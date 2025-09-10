@@ -127,6 +127,7 @@ Thumbs.db
 
 # Project specific
 strava_cache.json
+projects/fundraising_tracking_app/strava_integration/strava_cache.json
 *.cache
 cache/
 caches/
