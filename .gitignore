@@ -126,8 +126,8 @@ ehthumbs.db
 Thumbs.db
 
 # Project specific
-strava_cache.json
-projects/fundraising_tracking_app/strava_integration/strava_cache.json
+# strava_cache.json - Keep this for Digital Ocean deployment
+# projects/fundraising_tracking_app/strava_integration/strava_cache.json - Keep this for Digital Ocean deployment
 *.cache
 cache/
 caches/
