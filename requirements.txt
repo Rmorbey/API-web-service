@@ -2,3 +2,10 @@ fastapi
 redis
 types-redis
 uvicorn
+httpx
+python-multipart
+python-jose[cryptography]
+passlib[bcrypt]
+python-dotenv
+pydantic
+requests

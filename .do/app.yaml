@@ -1,0 +1,43 @@
+name: multi-project-api-service
+services:
+- name: api
+  source_dir: /
+  github:
+    repo: your-username/API-web-service
+    branch: main
+  run_command: uvicorn multi_project_api:app --host 0.0.0.0 --port $PORT
+  environment_slug: python
+  instance_count: 1
+  instance_size_slug: basic-xxs
+  http_port: 8080
+  routes:
+  - path: /api
+  envs:
+  - key: STRAVA_CLIENT_ID
+    scope: RUN_TIME
+    type: SECRET
+  - key: STRAVA_CLIENT_SECRET
+    scope: RUN_TIME
+    type: SECRET
+  - key: STRAVA_REDIRECT_URI
+    scope: RUN_TIME
+    value: https://www.russellmorbey.co.uk/api/fundraising-tracking/auth/strava/callback
+  - key: STRAVA_ACCESS_TOKEN
+    scope: RUN_TIME
+    type: SECRET
+  - key: STRAVA_REFRESH_TOKEN
+    scope: RUN_TIME
+    type: SECRET
+  - key: STRAVA_EXPIRES_AT
+    scope: RUN_TIME
+    type: SECRET
+  - key: PORT
+    scope: RUN_TIME
+    value: "8080"
+  health_check:
+    http_path: /health
+    initial_delay_seconds: 10
+    period_seconds: 10
+    timeout_seconds: 5
+    success_threshold: 1
+    failure_threshold: 3

@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Strava Activity Demo - All Activities Since May 22, 2025</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+            font-size: 18px;
+        }
+        
+        .error {
+            background: #fee;
+            color: #c33;
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid #fcc;
+            margin: 20px 0;
+        }
+        
+        .activity-card {
+            margin-bottom: 30px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            background: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .activity-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #333;
+        }
+        
+        .activity-date {
+            color: #666;
+            margin-bottom: 15px;
+        }
+        
+        .map-container {
+            height: 200px;
+            width: 100%;
+            border-radius: 8px;
+            overflow: hidden;
+            margin: 10px 0;
+            border: 2px solid #fc4c02;
+        }
+        
+        .activity-stats {
+            display: flex;
+            justify-content: space-around;
+            margin: 15px 0;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+        
+        .stat {
+            text-align: center;
+        }
+        
+        .stat-value {
+            display: block;
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .stat-label {
+            font-size: 12px;
+            color: #666;
+        }
+        
+        .description-section {
+            margin: 15px 0;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #007bff;
+        }
+        
+        .description-section h4 {
+            margin: 0 0 10px 0;
+            color: #333;
+        }
+        
+        .description-section p {
+            margin: 0;
+            color: #555;
+        }
+        
+        .photo-section {
+            margin: 15px 0;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #28a745;
+        }
+        
+        .photo-section h4 {
+            margin: 0 0 15px 0;
+            color: #333;
+        }
+        
+        .media-container img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .video-thumbnail, .photo-placeholder {
+            padding: 20px;
+            background: #e9ecef;
+            border-radius: 4px;
+            text-align: center;
+            color: #666;
+            border: 2px dashed #ccc;
+        }
+        
+        .comments-section {
+            margin: 15px 0;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #28a745;
+        }
+        
+        .comments-section h4 {
+            margin: 0 0 15px 0;
+            color: #333;
+        }
+        
+        .comment-item {
+            padding: 10px;
+            background: white;
+            border-radius: 4px;
+            margin-bottom: 8px;
+            border-left: 3px solid #28a745;
+        }
+        
+        .no-comments {
+            color: #666;
+            font-style: italic;
+            text-align: center;
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🏃‍♂️🚴‍♂️ Strava Activities Since May 22, 2025</h1>
+        <p class="subtitle">All your Run and Ride activities with animated route maps</p>
+        
+        <div id="activities-container">
+            <div class="loading">🔄 Loading all activities...</div>
+        </div>
+    </div>
+
+    <script>
+        // Transform Strava data to React component format
+        function transformStravaToReact(stravaActivity) {
+            // Calculate distance and time (using processed API fields)
+            const distanceKm = stravaActivity.distance_km || 0;
+            const durationMinutes = stravaActivity.duration_minutes || 0;
+            const durationHours = durationMinutes / 60;
+            
+            // Calculate pace for runs or speed for rides
+            let paceOrSpeed;
+            let paceOrSpeedLabel;
+            
+            if (stravaActivity.type === 'Run') {
+                // Pace (minutes per km) for runs
+                const paceMinutes = durationMinutes / distanceKm;
+                const paceMinutesInt = Math.floor(paceMinutes);
+                const paceSeconds = Math.round((paceMinutes - paceMinutesInt) * 60);
+                paceOrSpeed = `${paceMinutesInt}:${paceSeconds.toString().padStart(2, '0')}/km`;
+                paceOrSpeedLabel = 'Pace';
+            } else if (stravaActivity.type === 'Ride') {
+                // Speed (km/h) for rides
+                const speedKmh = distanceKm / durationHours;
+                paceOrSpeed = `${speedKmh.toFixed(1)} km/h`;
+                paceOrSpeedLabel = 'Speed';
+            } else {
+                // Default to pace for other activities
+                const paceMinutes = durationMinutes / distanceKm;
+                const paceMinutesInt = Math.floor(paceMinutes);
+                const paceSeconds = Math.round((paceMinutes - paceMinutesInt) * 60);
+                paceOrSpeed = `${paceMinutesInt}:${paceSeconds.toString().padStart(2, '0')}/km`;
+                paceOrSpeedLabel = 'Pace';
+            }
+            
+            // Format time (HH:MM:SS or MM:SS)
+            let time;
+            if (durationHours >= 1) {
+                const hours = Math.floor(durationHours);
+                const minutes = Math.floor(durationMinutes % 60);
+                const seconds = Math.round((durationMinutes - Math.floor(durationMinutes)) * 60);
+                time = `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            } else {
+                const minutes = Math.floor(durationMinutes);
+                const seconds = Math.round((durationMinutes - minutes) * 60);
+                time = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+            }
+            
+            // Determine media type and get photo URL
+            const hasMedia = stravaActivity.photos && stravaActivity.photos.primary;
+            const mediaType = hasMedia ? (stravaActivity.photos.primary.media_type === 2 ? "video" : "photo") : "none";
+            const mediaIcon = mediaType === "video" ? "🎥" : mediaType === "photo" ? "📸" : "";
+            const mediaText = mediaType === "video" ? "Video" : mediaType === "photo" ? "Photo" : "No Media";
+            const photoUrl = hasMedia && mediaType === "photo" ? stravaActivity.photos.primary.urls['600'] : null;
+            
+            // Format date using the full start_date_local field for proper timezone handling
+            const date = formatDate(stravaActivity.start_date_local);
+            
+            return {
+                id: stravaActivity.id,
+                title: stravaActivity.name,
+                date: date,
+                distance: `${distanceKm.toFixed(1)} km`,
+                time: time,
+                pace: paceOrSpeed,
+                paceLabel: paceOrSpeedLabel,
+                type: stravaActivity.type,
+                mediaType: mediaType,
+                mediaIcon: mediaIcon,
+                mediaText: mediaText,
+                description: stravaActivity.description,
+                photoUrl: photoUrl,
+                comments: stravaActivity.comment_count || 0
+            };
+        }
+
+        // Format date for display
+        function formatDate(dateString) {
+            // Strava's start_date_local is actually UTC but represents local time
+            // We need to treat it as local time, not UTC
+            const date = new Date(dateString.replace('Z', ''));
+            const today = new Date();
+            const yesterday = new Date(today);
+            yesterday.setDate(yesterday.getDate() - 1);
+            
+            // Format time (HH:MM)
+            const time = date.toLocaleTimeString('en-GB', { 
+                hour: '2-digit', 
+                minute: '2-digit',
+                hour12: false 
+            });
+            
+            // Format date (Day Month Year)
+            const dateStr = date.toLocaleDateString('en-GB', {
+                weekday: 'long',
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric'
+            });
+            
+            if (date.toDateString() === today.toDateString()) {
+                return `Today at ${time}`;
+            } else if (date.toDateString() === yesterday.toDateString()) {
+                return `Yesterday at ${time}`;
+            } else {
+                return `${dateStr} at ${time}`;
+            }
+        }
+
+        // Create activity map with animated route
+        async function createActivityMap(activityData) {
+            const mapContainer = document.getElementById(`activity-map-${activityData.id}`);
+            if (!mapContainer) return;
+            
+            try {
+                // Get GPS data
+                const mapResponse = await fetch(`http://localhost:8000/api/strava-integration/activities/${activityData.id}/map`);
+                const mapData = await mapResponse.json();
+                
+                if (mapData.gps_points && mapData.gps_points.length > 0) {
+                    // Create map
+                    const map = L.map(mapContainer, {
+                        zoomControl: false,
+                        dragging: false,
+                        touchZoom: false,
+                        doubleClickZoom: false,
+                        scrollWheelZoom: false,
+                        boxZoom: false,
+                        keyboard: false
+                    });
+                    
+                    // Try Jawg Dark tiles first, fallback to OpenStreetMap
+                    try {
+                        const tokenResponse = await fetch('http://localhost:8000/api/strava-integration/jawg-token');
+                        const tokenData = await tokenResponse.json();
+                        const jawgToken = tokenData.jawg_access_token;
+                        
+                        if (jawgToken && jawgToken !== 'demo' && tokenData.has_token && jawgToken.length < 100) {
+                            // Add Jawg Dark tiles
+                            L.tileLayer('https://tile.jawg.io/jawg-dark/{z}/{x}/{y}{r}.png?access-token=' + jawgToken, {
+                                attribution: '<a href="https://jawg.io" title="Tiles Courtesy of Jawg Maps" target="_blank">&copy; <b>Jawg</b>Maps</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                                minZoom: 0,
+                                maxZoom: 22,
+                                subdomains: 'abcd',
+                                accessToken: jawgToken
+                            }).addTo(map);
+                        } else {
+                            throw new Error('Invalid Jawg token');
+                        }
+                    } catch (tokenError) {
+                        console.log('Jawg token failed, using OpenStreetMap fallback');
+                        // Fallback to OpenStreetMap tiles
+                        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                            maxZoom: 19
+                        }).addTo(map);
+                    }
+                    
+                    // Add route
+                    const routePoints = mapData.gps_points.map(point => [point.lat, point.lng]);
+                    const routeLine = L.polyline(routePoints, {
+                        color: '#ff6b35',
+                        weight: 4,
+                        opacity: 0.9
+                    }).addTo(map);
+                    
+                    // Add animated route drawing
+                    animateRoute(routePoints, mapData, map);
+                    
+                    // Fit map to route
+                    if (mapData.bounds) {
+                        const bounds = [
+                            [mapData.bounds.south, mapData.bounds.west],
+                            [mapData.bounds.north, mapData.bounds.east]
+                        ];
+                        map.fitBounds(bounds, {padding: [10, 10]});
+                    } else {
+                        map.fitBounds(routeLine.getBounds(), {padding: [10, 10]});
+                    }
+                } else {
+                    // No GPS data - show placeholder
+                    mapContainer.innerHTML = `
+                        <div class="map-placeholder">
+                            🗺️ No GPS Data
+                            <div style="font-size: 12px; color: #999;">This activity was recorded without GPS</div>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                mapContainer.innerHTML = `
+                    <div class="map-placeholder">
+                        ❌ Map Error
+                        <div style="font-size: 12px; color: #999;">Failed to load map: ${error.message}</div>
+                    </div>
+                `;
+            }
+        }
+
+        // Animate the route drawing from start to finish
+        function animateRoute(routePoints, mapData, map) {
+            if (routePoints.length < 2) return;
+            
+            // Create an animated polyline that will grow
+            const animatedRoute = L.polyline([], {
+                color: '#ff6b35',
+                weight: 6,
+                opacity: 1.0,
+                dashArray: '15, 10'
+            }).addTo(map);
+            
+            // Create a moving dot
+            const movingDot = L.circleMarker(routePoints[0], {
+                radius: 10,
+                fillColor: '#ff6b35',
+                color: '#fff',
+                weight: 4,
+                opacity: 1,
+                fillOpacity: 0.9
+            }).addTo(map);
+            
+            // Animation controls
+            let currentIndex = 0;
+            const totalPoints = routePoints.length;
+            const animationSpeed = Math.max(10, Math.floor(totalPoints / 100)); // Adjust speed based on route length
+            
+            let animationInterval = null;
+            
+            // Animation function
+            function animateStep() {
+                if (currentIndex < totalPoints) {
+                    // Add next point to animated route
+                    const currentPoints = routePoints.slice(0, currentIndex + 1);
+                    animatedRoute.setLatLngs(currentPoints);
+                    
+                    // Move the dot to current position
+                    movingDot.setLatLng(routePoints[currentIndex]);
+                    
+                    currentIndex++;
+                } else {
+                    // Animation complete - restart the loop
+                    currentIndex = 0;
+                    animatedRoute.setLatLngs([]);
+                    movingDot.setLatLng(routePoints[0]);
+                }
+            }
+            
+            // Auto-start animation after a short delay
+            setTimeout(() => {
+                animationInterval = setInterval(animateStep, animationSpeed);
+            }, 1000);
+        }
+
+        // Load all Strava activities since May 22, 2025 (Run and Ride only)
+        async function loadAllActivities() {
+            try {
+                console.log('Loading all activities since May 22, 2025...');
+                
+                // Get all activities from the feed (no limit = all cached activities)
+                const feedResponse = await fetch('http://localhost:8000/api/strava-integration/feed?limit=200');
+                
+                if (!feedResponse.ok) {
+                    throw new Error('Failed to fetch activities feed');
+                }
+                
+                const feedData = await feedResponse.json();
+                const activities = feedData.activities || [];
+                
+                if (activities.length === 0) {
+                    throw new Error('No activities found');
+                }
+                
+                // Display all activities
+                displayAllActivities(activities);
+                
+            } catch (error) {
+                console.error('Error loading activities:', error);
+                document.getElementById('activities-container').innerHTML = `<div class="error">❌ Error: ${error.message}</div>`;
+            }
+        }
+
+        // Display all activities
+        async function displayAllActivities(activities) {
+            const container = document.getElementById('activities-container');
+            container.innerHTML = '<div class="loading">🔄 Loading activities...</div>';
+            
+            let activitiesHtml = '';
+            
+            for (let i = 0; i < activities.length; i++) {
+                const activity = activities[i];
+                
+                // Get real comments for this activity
+                const commentsResponse = await fetch(`http://localhost:8000/api/strava-integration/activities/${activity.id}/comments`);
+                let realComments = [];
+                if (commentsResponse.ok) {
+                    const commentsData = await commentsResponse.json();
+                    realComments = commentsData.comments || [];
+                }
+                
+                // Transform to React format
+                const reactData = transformStravaToReact(activity);
+                reactData.realComments = realComments;
+                
+                // Create activity card
+                activitiesHtml += `
+                    <div class="activity-card">
+                        <div class="activity-title">${reactData.title}</div>
+                        <div class="activity-date">${reactData.date}</div>
+                        
+                        <!-- Map Section -->
+                        <div class="map-section">
+                            <div class="map-container" id="activity-map-${reactData.id}"></div>
+                        </div>
+                        
+                        <!-- Activity Stats -->
+                        <div class="activity-stats">
+                            <div class="stat">
+                                <span class="stat-value">${reactData.distance}</span>
+                                <span class="stat-label">Distance</span>
+                            </div>
+                            <div class="stat">
+                                <span class="stat-value">${reactData.time}</span>
+                                <span class="stat-label">Time</span>
+                            </div>
+                            <div class="stat">
+                                <span class="stat-value">${reactData.pace}</span>
+                                <span class="stat-label">${reactData.paceLabel}</span>
+                            </div>
+                            <div class="stat">
+                                <span class="stat-value">${reactData.type}</span>
+                                <span class="stat-label">Type</span>
+                            </div>
+                        </div>
+                        
+                        <!-- Description Section -->
+                        ${reactData.description ? `
+                            <div class="description-section">
+                                <h4>📝 Description</h4>
+                                <p>${reactData.description}</p>
+                            </div>
+                        ` : ''}
+                        
+                        <!-- Photo Section -->
+                        ${reactData.mediaType !== "none" ? `
+                            <div class="photo-section">
+                                <h4>${reactData.mediaIcon} ${reactData.mediaText}</h4>
+                                <div class="media-container">
+                                    ${reactData.mediaType === "video" ? `
+                                        <div class="video-thumbnail">
+                                            🎥 Video thumbnail - Click to view on Strava
+                                        </div>
+                                    ` : reactData.photoUrl ? `
+                                        <img src="${reactData.photoUrl}" alt="Activity photo">
+                                    ` : `
+                                        <div class="photo-placeholder">
+                                            📸 Activity photo
+                                        </div>
+                                    `}
+                                </div>
+                            </div>
+                        ` : ''}
+                        
+                        <!-- Comments Section (only show if there are comments) -->
+                        ${reactData.realComments && reactData.realComments.length > 0 ? `
+                            <div class="comments-section">
+                                <h4>💬 Comments (${reactData.realComments.length})</h4>
+                                <div class="comments-list">
+                                    ${reactData.realComments.map(comment => `
+                                        <div class="comment-item">
+                                            <strong>${comment.athlete.firstname} ${comment.athlete.lastname}:</strong> ${comment.text}
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            }
+            
+            container.innerHTML = activitiesHtml;
+            
+            // Create maps for all activities after a delay
+            setTimeout(() => {
+                activities.forEach(activity => {
+                    createActivityMap(activity);
+                });
+            }, 100);
+        }
+        
+        // Load all activities on page load
+        window.addEventListener('load', () => {
+            loadAllActivities();
+        });
+    </script>
+</body>
+</html>
