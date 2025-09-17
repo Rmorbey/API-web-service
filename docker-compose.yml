@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  strava-api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - STRAVA_ACCESS_TOKEN=${STRAVA_ACCESS_TOKEN}
+      - STRAVA_REFRESH_TOKEN=${STRAVA_REFRESH_TOKEN}
+      - STRAVA_CLIENT_ID=${STRAVA_CLIENT_ID}
+      - STRAVA_CLIENT_SECRET=${STRAVA_CLIENT_SECRET}
+      - JAWG_ACCESS_TOKEN=${JAWG_ACCESS_TOKEN}
+      - STRAVA_CACHE_HOURS=6
+    volumes:
+      - ./logs:/app/logs
+      - ./projects/fundraising_tracking_app/strava_integration/strava_cache.json:/app/projects/fundraising_tracking_app/strava_integration/strava_cache.json
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/strava-integration/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s

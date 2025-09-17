@@ -4,12 +4,15 @@ Minimal Strava Integration API Module
 Contains only the essential endpoints used by the demo
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query, Path
+from fastapi.responses import Response, JSONResponse
 from typing import List, Dict, Any, Optional
 import os
+import httpx
 from datetime import datetime
 from dotenv import load_dotenv
 from .smart_strava_cache import SmartStravaCache
+from ..music_integration.music_integration import MusicIntegration
 
 # Load environment variables
 load_dotenv()
@@ -17,8 +20,9 @@ load_dotenv()
 # Create router for this project
 router = APIRouter()
 
-# Initialize the smart cache
+# Initialize the smart cache and music integration
 cache = SmartStravaCache()
+music = MusicIntegration()
 
 # Project endpoints
 @router.get("/")
@@ -30,9 +34,9 @@ def project_root():
         "version": "1.0.0",
         "endpoints": {
             "feed": "/feed - Get basic activity feed",
-            "feed-complete": "/feed-complete - Get complete feed with maps and comments",
             "map": "/activities/{id}/map - Get GPS data for maps",
             "comments": "/activities/{id}/comments - Get activity comments",
+            "music": "/activities/{id}/music - Get music widget for activity",
             "jawg-token": "/jawg-token - Get Jawg Maps token"
         }
     }
@@ -44,20 +48,86 @@ def health_check():
         "project": "strava-integration",
         "status": "healthy",
         "timestamp": datetime.utcnow().isoformat(),
-        "strava_configured": bool(os.getenv("STRAVA_ACCESS_TOKEN"))
+        "strava_configured": bool(os.getenv("STRAVA_ACCESS_TOKEN")),
+        "jawg_configured": bool(os.getenv("JAWG_ACCESS_TOKEN")),
+        "cache_status": "active" if cache._cache_data else "inactive"
+    }
+
+@router.get("/metrics")
+def get_metrics():
+    """Get system metrics and performance data"""
+    return {
+        "timestamp": datetime.utcnow().isoformat(),
+        "api_calls": {
+            "total_made": cache.api_calls_made,
+            "max_per_15min": cache.max_calls_per_15min,
+            "max_per_day": cache.max_calls_per_day,
+            "reset_time": cache.api_calls_reset_time.isoformat()
+        },
+        "cache": {
+            "in_memory_active": cache._cache_data is not None,
+            "cache_ttl": cache._cache_ttl,
+            "cache_duration_hours": cache.cache_duration_hours
+        },
+        "system": {
+            "strava_configured": bool(os.getenv("STRAVA_ACCESS_TOKEN")),
+            "jawg_configured": bool(os.getenv("JAWG_ACCESS_TOKEN")),
+            "music_integration": "active"
+        }
     }
 
 @router.get("/jawg-token")
 def get_jawg_token():
-    """Get Jawg Maps access token for frontend use"""
+    """Get Jawg Maps access token for frontend use - SECURE VERSION"""
     jawg_token = os.getenv("JAWG_ACCESS_TOKEN", "demo")
+    
+    # SECURITY: Don't expose the actual token to frontend
+    # Instead, return a flag indicating if token is available
+    # The frontend will use our backend proxy for map tiles
     return {
-        "jawg_access_token": jawg_token,
-        "has_token": jawg_token != "demo"
+        "has_token": jawg_token != "demo",
+        "token_length": len(jawg_token) if jawg_token != "demo" else 0,
+        "message": "Token available" if jawg_token != "demo" else "Using demo token"
     }
 
+@router.get("/map-tiles/{z}/{x}/{y}")
+async def get_map_tiles(z: int, x: int, y: int):
+    """Secure proxy for Jawg map tiles - keeps token server-side"""
+    jawg_token = os.getenv("JAWG_ACCESS_TOKEN", "demo")
+    
+    if jawg_token == "demo":
+        # Fallback to OpenStreetMap if no Jawg token
+        tile_url = f"https://{{s}}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+    else:
+        # Use Jawg tiles with server-side token
+        tile_url = f"https://tile.jawg.io/jawg-dark/{z}/{x}/{y}.png?access-token={jawg_token}"
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(tile_url)
+            return Response(
+                content=response.content,
+                media_type=response.headers.get("content-type", "image/png"),
+                headers={
+                    "Cache-Control": "public, max-age=86400",  # Cache for 24 hours
+                    "Access-Control-Allow-Origin": "*"
+                }
+            )
+    except Exception as e:
+        # Fallback to OpenStreetMap on error
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"https://tile.openstreetmap.org/{z}/{x}/{y}.png")
+            return Response(
+                content=response.content,
+                media_type="image/png",
+                headers={
+                    "Cache-Control": "public, max-age=86400",
+                    "Access-Control-Allow-Origin": "*"
+                }
+            )
+
 @router.get("/feed")
-def get_activity_feed(limit: int = 20):
+def get_activity_feed(limit: int = Query(20, ge=1, le=200)):
     """Get activity feed with photos, videos, and descriptions for frontend display"""
     try:
         raw_activities = cache.get_activities_smart(limit)
@@ -73,8 +143,12 @@ def get_activity_feed(limit: int = 20):
         
         feed_activities = []
         for activity in raw_activities:
-            # Get complete activity data including photos, videos, and descriptions
-            detailed_activity = cache.get_complete_activity_data(activity["id"])
+            # Use cached complete data if available, otherwise get basic data
+            if cache._has_complete_data(activity):
+                detailed_activity = activity
+            else:
+                # Only fetch complete data if not already complete
+                detailed_activity = cache.get_complete_activity_data(activity["id"])
             
             feed_item = {
                 "id": activity["id"],
@@ -91,21 +165,62 @@ def get_activity_feed(limit: int = 20):
                 "comment_count": detailed_activity.get("comment_count", 0),
                 "photos": detailed_activity.get("photos", {}),
                 "comments": detailed_activity.get("comments", []),
-                "map": detailed_activity.get("map", {})
+                "map": detailed_activity.get("map", {}),
+                "music": detailed_activity.get("music", {})  # Use cached music data
             }
             feed_activities.append(feed_item)
         
-        return {
+        response_data = {
             "timestamp": datetime.utcnow().isoformat(),
             "total_activities": len(feed_activities),
             "activities": feed_activities
         }
+        
+        # Add caching headers for performance
+        response = JSONResponse(content=response_data)
+        response.headers["Cache-Control"] = "public, max-age=300"  # 5 minutes
+        response.headers["ETag"] = f'"{hash(str(response_data))}"'
+        return response
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching activity feed: {str(e)}")
 
 
+@router.get("/test-feed")
+def get_test_activities_feed(limit: int = Query(200, ge=1, le=200)):
+    """Get real activities feed from Strava API v3 (temporarily serving real data)"""
+    try:
+        # Get real activities from smart cache
+        activities = cache.get_activities_smart(limit=limit)
+        
+        return {
+            "activities": activities,
+            "total_activities": len(activities),
+            "timestamp": datetime.now().isoformat(),
+            "source": "strava_api_v3"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching real activities: {str(e)}")
+
+
+@router.get("/real-activities")
+def get_real_activities(limit: int = 200):
+    """Get real activities from Strava API v3"""
+    try:
+        # Get real activities from smart cache
+        activities = cache.get_activities_smart(limit=limit)
+        
+        return {
+            "activities": activities,
+            "total_activities": len(activities),
+            "timestamp": datetime.now().isoformat(),
+            "source": "strava_api_v3"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching real activities: {str(e)}")
+
+
 @router.get("/activities/{activity_id}/map")
-def get_activity_map(activity_id: int):
+def get_activity_map(activity_id: int = Path(..., ge=1, le=99999999999)):
     """Get GPS data for activity map visualization"""
     try:
         # Get complete activity data (includes map data)
@@ -163,7 +278,7 @@ def get_activity_map(activity_id: int):
         raise HTTPException(status_code=500, detail=f"Error fetching activity map data: {str(e)}")
 
 @router.get("/activities/{activity_id}/comments")
-def get_activity_comments(activity_id: int):
+def get_activity_comments(activity_id: int = Path(..., ge=1, le=99999999999)):
     """Get actual comments for a specific activity"""
     try:
         # Get complete activity data (includes comments)
@@ -179,7 +294,7 @@ def get_activity_comments(activity_id: int):
         raise HTTPException(status_code=500, detail=f"Error fetching activity comments: {str(e)}")
 
 @router.get("/activities/{activity_id}/complete")
-def get_complete_activity(activity_id: int):
+def get_complete_activity(activity_id: int = Path(..., ge=1, le=99999999999)):
     """Get complete activity data including photos, comments, map, and description"""
     try:
         # Get complete activity data
@@ -191,5 +306,35 @@ def get_complete_activity(activity_id: int):
         return activity_data
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching complete activity data: {str(e)}")
+
+@router.get("/activities/{activity_id}/music")
+def get_activity_music(activity_id: int = Path(..., ge=1, le=99999999999)):
+    """Get music widget for a specific activity"""
+    try:
+        # Get complete activity data
+        activity_data = cache.get_complete_activity_data(activity_id)
+        
+        if not activity_data:
+            raise HTTPException(status_code=404, detail="Activity not found")
+        
+        description = activity_data.get("description", "")
+        music_data = music.get_music_widget(description)
+        
+        return {
+            "activity_id": activity_id,
+            "has_music": music_data is not None,
+            "music_data": music_data,
+            "description": description
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching activity music: {str(e)}")
+
+def _get_activity_music(activity_id: int, description: str) -> Optional[Dict[str, Any]]:
+    """Helper method to get music data for an activity"""
+    try:
+        return music.get_music_widget(description)
+    except Exception as e:
+        print(f"Error getting music for activity {activity_id}: {e}")
+        return None
 
 

@@ -121,6 +121,41 @@
             color: #555;
         }
         
+        .music-section {
+            margin: 15px 0;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #ff6b35;
+        }
+        
+        .music-section h4 {
+            margin: 0 0 10px 0;
+            color: #333;
+        }
+        
+        .music-info {
+            margin-bottom: 15px;
+        }
+        
+        .music-info p {
+            margin: 5px 0;
+            color: #555;
+        }
+        
+        .music-widget {
+            width: 100%;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        .music-widget iframe {
+            width: 100%;
+            height: 300px;
+            border: none;
+            border-radius: 8px;
+        }
+        
         .photo-section {
             margin: 15px 0;
             padding: 15px;
@@ -192,9 +227,9 @@
     <script>
         // Transform Strava data to React component format
         function transformStravaToReact(stravaActivity) {
-            // Calculate distance and time (using processed API fields)
-            const distanceKm = stravaActivity.distance_km || 0;
-            const durationMinutes = stravaActivity.duration_minutes || 0;
+            // Calculate distance and time (using real Strava API fields)
+            const distanceKm = (stravaActivity.distance || 0) / 1000; // Convert meters to km
+            const durationMinutes = (stravaActivity.moving_time || 0) / 60; // Convert seconds to minutes
             const durationHours = durationMinutes / 60;
             
             // Calculate pace for runs or speed for rides
@@ -259,7 +294,8 @@
                 mediaText: mediaText,
                 description: stravaActivity.description,
                 photoUrl: photoUrl,
-                comments: stravaActivity.comment_count || 0
+                comments: stravaActivity.comment_count || 0,
+                music: stravaActivity.music || null
             };
         }
 
@@ -296,17 +332,57 @@
             }
         }
 
+        // Polyline decoder function
+        function decodePolyline(encoded) {
+            const points = [];
+            let index = 0;
+            const len = encoded.length;
+            let lat = 0;
+            let lng = 0;
+            
+            while (index < len) {
+                let b, shift = 0, result = 0;
+                do {
+                    b = encoded.charCodeAt(index++) - 63;
+                    result |= (b & 0x1f) << shift;
+                    shift += 5;
+                } while (b >= 0x20);
+                const dlat = ((result & 1) ? ~(result >> 1) : (result >> 1));
+                lat += dlat;
+                
+                shift = 0;
+                result = 0;
+                do {
+                    b = encoded.charCodeAt(index++) - 63;
+                    result |= (b & 0x1f) << shift;
+                    shift += 5;
+                } while (b >= 0x20);
+                const dlng = ((result & 1) ? ~(result >> 1) : (result >> 1));
+                lng += dlng;
+                
+                points.push([lat / 1e5, lng / 1e5]);
+            }
+            return points;
+        }
+
         // Create activity map with animated route
         async function createActivityMap(activityData) {
             const mapContainer = document.getElementById(`activity-map-${activityData.id}`);
             if (!mapContainer) return;
             
             try {
-                // Get GPS data
-                const mapResponse = await fetch(`http://localhost:8000/api/strava-integration/activities/${activityData.id}/map`);
-                const mapData = await mapResponse.json();
+                // Get GPS data from activity data (already included in test data)
+                const mapData = activityData.map || {};
                 
-                if (mapData.gps_points && mapData.gps_points.length > 0) {
+                // Check for polyline data first, then GPS points
+                let routePoints = [];
+                if (mapData.polyline) {
+                    routePoints = decodePolyline(mapData.polyline);
+                } else if (mapData.gps_points && mapData.gps_points.length > 0) {
+                    routePoints = mapData.gps_points.map(point => [point.lat, point.lng]);
+                }
+                
+                if (routePoints.length > 0) {
                     // Create map
                     const map = L.map(mapContainer, {
                         zoomControl: false,
@@ -322,19 +398,16 @@
                     try {
                         const tokenResponse = await fetch('http://localhost:8000/api/strava-integration/jawg-token');
                         const tokenData = await tokenResponse.json();
-                        const jawgToken = tokenData.jawg_access_token;
                         
-                        if (jawgToken && jawgToken !== 'demo' && tokenData.has_token && jawgToken.length < 100) {
-                            // Add Jawg Dark tiles
-                            L.tileLayer('https://tile.jawg.io/jawg-dark/{z}/{x}/{y}{r}.png?access-token=' + jawgToken, {
+                        if (tokenData.has_token) {
+                            // Use secure proxy for Jawg tiles (token stays server-side)
+                            L.tileLayer('http://localhost:8000/api/strava-integration/map-tiles/{z}/{x}/{y}', {
                                 attribution: '<a href="https://jawg.io" title="Tiles Courtesy of Jawg Maps" target="_blank">&copy; <b>Jawg</b>Maps</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
                                 minZoom: 0,
-                                maxZoom: 22,
-                                subdomains: 'abcd',
-                                accessToken: jawgToken
+                                maxZoom: 22
                             }).addTo(map);
                         } else {
-                            throw new Error('Invalid Jawg token');
+                            throw new Error('No Jawg token available');
                         }
                     } catch (tokenError) {
                         console.log('Jawg token failed, using OpenStreetMap fallback');
@@ -345,8 +418,7 @@
                         }).addTo(map);
                     }
                     
-                    // Add route
-                    const routePoints = mapData.gps_points.map(point => [point.lat, point.lng]);
+                    // Add route (routePoints already decoded from polyline or GPS points)
                     const routeLine = L.polyline(routePoints, {
                         color: '#ff6b35',
                         weight: 4,
@@ -445,7 +517,7 @@
                 console.log('Loading all activities since May 22, 2025...');
                 
                 // Get all activities from the feed (no limit = all cached activities)
-                const feedResponse = await fetch('http://localhost:8000/api/strava-integration/feed?limit=200');
+                const feedResponse = await fetch('http://localhost:8000/api/strava-integration/test-feed?limit=200');
                 
                 if (!feedResponse.ok) {
                     throw new Error('Failed to fetch activities feed');
@@ -475,19 +547,21 @@
             let activitiesHtml = '';
             
             for (let i = 0; i < activities.length; i++) {
-                const activity = activities[i];
-                
-                // Get real comments for this activity
-                const commentsResponse = await fetch(`http://localhost:8000/api/strava-integration/activities/${activity.id}/comments`);
-                let realComments = [];
-                if (commentsResponse.ok) {
-                    const commentsData = await commentsResponse.json();
-                    realComments = commentsData.comments || [];
-                }
-                
-                // Transform to React format
-                const reactData = transformStravaToReact(activity);
-                reactData.realComments = realComments;
+                try {
+                    const activity = activities[i];
+                    console.log(`Processing activity ${i + 1}:`, activity.name);
+                    
+                    // Get comments from activity data (already included in test data)
+                    const realComments = activity.comments || [];
+                    
+                    // Transform to React format
+                    const reactData = transformStravaToReact(activity);
+                    reactData.realComments = realComments;
+                    
+                    console.log(`Transformed data for ${activity.name}:`, {
+                        description: reactData.description,
+                        music: reactData.music
+                    });
                 
                 // Create activity card
                 activitiesHtml += `
@@ -528,6 +602,20 @@
                             </div>
                         ` : ''}
                         
+                        <!-- Music Section -->
+                        ${reactData.music ? `
+                            <div class="music-section">
+                                <h4>🎵 Music</h4>
+                                <div class="music-info">
+                                    <p><strong>${reactData.music.detected.title}</strong> by ${reactData.music.detected.artist}</p>
+                                    <p><em>${reactData.music.detected.type === 'track' ? 'Russell Radio' : reactData.music.detected.type === 'album' ? 'Album' : 'Playlist'}</em></p>
+                                </div>
+                                <div class="music-widget">
+                                    ${reactData.music.widget_html}
+                                </div>
+                            </div>
+                        ` : ''}
+                        
                         <!-- Photo Section -->
                         ${reactData.mediaType !== "none" ? `
                             <div class="photo-section">
@@ -563,6 +651,11 @@
                         ` : ''}
                     </div>
                 `;
+                } catch (error) {
+                    console.error(`Error processing activity ${i + 1}:`, error);
+                    // Continue with next activity instead of stopping
+                    continue;
+                }
             }
             
             container.innerHTML = activitiesHtml;
