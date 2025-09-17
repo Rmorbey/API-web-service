@@ -390,6 +390,19 @@
                     routePoints = mapData.gps_points.map(point => [point.lat, point.lng]);
                 }
                 
+                // Filter out invalid coordinates
+                routePoints = routePoints.filter(point => 
+                    point && 
+                    Array.isArray(point) && 
+                    point.length === 2 && 
+                    typeof point[0] === 'number' && 
+                    typeof point[1] === 'number' &&
+                    !isNaN(point[0]) && 
+                    !isNaN(point[1]) &&
+                    point[0] >= -90 && point[0] <= 90 &&  // Valid latitude
+                    point[1] >= -180 && point[1] <= 180   // Valid longitude
+                );
+                
                 if (routePoints.length > 0) {
                     // Create map
                     const map = L.map(mapContainer, {
@@ -570,8 +583,8 @@
                         description: reactData.description,
                         music: reactData.music
                     });
-                
-                // Create activity card
+                    
+                    // Create activity card
                 activitiesHtml += `
                     <div class="activity-card">
                         <div class="activity-title">${reactData.title}</div>
@@ -611,7 +624,7 @@
                         ` : ''}
                         
                         <!-- Music Section -->
-                        ${reactData.music ? `
+                        ${reactData.music && reactData.music.detected ? `
                             <div class="music-section">
                                 <h4>🎵 Music</h4>
                                 <div class="music-info">

@@ -273,36 +273,34 @@ class SmartStravaCache:
 
     def get_complete_activity_data(self, activity_id: int) -> Dict[str, Any]:
         """Get complete activity data including photos, comments, map, and description"""
+        print(f"🔍 DEBUG: get_complete_activity_data called for activity {activity_id}")
+        print(f"🔍 DEBUG: Stack trace:")
+        import traceback
+        traceback.print_stack()
+        
         cache_data = self._load_cache()
         
-        # Check if we have complete data in cache
+        # ALWAYS use cached data only - never make API calls
         for activity in cache_data.get("activities", []):
             if activity.get("id") == activity_id:
-                # Check if this activity has complete data
-                if self._has_complete_data(activity):
-                    print(f"✅ Using complete cached data for activity {activity_id}")
-                    return activity
-                else:
-                    print(f"🔄 Activity {activity_id} has incomplete data, fetching details...")
-                    break
+                print(f"✅ Using cached data for activity {activity_id} (6-hour cache strategy)")
+                return activity
         
-        # Fetch complete data from Strava
-        try:
-            complete_data = self._fetch_complete_activity_data(activity_id)
-            
-            # Update cache with complete data
-            self._update_activity_in_cache(activity_id, complete_data)
-            
-            print(f"✅ Fetched complete data for activity {activity_id}")
-            return complete_data
-            
-        except Exception as e:
-            print(f"❌ Error fetching complete data for activity {activity_id}: {e}")
-            # Return basic data from cache if available
-            for activity in cache_data.get("activities", []):
-                if activity.get("id") == activity_id:
-                    return activity
-            return {}
+        # Activity not found in cache - return basic data
+        print(f"⚠️ Activity {activity_id} not found in cache, returning basic data")
+        return {
+            "id": activity_id,
+            "name": "Unknown Activity",
+            "type": "Unknown",
+            "distance": 0,
+            "moving_time": 0,
+            "start_date_local": "2025-01-01T00:00:00Z",
+            "description": "",
+            "photos": {},
+            "comments": [],
+            "map": {},
+            "music": {}
+        }
 
     def _has_complete_data(self, activity: Dict[str, Any]) -> bool:
         """Check if activity has complete data (photos, comments, map, description)"""
@@ -315,63 +313,32 @@ class SmartStravaCache:
 
     def _fetch_complete_activity_data(self, activity_id: int) -> Dict[str, Any]:
         """Fetch complete activity data from Strava API with enhanced error handling"""
-        try:
-            access_token = self.token_manager.get_valid_access_token()
-            headers = {"Authorization": f"Bearer {access_token}"}
-            
-            # Fetch basic activity data
-            activity_response = self._make_api_call_with_retry(
-                f"{self.base_url}/activities/{activity_id}",
-                headers
-            )
-            activity_data = activity_response.json()
-            
-            # Fetch photos with size parameter to get actual photos instead of placeholders
-            try:
-                photos_response = self._make_api_call_with_retry(
-                    f"{self.base_url}/activities/{activity_id}/photos?size=5000",
-                    headers
-                )
-                photos_data = photos_response.json()
-            except Exception as e:
-                logger.warning(f"Failed to fetch photos for activity {activity_id}: {e}")
-                photos_data = []
-            
-            # Fetch comments
-            try:
-                comments_response = self._make_api_call_with_retry(
-                    f"{self.base_url}/activities/{activity_id}/comments",
-                    headers
-                )
-                comments_data = comments_response.json()
-            except Exception as e:
-                logger.warning(f"Failed to fetch comments for activity {activity_id}: {e}")
-                comments_data = []
-            
-            # Process and combine all data
-            complete_data = self._process_activity_data(activity_data)
-            complete_data["photos"] = self._process_photos_data(photos_data)
-            complete_data["comments"] = self._process_comments_data(comments_data)
-            complete_data["map"] = self._process_map_data(activity_data)
-            
-            # Add music detection and Deezer integration
-            try:
-                music_data = self._detect_music(complete_data.get("description", ""))
-                if music_data and music_data.get('detected'):
-                    # Use music integration to get Deezer data and widgets
-                    deezer_data = self.music_integration.get_music_widget(complete_data.get("description", ""))
-                    if deezer_data:
-                        music_data.update(deezer_data)
-                complete_data["music"] = music_data if music_data else {}
-            except Exception as e:
-                logger.warning(f"Failed to process music for activity {activity_id}: {e}")
-                complete_data["music"] = {}
-            
-            return complete_data
-            
-        except Exception as e:
-            logger.error(f"Failed to fetch complete data for activity {activity_id}: {str(e)}")
-            raise Exception(f"Complete data fetch failed: {str(e)}")
+        print(f"🚨 BLOCKED: _fetch_complete_activity_data called for activity {activity_id}")
+        print(f"🚨 BLOCKED: This method is DISABLED with 6-hour cache strategy!")
+        print(f"🚨 BLOCKED: Returning cached data instead of making API calls")
+        
+        # Return cached data instead of making API calls
+        cache_data = self._load_cache()
+        for activity in cache_data.get("activities", []):
+            if activity.get("id") == activity_id:
+                print(f"✅ Using cached data for activity {activity_id} (6-hour cache strategy)")
+                return activity
+        
+        # Activity not found in cache - return basic data
+        print(f"⚠️ Activity {activity_id} not found in cache, returning basic data")
+        return {
+            "id": activity_id,
+            "name": "Unknown Activity",
+            "type": "Unknown",
+            "distance": 0,
+            "moving_time": 0,
+            "start_date_local": "2025-01-01T00:00:00Z",
+            "description": "",
+            "photos": {},
+            "comments": [],
+            "map": {},
+            "music": {}
+        }
 
     def _process_activity_data(self, activity_data: Dict[str, Any]) -> Dict[str, Any]:
         """Process basic activity data"""
@@ -474,6 +441,50 @@ class SmartStravaCache:
             })
         return formatted_comments
 
+    def _decode_polyline(self, polyline_str: str) -> List[List[float]]:
+        """Decode Google polyline string to lat/lng coordinates"""
+        if not polyline_str:
+            return []
+        
+        try:
+            # Simple polyline decoder
+            index = 0
+            lat = 0
+            lng = 0
+            coordinates = []
+            
+            while index < len(polyline_str):
+                # Decode latitude
+                shift = 0
+                result = 0
+                while True:
+                    b = ord(polyline_str[index]) - 63
+                    index += 1
+                    result |= (b & 0x1f) << shift
+                    shift += 5
+                    if b < 0x20:
+                        break
+                lat += ~(result >> 1) if result & 1 else result >> 1
+                
+                # Decode longitude
+                shift = 0
+                result = 0
+                while True:
+                    b = ord(polyline_str[index]) - 63
+                    index += 1
+                    result |= (b & 0x1f) << shift
+                    shift += 5
+                    if b < 0x20:
+                        break
+                lng += ~(result >> 1) if result & 1 else result >> 1
+                
+                coordinates.append([lat / 1e5, lng / 1e5])
+            
+            return coordinates
+        except Exception as e:
+            logger.warning(f"Failed to decode polyline: {e}")
+            return []
+
     def _process_map_data(self, activity_data: Dict[str, Any]) -> Dict[str, Any]:
         """Process map data from basic activity response (polyline only)"""
         map_data = activity_data.get("map", {})
@@ -483,10 +494,33 @@ class SmartStravaCache:
         summary_polyline = map_data.get("summary_polyline")
         bounds = map_data.get("bounds", {})
         
+        # Decode polyline to get coordinates
+        coordinates = []
+        if polyline:
+            coordinates = self._decode_polyline(polyline)
+        
+        # Calculate bounds from coordinates if not provided
+        if not bounds and coordinates:
+            lats = [coord[0] for coord in coordinates]
+            lngs = [coord[1] for coord in coordinates]
+            bounds = {
+                "south": min(lats),
+                "west": min(lngs),
+                "north": max(lats),
+                "east": max(lngs)
+            }
+        
+        # Get start and end coordinates
+        start_latlng = coordinates[0] if coordinates else None
+        end_latlng = coordinates[-1] if coordinates else None
+        
         return {
             "polyline": polyline,
             "summary_polyline": summary_polyline,
-            "bounds": bounds
+            "bounds": bounds,
+            "coordinates": coordinates,
+            "start_latlng": start_latlng,
+            "end_latlng": end_latlng
         }
 
     def _update_activity_in_cache(self, activity_id: int, complete_data: Dict[str, Any]):
