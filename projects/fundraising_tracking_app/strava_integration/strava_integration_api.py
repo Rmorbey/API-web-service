@@ -150,23 +150,76 @@ def get_activity_feed(limit: int = Query(20, ge=1, le=200)):
                 # Only fetch complete data if not already complete
                 detailed_activity = cache.get_complete_activity_data(activity["id"])
             
+            # Optimize map data - remove summary_polyline (redundant with polyline)
+            map_data = detailed_activity.get("map", {})
+            optimized_map = {
+                "polyline": map_data.get("polyline"),
+                "bounds": map_data.get("bounds", {})
+            }
+            
+            # Optimize photos - keep only one URL size (600px is sufficient)
+            photos_data = detailed_activity.get("photos", {})
+            optimized_photos = {}
+            if photos_data and "primary" in photos_data:
+                primary = photos_data["primary"]
+                optimized_photos = {
+                    "primary": {
+                        "unique_id": primary.get("unique_id"),
+                        "type": primary.get("type"),
+                        "url": primary.get("urls", {}).get("600", ""),  # Only keep 600px URL
+                        "status": primary.get("status")
+                    },
+                    "count": photos_data.get("count", 0)
+                }
+            
+            # Format date and time properly
+            start_datetime = activity["start_date_local"]
+            date_str = start_datetime[:10]  # 2025-09-14
+            start_time_str = start_datetime[11:16]  # 10:12
+            
+            # Convert to readable date format with start time
+            from datetime import datetime
+            try:
+                dt = datetime.fromisoformat(start_datetime.replace('Z', '+00:00'))
+                # Format as "14th of September 2025 at 10:12"
+                day = dt.day
+                month_name = dt.strftime('%B')
+                year = dt.year
+                time_formatted = dt.strftime('%H:%M')
+                
+                # Add ordinal suffix (1st, 2nd, 3rd, 4th, etc.)
+                if 10 <= day % 100 <= 20:
+                    suffix = 'th'
+                else:
+                    suffix = {1: 'st', 2: 'nd', 3: 'rd'}.get(day % 10, 'th')
+                
+                formatted_date = f"{day}{suffix} of {month_name} {year} at {time_formatted}"
+            except:
+                formatted_date = f"{date_str} at {start_time_str}"  # Fallback format
+            
+            # Format moving time as duration
+            duration_minutes = round(activity["moving_time"] / 60, 1) if activity["moving_time"] else 0
+            if duration_minutes >= 60:
+                hours = int(duration_minutes // 60)
+                minutes = int(duration_minutes % 60)
+                formatted_duration = f"{hours}:{minutes:02d}"
+            else:
+                formatted_duration = f"{duration_minutes:.1f} min"
+            
             feed_item = {
                 "id": activity["id"],
                 "name": activity["name"],
                 "type": activity["type"],
                 "distance_km": round(activity["distance"] / 1000, 2) if activity["distance"] else 0,
                 "duration_minutes": round(activity["moving_time"] / 60, 1) if activity["moving_time"] else 0,
-                "elevation_gain_m": activity.get("total_elevation_gain", 0),
-                "date": activity["start_date_local"][:10],
-                "time": activity["start_date_local"][11:16],
-                "start_date_local": activity["start_date_local"],
+                "date": formatted_date,  # Now includes start time: "14th of September 2025 at 10:12"
+                "time": formatted_duration,  # Now shows moving time: "1:06" or "22.4 min"
                 "description": detailed_activity.get("description", ""),
-                "kudos_count": detailed_activity.get("kudos_count", 0),
                 "comment_count": detailed_activity.get("comment_count", 0),
-                "photos": detailed_activity.get("photos", {}),
+                "photos": optimized_photos,
                 "comments": detailed_activity.get("comments", []),
-                "map": detailed_activity.get("map", {}),
-                "music": detailed_activity.get("music", {})  # Use cached music data
+                "map": optimized_map,
+                "music": detailed_activity.get("music", {})
             }
             feed_activities.append(feed_item)
         

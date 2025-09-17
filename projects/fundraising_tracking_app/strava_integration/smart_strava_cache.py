@@ -309,7 +309,7 @@ class SmartStravaCache:
         has_description = bool(activity.get("description"))
         has_photos = bool(activity.get("photos") and activity.get("photos").get("primary"))
         has_comments = "comments" in activity
-        has_map = bool(activity.get("map") and activity.get("map").get("summary_polyline"))
+        has_map = bool(activity.get("map") and activity.get("map").get("polyline"))
         
         return has_description and has_photos and has_comments and has_map
 
@@ -348,22 +348,11 @@ class SmartStravaCache:
                 logger.warning(f"Failed to fetch comments for activity {activity_id}: {e}")
                 comments_data = []
             
-            # Fetch streams (GPS data)
-            try:
-                streams_response = self._make_api_call_with_retry(
-                    f"{self.base_url}/activities/{activity_id}/streams?keys=latlng,altitude,time&key_by_type=true",
-                    headers
-                )
-                streams_data = streams_response.json()
-            except Exception as e:
-                logger.warning(f"Failed to fetch streams for activity {activity_id}: {e}")
-                streams_data = {}
-        
             # Process and combine all data
             complete_data = self._process_activity_data(activity_data)
             complete_data["photos"] = self._process_photos_data(photos_data)
             complete_data["comments"] = self._process_comments_data(comments_data)
-            complete_data["map"] = self._process_streams_data(streams_data)
+            complete_data["map"] = self._process_map_data(activity_data)
             
             # Add music detection and Deezer integration
             try:
@@ -485,41 +474,19 @@ class SmartStravaCache:
             })
         return formatted_comments
 
-    def _process_streams_data(self, streams_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Process GPS streams data"""
-        if "latlng" not in streams_data or not streams_data["latlng"]:
-            return {}
+    def _process_map_data(self, activity_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Process map data from basic activity response (polyline only)"""
+        map_data = activity_data.get("map", {})
         
-        latlng_data = streams_data["latlng"]["data"]
-        altitude_data = streams_data.get("altitude", {}).get("data", [])
-        time_data = streams_data.get("time", {}).get("data", [])
-        
-        gps_points = []
-        for i, (lat, lng) in enumerate(latlng_data):
-            point = {
-                "lat": lat,
-                "lng": lng,
-                "altitude": altitude_data[i] if i < len(altitude_data) else None,
-                "time": time_data[i] if i < len(time_data) else None
-            }
-            gps_points.append(point)
-        
-        # Calculate bounds
-        bounds = None
-        if gps_points:
-            lats = [p["lat"] for p in gps_points]
-            lngs = [p["lng"] for p in gps_points]
-            bounds = {
-                "north": max(lats),
-                "south": min(lats),
-                "east": max(lngs),
-                "west": min(lngs)
-            }
+        # Extract polyline and bounds from basic activity data
+        polyline = map_data.get("polyline")
+        summary_polyline = map_data.get("summary_polyline")
+        bounds = map_data.get("bounds", {})
         
         return {
-            "gps_points": gps_points,
-            "bounds": bounds,
-            "point_count": len(gps_points)
+            "polyline": polyline,
+            "summary_polyline": summary_polyline,
+            "bounds": bounds
         }
 
     def _update_activity_in_cache(self, activity_id: int, complete_data: Dict[str, Any]):

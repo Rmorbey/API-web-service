@@ -225,11 +225,11 @@
     </div>
 
     <script>
-        // Transform Strava data to React component format
+        // Transform processed Strava data to React component format
         function transformStravaToReact(stravaActivity) {
-            // Calculate distance and time (using real Strava API fields)
-            const distanceKm = (stravaActivity.distance || 0) / 1000; // Convert meters to km
-            const durationMinutes = (stravaActivity.moving_time || 0) / 60; // Convert seconds to minutes
+            // Data is already processed by backend - use directly
+            const distanceKm = stravaActivity.distance_km || 0;
+            const durationMinutes = stravaActivity.duration_minutes || 0;
             const durationHours = durationMinutes / 60;
             
             // Calculate pace for runs or speed for rides
@@ -257,28 +257,36 @@
                 paceOrSpeedLabel = 'Pace';
             }
             
-            // Format time (HH:MM:SS or MM:SS)
-            let time;
-            if (durationHours >= 1) {
-                const hours = Math.floor(durationHours);
-                const minutes = Math.floor(durationMinutes % 60);
-                const seconds = Math.round((durationMinutes - Math.floor(durationMinutes)) * 60);
-                time = `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-            } else {
-                const minutes = Math.floor(durationMinutes);
-                const seconds = Math.round((durationMinutes - minutes) * 60);
-                time = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+            // Use time from backend (now shows moving time/duration)
+            let time = stravaActivity.time;
+            if (!time) {
+                // Fallback formatting if backend doesn't provide time
+                if (durationHours >= 1) {
+                    const hours = Math.floor(durationHours);
+                    const minutes = Math.floor(durationMinutes % 60);
+                    const seconds = Math.round((durationMinutes - Math.floor(durationMinutes)) * 60);
+                    time = `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                } else {
+                    const minutes = Math.floor(durationMinutes);
+                    const seconds = Math.round((durationMinutes - minutes) * 60);
+                    time = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+                }
             }
             
             // Determine media type and get photo URL
             const hasMedia = stravaActivity.photos && stravaActivity.photos.primary;
-            const mediaType = hasMedia ? (stravaActivity.photos.primary.media_type === 2 ? "video" : "photo") : "none";
+            const mediaType = hasMedia ? (stravaActivity.photos.primary.type === 2 ? "video" : "photo") : "none";
             const mediaIcon = mediaType === "video" ? "🎥" : mediaType === "photo" ? "📸" : "";
             const mediaText = mediaType === "video" ? "Video" : mediaType === "photo" ? "Photo" : "No Media";
-            const photoUrl = hasMedia && mediaType === "photo" ? stravaActivity.photos.primary.urls['600'] : null;
+            const photoUrl = hasMedia && mediaType === "photo" ? 
+                (stravaActivity.photos.primary.url || stravaActivity.photos.primary.urls?.['600'] || stravaActivity.photos.primary.urls?.['1000']) : null;
             
-            // Format date using the full start_date_local field for proper timezone handling
-            const date = formatDate(stravaActivity.start_date_local);
+            // Use pre-formatted date from backend, or format if needed
+            let date = stravaActivity.date;
+            if (!date) {
+                // Fallback formatting if backend doesn't provide date
+                date = formatDate(stravaActivity.start_date_local);
+            }
             
             return {
                 id: stravaActivity.id,
@@ -517,7 +525,7 @@
                 console.log('Loading all activities since May 22, 2025...');
                 
                 // Get all activities from the feed (no limit = all cached activities)
-                const feedResponse = await fetch('http://localhost:8000/api/strava-integration/test-feed?limit=200');
+                const feedResponse = await fetch('http://localhost:8000/api/strava-integration/feed?limit=200');
                 
                 if (!feedResponse.ok) {
                     throw new Error('Failed to fetch activities feed');
