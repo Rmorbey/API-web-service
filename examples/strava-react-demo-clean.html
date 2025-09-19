@@ -3,6 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://cdn-assets.dzcdn.net; style-src 'self' 'unsafe-inline' https://unpkg.com https://cdn-assets.dzcdn.net; img-src 'self' data: https:; connect-src 'self' http://localhost:8000 https://api.strava.com https://api.deezer.com https://widget.deezer.com https://unpkg.com; frame-src 'self' https://widget.deezer.com https://*.deezer.com; object-src 'none'; base-uri 'self';">
+    <meta http-equiv="Permissions-Policy" content="accelerometer=(), gyroscope=(), magnetometer=(), camera=(), microphone=(), payment=(), usb=(), serial=(), bluetooth=(), midi=(), sync-xhr=(), fullscreen=(self), picture-in-picture=()">
     <title>Strava Activity Demo - All Activities Since May 22, 2025</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -218,6 +220,23 @@
     <div class="container">
         <h1>🏃‍♂️🚴‍♂️ Strava Activities Since May 22, 2025</h1>
         <p class="subtitle">All your Run and Ride activities with animated route maps</p>
+        
+        <div style="text-align: center; margin-bottom: 20px;">
+            <button id="refresh-cache-btn" onclick="refreshCache()" style="
+                background: #fc4c02;
+                color: white;
+                border: none;
+                padding: 12px 24px;
+                border-radius: 6px;
+                font-size: 16px;
+                font-weight: 600;
+                cursor: pointer;
+                transition: background 0.2s;
+            " onmouseover="this.style.background='#e03d00'" onmouseout="this.style.background='#fc4c02'">
+                🔄 Refresh Cache Data
+            </button>
+            <div id="refresh-status" style="margin-top: 10px; font-size: 14px; color: #666;"></div>
+        </div>
         
         <div id="activities-container">
             <div class="loading">🔄 Loading all activities...</div>
@@ -530,6 +549,49 @@
             setTimeout(() => {
                 animationInterval = setInterval(animateStep, animationSpeed);
             }, 1000);
+        }
+
+        // Manual cache refresh function
+        async function refreshCache() {
+            const btn = document.getElementById('refresh-cache-btn');
+            const status = document.getElementById('refresh-status');
+            
+            // Disable button and show loading
+            btn.disabled = true;
+            btn.innerHTML = '🔄 Refreshing...';
+            status.innerHTML = 'Starting cache refresh...';
+            
+            try {
+                // Call the refresh endpoint
+                const response = await fetch('/api/strava-integration/refresh-cache', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    status.innerHTML = `✅ Cache refresh started! ${result.message || 'Processing activities in batches...'}`;
+                    
+                    // Reload activities after a short delay
+                    setTimeout(() => {
+                        loadAllActivities();
+                    }, 2000);
+                } else {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+            } catch (error) {
+                console.error('Cache refresh failed:', error);
+                status.innerHTML = `❌ Refresh failed: ${error.message}`;
+            } finally {
+                // Re-enable button after 5 seconds
+                setTimeout(() => {
+                    btn.disabled = false;
+                    btn.innerHTML = '🔄 Refresh Cache Data';
+                    status.innerHTML = '';
+                }, 5000);
+            }
         }
 
         // Load all Strava activities since May 22, 2025 (Run and Ride only)

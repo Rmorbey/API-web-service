@@ -100,11 +100,12 @@ class StravaTokenManager:
         return current_tokens["access_token"]
     
     def _refresh_access_token(self, refresh_token: str) -> str:
-        """Refresh the access token using the refresh token"""
+        """Refresh the access token using the refresh token - FIXED to be synchronous"""
         
-        async def refresh_token_async():
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
+        try:
+            # Use synchronous httpx client instead of async
+            with httpx.Client() as client:
+                response = client.post(
                     "https://www.strava.com/oauth/token",
                     data={
                         "client_id": self.client_id,
@@ -117,12 +118,7 @@ class StravaTokenManager:
                 if response.status_code != 200:
                     raise Exception(f"Failed to refresh token: {response.status_code} - {response.text}")
                 
-                return response.json()
-        
-        try:
-            # Run the async function
-            import asyncio
-            token_data = asyncio.run(refresh_token_async())
+                token_data = response.json()
             
             # Calculate expires_at timestamp
             expires_at = int(datetime.now().timestamp()) + token_data["expires_in"]

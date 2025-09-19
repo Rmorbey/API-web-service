@@ -4,8 +4,8 @@ Minimal Strava Integration API Module
 Contains only the essential endpoints used by the demo
 """
 
-from fastapi import APIRouter, HTTPException, Query, Path
-from fastapi.responses import Response, JSONResponse
+from fastapi import FastAPI, APIRouter, HTTPException, Query, Path
+from fastapi.responses import Response, JSONResponse, HTMLResponse
 from typing import List, Dict, Any, Optional
 import os
 import httpx
@@ -132,6 +132,58 @@ async def get_map_tiles(z: int, x: int, y: int):
                 }
             )
 
+@router.post("/refresh-cache")
+async def refresh_cache():
+    """Manually trigger cache refresh with batch processing"""
+    try:
+        # Force an immediate refresh using the automated system
+        success = cache.force_refresh_now()
+        
+        if success:
+            return {
+                "success": True,
+                "message": "Cache refresh started! Processing activities in 20-activity batches every 15 minutes.",
+                "timestamp": datetime.now().isoformat()
+            }
+        else:
+            return {
+                "success": False,
+                "error": "Failed to start cache refresh",
+                "timestamp": datetime.now().isoformat()
+            }
+    except Exception as e:
+        logger.error(f"Cache refresh failed: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }
+
+@router.post("/cleanup-backups")
+async def cleanup_backups():
+    """Clean up old backup files, keeping only the most recent one"""
+    try:
+        success = cache.cleanup_backups()
+        
+        if success:
+            return {
+                "success": True,
+                "message": "Backup cleanup completed! Only the most recent backup is kept.",
+                "timestamp": datetime.now().isoformat()
+            }
+        else:
+            return {
+                "success": False,
+                "error": "Failed to cleanup backups",
+                "timestamp": datetime.now().isoformat()
+            }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }
+
 @router.get("/feed")
 def get_activity_feed(limit: int = Query(20, ge=1, le=200)):
     """Get activity feed with photos, videos, and descriptions for frontend display"""
@@ -213,6 +265,7 @@ def get_activity_feed(limit: int = Query(20, ge=1, le=200)):
             else:
                 formatted_duration = f"{duration_minutes:.1f} min"
             
+            
             feed_item = {
                 "id": activity["id"],
                 "name": activity["name"],
@@ -222,7 +275,7 @@ def get_activity_feed(limit: int = Query(20, ge=1, le=200)):
                 "date": formatted_date,  # Now includes start time: "14th of September 2025 at 10:12"
                 "time": formatted_duration,  # Now shows moving time: "1:06" or "22.4 min"
                 "description": detailed_activity.get("description", ""),
-                "comment_count": detailed_activity.get("comment_count", 0),
+                "comment_count": len(detailed_activity.get("comments", [])),
                 "photos": optimized_photos,
                 "comments": _clean_comments(detailed_activity.get("comments", [])),
                 "map": optimized_map,
@@ -286,4 +339,18 @@ def _clean_comments(comments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 # - /activities/{id}/music (unused - music included in feed)
 # - _get_activity_music() helper function (unused)
 
+@router.get("/demo", response_class=HTMLResponse)
+def get_demo_page():
+    """Serve the demo HTML page"""
+    try:
+        # Read the HTML file
+        html_file_path = os.path.join(os.path.dirname(__file__), "..", "..", "..", "examples", "strava-react-demo-clean.html")
+        with open(html_file_path, 'r', encoding='utf-8') as f:
+            html_content = f.read()
+        return HTMLResponse(content=html_content)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error loading demo page: {str(e)}")
 
+# Create FastAPI app
+app = FastAPI(title="Strava Integration API", version="1.0.0")
+app.include_router(router, prefix="/api/strava-integration")
