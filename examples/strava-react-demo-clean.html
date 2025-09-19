@@ -292,8 +292,8 @@
                 }
             }
             
-            // Determine media type and get photo URL
-            const hasMedia = stravaActivity.photos && stravaActivity.photos.primary;
+            // Determine media type and get photo URL - only show if there's actual photo data
+            const hasMedia = stravaActivity.photos && stravaActivity.photos.primary && stravaActivity.photos.primary.url;
             const mediaType = hasMedia ? (stravaActivity.photos.primary.type === 2 ? "video" : "photo") : "none";
             const mediaIcon = mediaType === "video" ? "🎥" : mediaType === "photo" ? "📸" : "";
             const mediaText = mediaType === "video" ? "Video" : mediaType === "photo" ? "Photo" : "No Media";
@@ -699,8 +699,8 @@
                             </div>
                         ` : ''}
                         
-                        <!-- Photo Section -->
-                        ${reactData.mediaType !== "none" ? `
+                        <!-- Photo Section - only show if there's actual photo data -->
+                        ${reactData.mediaType !== "none" && reactData.photoUrl ? `
                             <div class="photo-section">
                                 <h4>${reactData.mediaIcon} ${reactData.mediaText}</h4>
                                 <div class="media-container">
@@ -708,12 +708,8 @@
                                         <div class="video-thumbnail">
                                             🎥 Video thumbnail - Click to view on Strava
                                         </div>
-                                    ` : reactData.photoUrl ? `
-                                        <img src="${reactData.photoUrl}" alt="Activity photo">
                                     ` : `
-                                        <div class="photo-placeholder">
-                                            📸 Activity photo
-                                        </div>
+                                        <img src="${reactData.photoUrl}" alt="Activity photo">
                                     `}
                                 </div>
                             </div>

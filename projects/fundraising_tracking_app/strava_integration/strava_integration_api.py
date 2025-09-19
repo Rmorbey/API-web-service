@@ -256,14 +256,12 @@ def get_activity_feed(limit: int = Query(20, ge=1, le=200)):
             except:
                 formatted_date = f"{date_str} at {start_time_str}"  # Fallback format
             
-            # Format moving time as duration
-            duration_minutes = round(activity["moving_time"] / 60, 1) if activity["moving_time"] else 0
-            if duration_minutes >= 60:
-                hours = int(duration_minutes // 60)
-                minutes = int(duration_minutes % 60)
-                formatted_duration = f"{hours}:{minutes:02d}"
-            else:
-                formatted_duration = f"{duration_minutes:.1f} min"
+            # Format moving time as HH:MM:SS duration
+            duration_seconds = activity["moving_time"] if activity["moving_time"] else 0
+            hours = int(duration_seconds // 3600)
+            minutes = int((duration_seconds % 3600) // 60)
+            seconds = int(duration_seconds % 60)
+            formatted_duration = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
             
             
             feed_item = {
