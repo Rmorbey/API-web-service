@@ -15,10 +15,7 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional, Tuple
 from dotenv import load_dotenv
 from .strava_token_manager import StravaTokenManager
-import sys
 import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
-from ..music_integration.music_integration import MusicIntegration
 
 # Configure enhanced logging
 logging.basicConfig(
@@ -31,16 +28,13 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Create performance logger
-perf_logger = logging.getLogger('performance')
-perf_logger.setLevel(logging.INFO)
+# Performance logging is handled by the main logger
 
 load_dotenv()
 
 class SmartStravaCache:
     def __init__(self, cache_duration_hours: int = None):
         self.token_manager = StravaTokenManager()
-        self.music_integration = MusicIntegration()
         self.base_url = "https://www.strava.com/api/v3"
         self.cache_file = "projects/fundraising_tracking_app/strava_integration/strava_cache.json"
         
@@ -74,7 +68,7 @@ class SmartStravaCache:
         self._start_automated_refresh()
         
     def _load_cache(self) -> Dict[str, Any]:
-        """Load cache from file with in-memory optimization"""
+        """Load cache from file with in-memory optimization and corruption detection"""
         now = datetime.now()
         
         # Check if in-memory cache is still valid
@@ -88,11 +82,32 @@ class SmartStravaCache:
             with open(self.cache_file, 'r') as f:
                 self._cache_data = json.load(f)
                 self._cache_loaded_at = now
+                
+                # Validate cache integrity
+                if self._validate_cache_integrity(self._cache_data):
+                    return self._cache_data
+                else:
+                    logger.warning("Cache integrity check failed, attempting to restore from backup...")
+                    if self._restore_from_backup():
+                        return self._cache_data
+                    else:
+                        logger.error("All backups failed, triggering immediate refresh to rebuild cache...")
+                        self._cache_data = {"timestamp": None, "activities": []}
+                        # Trigger immediate refresh to rebuild cache
+                        self._trigger_emergency_refresh()
+                        return self._cache_data
+                        
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            logger.warning(f"Cache file error: {e}, attempting to restore from backup...")
+            if self._restore_from_backup():
                 return self._cache_data
-        except (FileNotFoundError, json.JSONDecodeError):
-            self._cache_data = {"timestamp": None, "activities": []}
-            self._cache_loaded_at = now
-            return self._cache_data
+            else:
+                logger.error("All backups failed, triggering immediate refresh to rebuild cache...")
+                self._cache_data = {"timestamp": None, "activities": []}
+                self._cache_loaded_at = now
+                # Trigger immediate refresh to rebuild cache
+                self._trigger_emergency_refresh()
+                return self._cache_data
     
     def _save_cache(self, data: Dict[str, Any]):
         """Save cache to file and update in-memory cache"""
@@ -225,7 +240,7 @@ class SmartStravaCache:
         # Use cache if valid and not forcing refresh
         if not force_refresh and self._is_cache_valid(cache_data):
             logger.info(f"Using cached data ({len(cache_data['activities'])} activities)")
-            perf_logger.info(f"Cache hit - {time.time() - start_time:.3f}s")
+            logger.info(f"Cache hit - {time.time() - start_time:.3f}s")
             return cache_data["activities"][:limit]
         
         # Cache is invalid or force refresh - SMART MERGE with existing data
@@ -255,13 +270,13 @@ class SmartStravaCache:
             
             execution_time = time.time() - start_time
             logger.info(f"Smart merged {len(merged_activities)} activities (preserved rich data)")
-            perf_logger.info(f"Smart merge complete - {execution_time:.3f}s")
+            logger.info(f"Smart merge complete - {execution_time:.3f}s")
             return merged_activities[:limit]
             
         except Exception as e:
             execution_time = time.time() - start_time
             logger.error(f"Error fetching from Strava: {e}")
-            perf_logger.error(f"API fetch failed - {execution_time:.3f}s")
+            logger.error(f"API fetch failed - {execution_time:.3f}s")
             
             # Fallback to cached data even if expired
             if cache_data.get("activities"):
@@ -284,41 +299,11 @@ class SmartStravaCache:
             )
             
             return response.json()
-        
+            
         except Exception as e:
             logger.error(f"Failed to fetch activities from Strava: {str(e)}")
             raise Exception(f"Strava API error: {str(e)}")
 
-    def get_complete_activity_data(self, activity_id: int) -> Dict[str, Any]:
-        """Get complete activity data including photos, comments, map, and description"""
-        print(f"🔍 DEBUG: get_complete_activity_data called for activity {activity_id}")
-        print(f"🔍 DEBUG: Stack trace:")
-        import traceback
-        traceback.print_stack()
-        
-        cache_data = self._load_cache()
-        
-        # ALWAYS use cached data only - never make API calls
-        for activity in cache_data.get("activities", []):
-            if activity.get("id") == activity_id:
-                print(f"✅ Using cached data for activity {activity_id} (6-hour cache strategy)")
-                return activity
-        
-        # Activity not found in cache - return basic data
-        print(f"⚠️ Activity {activity_id} not found in cache, returning basic data")
-        return {
-            "id": activity_id,
-            "name": "Unknown Activity",
-            "type": "Unknown",
-            "distance": 0,
-            "moving_time": 0,
-            "start_date_local": "2025-01-01T00:00:00Z",
-            "description": "",
-            "photos": {},
-            "comments": [],
-            "map": {},
-            "music": {}
-        }
 
     def _has_complete_data(self, activity: Dict[str, Any]) -> bool:
         """Check if activity has complete data (photos, comments, map, description)"""
@@ -416,75 +401,7 @@ class SmartStravaCache:
             "resource_state": activity_data.get("resource_state", 2)
         }
 
-    def _process_photos_data(self, photos_data: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """Process photos data"""
-        if not photos_data:
-            return {}
-        
-        # Find primary photo
-        primary_photo = None
-        for photo in photos_data:
-            if photo.get("default_photo", False):
-                primary_photo = photo
-                break
-        
-        if not primary_photo and photos_data:
-            primary_photo = photos_data[0]
-        
-        if primary_photo:
-            # Get available URLs from Strava API
-            urls = primary_photo.get("urls", {})
-            
-            # Map available sizes to our expected format
-            photo_urls = {}
-            if "600" in urls and urls["600"]:
-                photo_urls["600"] = urls["600"]
-            elif "1000" in urls and urls["1000"]:
-                photo_urls["600"] = urls["1000"]  # Use 1000 as 600 fallback
-            elif "1800" in urls and urls["1800"]:
-                photo_urls["600"] = urls["1800"]  # Use 1800 as 600 fallback
-                photo_urls["1000"] = urls["1800"]  # Use 1800 as 1000 fallback
-            elif "5000" in urls and urls["5000"]:
-                photo_urls["600"] = urls["5000"]  # Use 5000 as 600 fallback
-                photo_urls["1000"] = urls["5000"]  # Use 5000 as 1000 fallback
-            
-            # If no URLs available, use placeholder
-            if not photo_urls:
-                placeholder = primary_photo.get("placeholder_image", {})
-                if placeholder.get("light_url"):
-                    photo_urls["600"] = placeholder["light_url"]
-                    photo_urls["1000"] = placeholder["light_url"]
-            
-            return {
-                "primary": {
-                    "id": primary_photo.get("unique_id"),  # Use unique_id instead of id
-                    "media_type": primary_photo.get("type", 1),  # Use type instead of media_type
-                    "urls": photo_urls,
-                    "status": primary_photo.get("status", 0),  # Add status info
-                    "placeholder": primary_photo.get("placeholder_image", {})  # Add placeholder info
-                },
-                "count": len(photos_data)
-            }
-        
-        return {}
 
-    def _process_comments_data(self, comments_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Process comments data"""
-        formatted_comments = []
-        for comment in comments_data:
-            formatted_comments.append({
-                "id": comment.get("id"),
-                "text": comment.get("text", ""),
-                "athlete": {
-                    "id": comment.get("athlete", {}).get("id"),
-                    "firstname": comment.get("athlete", {}).get("firstname", ""),
-                    "lastname": comment.get("athlete", {}).get("lastname", ""),
-                    "username": comment.get("athlete", {}).get("username", ""),
-                },
-                "created_at": comment.get("created_at"),
-                "activity_id": comment.get("activity_id")
-            })
-        return formatted_comments
 
     def _decode_polyline(self, polyline_str: str) -> List[List[float]]:
         """Decode Google polyline string to lat/lng coordinates"""
@@ -559,7 +476,8 @@ class SmartStravaCache:
 
     def _smart_merge_activities(self, existing_activities: List[Dict[str, Any]], fresh_activities: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
-        Smart merge: Preserve rich data from existing activities, update basic fields from fresh data
+        Smart merge: Preserve ALL existing data, update only basic fields from fresh data
+        FIXED: Never overwrite existing activities with fresh data to prevent data loss
         """
         # Create lookup maps
         existing_by_id = {activity.get("id"): activity for activity in existing_activities}
@@ -572,8 +490,8 @@ class SmartStravaCache:
             activity_id = fresh_activity.get("id")
             existing_activity = existing_by_id.get(activity_id)
             
-            if existing_activity and self._has_complete_data(existing_activity):
-                # PRESERVE: Keep existing rich data, update only basic fields
+            if existing_activity:
+                # PRESERVE: Always keep existing data, update only basic fields
                 merged_activity = existing_activity.copy()
                 
                 # Update only basic fields that might have changed
@@ -584,7 +502,7 @@ class SmartStravaCache:
                     if field in fresh_activity:
                         merged_activity[field] = fresh_activity[field]
                 
-                logger.info(f"Preserved rich data for activity {activity_id}: {fresh_activity.get('name', 'Unknown')}")
+                logger.info(f"Preserved existing data for activity {activity_id}: {fresh_activity.get('name', 'Unknown')}")
                 
             else:
                 # NEW ACTIVITY: Use fresh data (will be processed later if needed)
@@ -1074,3 +992,135 @@ class SmartStravaCache:
         except Exception as e:
             logger.error(f"❌ Backup cleanup failed: {e}")
             return False
+    
+    def _validate_cache_integrity(self, cache_data: Dict[str, Any]) -> bool:
+        """Validate cache integrity - check for data loss indicators"""
+        try:
+            activities = cache_data.get("activities", [])
+            if not activities:
+                logger.warning("Cache has no activities")
+                return False
+            
+            # Check for significant data loss
+            polyline_count = sum(1 for activity in activities if activity.get("map", {}).get("polyline"))
+            total_activities = len(activities)
+            
+            # If less than 50% of activities have polyline data, consider it corrupted
+            if polyline_count < total_activities * 0.5:
+                logger.warning(f"Cache integrity check failed: Only {polyline_count}/{total_activities} activities have polyline data")
+                return False
+            
+            # Check for recent activities (should have more data)
+            recent_activities = [a for a in activities if a.get("start_date_local", "").startswith("2025-09")]
+            if recent_activities:
+                recent_polyline_count = sum(1 for activity in recent_activities if activity.get("map", {}).get("polyline"))
+                if recent_polyline_count < len(recent_activities) * 0.8:
+                    logger.warning(f"Cache integrity check failed: Recent activities missing polyline data ({recent_polyline_count}/{len(recent_activities)})")
+                    return False
+            
+            logger.info(f"Cache integrity check passed: {polyline_count}/{total_activities} activities have polyline data")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Cache integrity check error: {e}")
+            return False
+    
+    def _restore_from_backup(self) -> bool:
+        """Restore cache from the most recent backup"""
+        try:
+            import glob
+            
+            # Find all backup files
+            backup_pattern = f"{self.cache_file}.backup.*"
+            backup_files = glob.glob(backup_pattern)
+            
+            if not backup_files:
+                logger.error("No backup files found")
+                return False
+            
+            # Sort by modification time (newest first)
+            backup_files.sort(key=lambda x: os.path.getmtime(x), reverse=True)
+            
+            # Try to restore from the most recent backup
+            for backup_file in backup_files:
+                try:
+                    with open(backup_file, 'r') as f:
+                        backup_data = json.load(f)
+                    
+                    # Validate backup integrity
+                    if self._validate_cache_integrity(backup_data):
+                        # Restore the backup
+                        shutil.copy2(backup_file, self.cache_file)
+                        self._cache_data = backup_data
+                        self._cache_loaded_at = datetime.now()
+                        logger.info(f"Successfully restored cache from backup: {os.path.basename(backup_file)}")
+                        return True
+                    else:
+                        logger.warning(f"Backup {os.path.basename(backup_file)} also appears corrupted, trying next...")
+                        continue
+                        
+                except Exception as e:
+                    logger.warning(f"Failed to restore from {os.path.basename(backup_file)}: {e}")
+                    continue
+            
+            logger.error("All backup files are corrupted or invalid")
+            return False
+            
+        except Exception as e:
+            logger.error(f"Failed to restore from backup: {e}")
+            return False
+    
+    def _trigger_emergency_refresh(self):
+        """Trigger an immediate refresh when all data is lost"""
+        try:
+            logger.info("🚨 EMERGENCY REFRESH: All data lost, triggering immediate refresh...")
+            
+            # Create a backup of the empty cache before refresh
+            self._create_backup()
+            
+            # Start emergency refresh in a separate thread to avoid blocking
+            import threading
+            emergency_thread = threading.Thread(target=self._perform_emergency_refresh, daemon=True)
+            emergency_thread.start()
+            
+            logger.info("🚨 Emergency refresh started in background thread")
+            
+        except Exception as e:
+            logger.error(f"Failed to trigger emergency refresh: {e}")
+    
+    def _perform_emergency_refresh(self):
+        """Perform the actual emergency refresh"""
+        try:
+            logger.info("🔄 Performing emergency refresh...")
+            
+            # Fetch fresh data from Strava
+            fresh_activities = self._fetch_from_strava(200)
+            filtered_activities = self._filter_activities(fresh_activities)
+            
+            logger.info(f"✅ Emergency refresh: Fetched {len(fresh_activities)} activities, {len(filtered_activities)} after filtering")
+            
+            # Create new cache with fresh data
+            emergency_cache = {
+                "timestamp": datetime.now().isoformat(),
+                "activities": filtered_activities,
+                "total_fetched": len(fresh_activities),
+                "total_filtered": len(filtered_activities),
+                "emergency_refresh": True
+            }
+            
+            # Save the emergency cache
+            self._save_cache(emergency_cache)
+            
+            # Update in-memory cache
+            self._cache_data = emergency_cache
+            self._cache_loaded_at = datetime.now()
+            
+            logger.info(f"✅ Emergency refresh complete: {len(filtered_activities)} activities restored")
+            
+            # Start batch processing for complete data
+            self._start_batch_processing()
+            
+        except Exception as e:
+            logger.error(f"Emergency refresh failed: {e}")
+            # If emergency refresh fails, at least we have an empty cache
+            logger.warning("System will continue with empty cache until next scheduled refresh")

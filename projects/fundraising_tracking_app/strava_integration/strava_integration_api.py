@@ -9,10 +9,13 @@ from fastapi.responses import Response, JSONResponse, HTMLResponse
 from typing import List, Dict, Any, Optional
 import os
 import httpx
+import logging
 from datetime import datetime
 from dotenv import load_dotenv
 from .smart_strava_cache import SmartStravaCache
-from ..music_integration.music_integration import MusicIntegration
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 # Load environment variables
 load_dotenv()
@@ -20,9 +23,8 @@ load_dotenv()
 # Create router for this project
 router = APIRouter()
 
-# Initialize the smart cache and music integration
+# Initialize the smart cache
 cache = SmartStravaCache()
-music = MusicIntegration()
 
 # Project endpoints
 @router.get("/")
@@ -34,7 +36,6 @@ def project_root():
         "version": "2.0.0",
         "endpoints": {
             "feed": "/feed - Get optimized activity feed with all data",
-            "test-feed": "/test-feed - Raw data for testing (will be removed in production)",
             "jawg-token": "/jawg-token - Get Jawg Maps token",
             "health": "/health - Health check",
             "metrics": "/metrics - System metrics"
@@ -182,7 +183,7 @@ async def cleanup_backups():
             "success": False,
             "error": str(e),
             "timestamp": datetime.now().isoformat()
-        }
+    }
 
 @router.get("/feed")
 def get_activity_feed(limit: int = Query(20, ge=1, le=200)):
@@ -296,21 +297,6 @@ def get_activity_feed(limit: int = Query(20, ge=1, le=200)):
         raise HTTPException(status_code=500, detail=f"Error fetching activity feed: {str(e)}")
 
 
-@router.get("/test-feed")
-def get_test_activities_feed(limit: int = Query(200, ge=1, le=200)):
-    """Get real activities feed from Strava API v3 (temporarily serving real data)"""
-    try:
-        # Get real activities from smart cache
-        activities = cache.get_activities_smart(limit=limit)
-        
-        return {
-            "activities": activities,
-            "total_activities": len(activities),
-            "timestamp": datetime.now().isoformat(),
-            "source": "strava_api_v3"
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching real activities: {str(e)}")
 
 
 def _clean_comments(comments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

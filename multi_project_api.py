@@ -7,7 +7,6 @@ A FastAPI application that can handle multiple different API projects
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from fastapi.security import HTTPBearer
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
@@ -47,33 +46,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Security
-security = HTTPBearer()
-
-# Input validation functions
-def validate_activity_id(activity_id: int) -> int:
-    """Validate activity ID format and range"""
-    if not isinstance(activity_id, int) or activity_id <= 0:
-        raise HTTPException(status_code=400, detail="Invalid activity ID")
-    if activity_id > 99999999999:  # Reasonable upper limit
-        raise HTTPException(status_code=400, detail="Activity ID too large")
-    return activity_id
-
-def validate_limit(limit: int) -> int:
-    """Validate limit parameter"""
-    if not isinstance(limit, int) or limit <= 0:
-        raise HTTPException(status_code=400, detail="Invalid limit")
-    if limit > 200:  # Strava API limit
-        raise HTTPException(status_code=400, detail="Limit too large (max 200)")
-    return limit
-
-def sanitize_string(input_str: str) -> str:
-    """Sanitize string input to prevent injection attacks"""
-    if not isinstance(input_str, str):
-        return ""
-    # Remove potentially dangerous characters
-    sanitized = re.sub(r'[<>"\']', '', input_str)
-    return sanitized[:1000]  # Limit length
+# Input validation is handled by FastAPI's built-in validation
 
 # Security headers middleware
 @app.middleware("http")
