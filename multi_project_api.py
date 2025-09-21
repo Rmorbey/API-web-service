@@ -70,11 +70,11 @@ PROJECTS = {
         "version": "1.0.0",
         "enabled": True
     },
-    "web-scraping": {
-        "name": "Web Scraping Service",
-        "description": "Web scraping utilities for data collection",
+    "fundraising-scraper": {
+        "name": "Fundraising Scraper Service",
+        "description": "JustGiving fundraising data scraper and API",
         "version": "1.0.0", 
-        "enabled": False  # Not implemented yet
+        "enabled": True
     }
 }
 
@@ -84,6 +84,12 @@ try:
 except ImportError:
     # Fallback if modules don't exist
     strava_router = None
+
+try:
+    from projects.fundraising_tracking_app.fundraising_scraper.fundraising_api import router as fundraising_router
+except ImportError:
+    # Fallback if modules don't exist
+    fundraising_router = None
 
 # Root endpoint - shows all available projects
 @app.get("/")
@@ -132,12 +138,24 @@ def serve_demo():
     """Serve the Strava React demo"""
     return FileResponse("examples/strava-react-demo-clean.html")
 
+@app.get("/fundraising-demo")
+def serve_fundraising_demo():
+    """Serve the fundraising demo"""
+    return FileResponse("examples/fundraising-demo.html")
+
 # Include project routers if they exist
 if strava_router:
     app.include_router(
         strava_router, 
         prefix="/api/strava-integration", 
         tags=["strava-integration"]
+    )
+
+if fundraising_router:
+    app.include_router(
+        fundraising_router, 
+        prefix="/api/fundraising", 
+        tags=["fundraising"]
     )
 
 # Direct route for the demo HTML file

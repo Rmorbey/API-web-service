@@ -31,6 +31,12 @@ services:
   - key: STRAVA_EXPIRES_AT
     scope: RUN_TIME
     type: SECRET
+  - key: STRAVA_API_KEY
+    scope: RUN_TIME
+    type: SECRET
+  - key: FUNDRAISING_API_KEY
+    scope: RUN_TIME
+    type: SECRET
   - key: PORT
     scope: RUN_TIME
     value: "8080"

@@ -819,8 +819,11 @@ class SmartStravaCache:
             # Clean up old backups first
             self._cleanup_old_backups()
             
-            # Create new backup
-            backup_file = f"{self.cache_file}.backup.{int(time.time())}"
+            # Create new backup in backups folder
+            backup_dir = os.path.join(os.path.dirname(self.cache_file), "backups")
+            os.makedirs(backup_dir, exist_ok=True)
+            backup_filename = f"strava_cache_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+            backup_file = os.path.join(backup_dir, backup_filename)
             shutil.copy2(self.cache_file, backup_file)
             logger.info(f"✅ Cache backup created: {backup_file}")
         except Exception as e:
@@ -831,8 +834,9 @@ class SmartStravaCache:
         try:
             import glob
             
-            # Find all backup files
-            backup_pattern = f"{self.cache_file}.backup.*"
+            # Find all backup files in backups folder
+            backup_dir = os.path.join(os.path.dirname(self.cache_file), "backups")
+            backup_pattern = os.path.join(backup_dir, "strava_cache_backup_*.json")
             backup_files = glob.glob(backup_pattern)
             
             if len(backup_files) > 1:
@@ -1030,8 +1034,9 @@ class SmartStravaCache:
         try:
             import glob
             
-            # Find all backup files
-            backup_pattern = f"{self.cache_file}.backup.*"
+            # Find all backup files in backups folder
+            backup_dir = os.path.join(os.path.dirname(self.cache_file), "backups")
+            backup_pattern = os.path.join(backup_dir, "strava_cache_backup_*.json")
             backup_files = glob.glob(backup_pattern)
             
             if not backup_files:

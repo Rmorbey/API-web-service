@@ -4,7 +4,7 @@ Minimal Strava Integration API Module
 Contains only the essential endpoints used by the demo
 """
 
-from fastapi import FastAPI, APIRouter, HTTPException, Query, Path
+from fastapi import FastAPI, APIRouter, HTTPException, Query, Path, Header, Depends
 from fastapi.responses import Response, JSONResponse, HTMLResponse
 from typing import List, Dict, Any, Optional
 import os
@@ -25,6 +25,19 @@ router = APIRouter()
 
 # Initialize the smart cache
 cache = SmartStravaCache()
+
+# API Key for protected endpoints
+API_KEY = os.getenv("STRAVA_API_KEY")
+if not API_KEY:
+    raise ValueError("STRAVA_API_KEY environment variable is required")
+
+def verify_api_key(x_api_key: Optional[str] = Header(None)):
+    """Verify API key for protected endpoints"""
+    if not x_api_key:
+        raise HTTPException(status_code=401, detail="API key required")
+    if x_api_key != API_KEY:
+        raise HTTPException(status_code=403, detail="Invalid API key")
+    return x_api_key
 
 # Project endpoints
 @router.get("/")
@@ -134,8 +147,8 @@ async def get_map_tiles(z: int, x: int, y: int):
             )
 
 @router.post("/refresh-cache")
-async def refresh_cache():
-    """Manually trigger cache refresh with batch processing"""
+async def refresh_cache(api_key: str = Depends(verify_api_key)):
+    """Manually trigger cache refresh with batch processing (requires API key)"""
     try:
         # Force an immediate refresh using the automated system
         success = cache.force_refresh_now()
@@ -161,8 +174,8 @@ async def refresh_cache():
         }
 
 @router.post("/cleanup-backups")
-async def cleanup_backups():
-    """Clean up old backup files, keeping only the most recent one"""
+async def cleanup_backups(api_key: str = Depends(verify_api_key)):
+    """Clean up old backup files, keeping only the most recent one (requires API key)"""
     try:
         success = cache.cleanup_backups()
         

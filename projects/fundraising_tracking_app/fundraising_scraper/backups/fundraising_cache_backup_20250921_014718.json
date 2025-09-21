@@ -1,0 +1,23 @@
+{
+  "timestamp": "2025-09-21T01:45:24.904986",
+  "total_raised": 15.0,
+  "donations": [
+    {
+      "donor_name": "Russell Morbey",
+      "amount": 5.0,
+      "message": "",
+      "date": "3 months ago",
+      "scraped_at": "2025-09-21T00:05:36.668677"
+    },
+    {
+      "donor_name": "Gabriella Cook",
+      "amount": 10.0,
+      "message": "Good luck!! X",
+      "date": "3 months ago",
+      "scraped_at": "2025-09-21T00:05:36.667280"
+    }
+  ],
+  "total_donations": 2,
+  "last_updated": "2025-09-21T01:45:24.909785",
+  "version": "1.0"
+}

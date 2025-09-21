@@ -1,15 +1,25 @@
-# Strava Integration API Service
+# Multi-Project API Service
 
-A production-ready FastAPI service that integrates with Strava API v3 to fetch, cache, and serve activity data with enhanced features including music detection, Deezer integration, and interactive maps.
+A production-ready FastAPI service that provides multiple integrated services including Strava data integration and JustGiving fundraising tracking with smart caching, security, and monitoring features.
 
 ## Features
 
+### Strava Integration
 - **Smart Caching**: Intelligent caching strategy with in-memory optimization
 - **Music Integration**: Automatic music detection from activity descriptions with Deezer widgets
 - **Interactive Maps**: GPS route visualization with Jawg Maps integration
 - **Rate Limiting**: Built-in API rate limiting and retry logic
-- **Security**: Comprehensive security headers and input validation
-- **Monitoring**: Health checks, metrics, and performance logging
+
+### Fundraising Tracking
+- **Web Scraping**: Automated JustGiving page scraping every 15 minutes
+- **Smart Data Merging**: Preserves individual donations while updating totals
+- **Backup System**: Automatic backup creation and restoration
+- **Real-time Updates**: Live fundraising progress tracking
+
+### Security & Monitoring
+- **API Key Protection**: Secure endpoints with API key authentication
+- **Security Headers**: Comprehensive security headers and input validation
+- **Health Checks**: System health monitoring and metrics
 - **Production Ready**: Docker containerization and deployment configuration
 
 ## Quick Start

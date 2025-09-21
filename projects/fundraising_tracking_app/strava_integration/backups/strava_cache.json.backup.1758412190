@@ -1,5 +1,5 @@
 {
-  "timestamp": "2025-09-19T23:13:52.058715",
+  "timestamp": "2025-09-20T23:17:02.283812",
   "activities": [
     {
       "id": 15806551007,
@@ -383,97 +383,41 @@
     },
     {
       "id": 15704873563,
-      "name": "Lunch Ride",
-      "type": "Ride",
-      "distance": 9003.7,
-      "moving_time": 1718,
-      "start_date_local": "2025-09-05T12:25:13Z",
-      "description": "Nice little cycle in the sun on the ways to tennis. \n\nRussell Radio: Black parade by my chemical romance, Halloween from rent.",
+      "name": "Unknown Activity",
+      "type": "Unknown",
+      "distance": 0,
+      "moving_time": 0,
+      "start_date_local": "2025-01-01T00:00:00Z",
+      "description": "",
       "photos": {},
       "comments": [],
-      "map": {
-        "polyline": "{owyHct@z@]SHY?I@E?GIGcCEg@Ds@?sAFKJBP^HBb@v@VZLZj@x@JBf@r@ZZjAvA^\\PD`@Ih@pAd@^vAz@`@^x@N\\JJHl@PJFH?j@b@P`@Px@LPPlA`@~EJj@@TJh@@VHj@Lh@JvARlAPb@JLZTLKHOJIXQHMXMXUPA\\OJQ\\QLM~@e@^GbA?LI\\Ep@?LDpA|@v@z@hA|AlDtFl@n@NZFDXl@PV\\`@FBHA`@j@P`A\\vAd@xAh@dAZp@x@tBh@bBx@xCj@~ABR`@xAH`@`@pAd@fBl@fBA@@DA@@PEG@JFNTRFPBPHFTf@Tn@f@hBZv@?LEPYVOTGNCRF|@f@|A^zADLDXDDRbBEpAKp@E`AMj@Gj@BZCnBBdABl@Np@DbAHNVz@b@`ARLb@f@lAfAJZRXXVTH@F`@Xn@`ALLf@t@XXx@nAJCHDRXJDl@z@HBV`@XVFNbAhAT@VCJBX?RCDSZQVW|@uAZWVa@PO\\OVDRI^AJ@h@K`@a@FMTMh@UXSFIPKXY\\Kj@IJGHMJEJMrBw@z@a@RG`AFb@GJEXCXGd@YT?RKNOVCR?p@JT\\b@zABPd@|ABPZv@ZfAHLT`AHl@HRLPPEPWLCJIJCj@_@f@Gd@?TDXEN@HL@?@CDED@VPBJ?NEp@JND?VKJ@HAn@LP?\\TJVJ^@ZGnCBb@BHNBJENTF?JH@LDz@AbBHpAChBJl@JDHKl@Kv@WDABDFP`@|@?JFXPXXv@b@|@j@dBLh@h@lAT^NPFDTd@`@lAALD\\d@hALd@Xb@|AbEALLf@@RAFe@f@@ROv@?f@QdAW`AEnA@LDFXDNLBFPHJCH@n@l@VDHJJD\\d@lAjAn@~@TR`AfBt@xBH\\Vh@Pl@h@`A\\pAHPb@rA`@|Ar@pB`AlBX`@n@`BDRRXNb@Jf@ALLXF^Pd@JLHf@HNHp@DNHf@@TFNN|@`@~AHp@Vr@JbAHVx@fDJRLh@LXTR\\RF?PFBHLz@B\\CL@z@FPTpAHNATPd@f@rBTrAFtAATDx@Uf@UhA[`ASbAc@pA]vASf@Ih@M^Gp@IL?LOh@AHUj@CLAPDLLVh@b@LVFBH?NLHT?CBDF?PV\\r@JBVTT\\tAlAr@\\LNJDHJHPHBTXVRJZn@v@JJF@d@h@TJTTx@dA?K?@F?^f@@VNv@J`@NfA@d@`@lBJ^FJBTFJ?JPh@Jv@HTJj@Rp@?E?CDXVFr@UNS\\MPFN@`@HdASf@@JBd@I~@?LDLA`@BRJPBNKx@AvA_@NALGP@`@I^Kn@KxAc@VBBKUg@C]GQOGWQSGMGOWC??FLHHLBABO[cAE_AIc@@MCBDACFGEJE?CAB",
-        "bounds": {
-          "south": 51.52453,
-          "west": -0.05576,
-          "north": 51.57146,
-          "east": 0.01024
-        }
-      },
-      "music": {
-        "track": {
-          "name": "Black parade",
-          "artist": "my chemical romance"
-        },
-        "detected": {
-          "type": "track",
-          "title": "Black parade",
-          "artist": "my chemical romance",
-          "source": "russell_radio"
-        },
-        "widget_html": "<iframe title=\"deezer-widget\" src=\"https://widget.deezer.com/widget/auto/track/676573\" width=\"100%\" height=\"300\" frameborder=\"0\" allowtransparency=\"true\" allow=\"encrypted-media; clipboard-write\"></iframe>"
-      }
+      "map": {},
+      "music": {}
     },
     {
       "id": 15636264740,
-      "name": "Lunch Ride",
-      "type": "Ride",
-      "distance": 9656.7,
-      "moving_time": 2372,
-      "start_date_local": "2025-08-30T12:12:10Z",
+      "name": "Unknown Activity",
+      "type": "Unknown",
+      "distance": 0,
+      "moving_time": 0,
+      "start_date_local": "2025-01-01T00:00:00Z",
       "description": "",
       "photos": {},
-      "comments": [
-        {
-          "id": 2266103104,
-          "text": "Man knows how to ride long time",
-          "created_at": "2025-09-05T11:28:54Z",
-          "athlete": {
-            "firstname": "Robert",
-            "lastname": "P."
-          }
-        }
-      ],
-      "map": {
-        "polyline": "gcoyHbtHGLCCDf@ZdB\\jARjAQL[AED]Lc@JI?UTSd@u@fCa@n@SPIDi@Di@Zi@TK@KCEOMkAGKi@O]OKOGQk@w@]m@c@iAEi@IQg@Qe@g@QIE?Y]UKIOKICGQBOKa@e@k@YUSAKGKSEIEa@e@[UI?AE?I_@]UMMQGY@SDSHWPULo@Ne@HKFo@Le@FIBSJMNa@TwAFQLQ`@iBNa@L{@Pm@E}@OkAEg@?}@EQQ_@OmAUg@Om@Ue@My@AQBMPc@BM?Y]mAEEMC]WKSKIG]KMOB?ICG@e@CWSq@Ac@Im@Se@S_AC[_@gACWKKF@Em@I]?KIe@IOWgAEI?]Ou@Yk@Es@GOSiAGSMIIYu@aAIUKE?[IUGLM[E?MUISGGAMK[?IEE]QMa@AM?WMa@C_@IOQcAIUSw@QKg@sAU[YuACU?OMi@Qc@EYQSCMQWUOQYIAk@k@SYi@e@_BsBOCOMU?SQGDe@M_@SOOIE@UEE?w@Ba@NQ@KFONcAFcATg@ZMDSCMSi@KECEScAOMPJOEi@gBRaBR]KE?KGSSUDMWg@Ma@EKG?CIKMKWGg@IQMMOYEw@MIc@c@MSICQa@OSEa@[s@Am@BOA]G_@EOEIGYMC[?SIGGUGMIEAUBi@\\]HONSDOJOAIEIeAAc@?{@@m@E{BEU?II[QYGCOe@@a@Em@Bc@As@AMSg@IIUMUGc@CWGSASIGa@Dy@AGACy@KO?IBy@HYPKBSAiAl@WFKFK?EIa@mBq@{B[y@u@}B]}AWg@QMIAG?[RGAWR_@Je@\\UHMLo@@UD_@Cg@F[EGJI@GNGHMCKNg@Le@b@SJw@d@_@L]ZyAb@q@l@WJIHKBOEiABg@HWHG?OF_AvAY^MFIRWVS\\WTWHW@GCOLYIK@UCEFQFYSEIm@q@e@g@o@w@o@o@CMUa@]k@ECWe@g@g@OKQa@e@w@IAOSGEe@q@MKcA{AcAkAO[i@_BKc@Iu@KuAAc@@cARmCBiAF_@Ba@N]@QIy@AaAC[GEKa@a@qAMWc@qAAQQe@AOMa@k@yAMg@?SGWE_@CGG@]kA_@s@Uy@g@uAGYg@aBUq@}@aDMUQi@_@m@s@kBUa@c@}AUc@Os@GKNEDOf@k@JCHIFI@OAQEYK[SSGSQO]eBQc@qAeCi@s@c@{@_@_@[GAOBGQo@IMSQi@s@i@kA]i@m@e@_@i@MGUYg@[KOSMMEEG_@SWGK@ODs@DMEo@@O?]L[RONi@`@UHIFIP]\\e@\\u@t@UDK]m@wAQ_BG_AOs@QwAKiAGe@MiAKc@IgAYcAe@cAq@s@g@MSIcA]YO_Au@MEg@]OAWY_@m@EM]g@QAMEIAGHOVI^UXGVQLI`@OHKGSY[SIC_@k@?K[[SKu@k@WKAIDc@LAD@GAOBPFDE@?PJ_@PHEL?OBABFMABB@IDNCKJ@MC@BCD@G?GHFK?ACH?CDEEH@G@@C@DQEF?EAF?EE@ECEKIkC@{CIy@K_@@GF?F[WPf@j@^n@AS]i@BGD@BEPg@NUPwAPYPi@BED_@CSIWMGSe@EEYGQOYs@IYEEAYHa@JKLa@DCJ_@@a@AA?@G?AECACDMGAEGBGGGDADKDIGNNLM@IG@CDEOM@?NEA@SCAMMCB?FHDJAFGBBUMM?KEABJUIJ@JJf@DCDNFF@@DMAQLFFCL@DF@HAHUg@MAMKEAEMEGGB@CILd@n@?RL@?@EMQQ?M@RBWGHDLf@Z@HB?BWBTCFG??B@A",
-        "bounds": {
-          "south": 51.528,
-          "west": -0.05283,
-          "north": 51.5719,
-          "east": 0.01409
-        }
-      },
+      "comments": [],
+      "map": {},
       "music": {}
     },
     {
       "id": 15633879464,
-      "name": "Morning Run",
-      "type": "Run",
-      "distance": 5197.1,
-      "moving_time": 1539,
-      "start_date_local": "2025-08-30T09:03:57Z",
+      "name": "Unknown Activity",
+      "type": "Unknown",
+      "distance": 0,
+      "moving_time": 0,
+      "start_date_local": "2025-01-01T00:00:00Z",
       "description": "",
       "photos": {},
-      "comments": [
-        {
-          "id": 2266103368,
-          "text": "Cracking pace Gromit ",
-          "created_at": "2025-09-05T11:29:21Z",
-          "athlete": {
-            "firstname": "Robert",
-            "lastname": "P."
-          }
-        }
-      ],
-      "map": {
-        "polyline": "ggmyHrzESGSDQC[c@a@YWQm@S{Aq@W[GEa@AWSSGc@EMF]b@E@[?EGGAG@ULe@PMCU@EFETG|AOpAEPSf@SV{B~@C?KC_@q@s@k@EQIISA_A]eAIIBqBLSHk@\\SXWj@Il@?`@D`@t@vC@d@Kf@S^Uj@WTQD]@m@Us@]WIE@WNc@FGESDQLOVETKfA@b@F^NtA?JC@IKESUeB?]D]Tu@P[X_@JIPIREXAt@Lj@Tl@?h@OLKP[No@B_@Cq@Km@QaB@w@J{@DG^[XIVSn@OXONEXAvATl@Rd@HPHZXNR^n@DDF@`@Sj@G\\M^IPKLWRs@\\eCDONQHCJ@RKTIb@CZ@BEDCt@OP?z@Lf@`@z@VfAVv@`@VJf@`@BHEFGAQSYi@UQq@a@_Bo@WAKGa@Ii@UWCc@J_@Dm@AMByAn@IJGPW~CI\\Ud@MNOFg@@c@Du@`@KCe@mAe@]BCB@EFGBe@EKE_@_@QCSDHAHEm@O_@D_@A]JO?e@HIJa@T[^MXMr@C\\B^D\\ZfAHhAAt@Ol@MR[TQHQ@g@Ee@Kw@WU?QD[EQ?G@Y^GPYfBEh@B^B\\Lt@IDGWO_BA_@@[F_@FWZm@V[RQJC\\E\\Ab@J\\TVH^?~@URSL]DUBe@Cy@S_AIi@EkAFa@H]Zg@DQHGREd@YZKTSTC~@HjBh@PLh@n@ZXb@v@NHTGXWXQz@QVOP]Pw@b@qCRSTI^GjAGj@Md@Ap@JZRNPPHjAN`Bf@^VJBNCd@SDEBY",
-        "bounds": {
-          "south": 51.51866,
-          "west": -0.03948,
-          "north": 51.52722,
-          "east": -0.03401
-        }
-      },
+      "comments": [],
+      "map": {},
       "music": {}
     },
     {
@@ -705,7 +649,11 @@
           "east": 0.01032
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 1548,
+      "start_date": "2025-08-01T13:18:22Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 25.8
     },
     {
       "id": 15240308203,
@@ -726,7 +674,11 @@
           "east": 0.00858
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 1767,
+      "start_date": "2025-07-26T10:14:03Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 24.7
     },
     {
       "id": 15238806151,
@@ -747,7 +699,11 @@
           "east": -0.03396
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 1530,
+      "start_date": "2025-07-26T08:02:44Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 30.2
     },
     {
       "id": 15238505684,
@@ -768,7 +724,11 @@
           "east": 0.01015
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 1763,
+      "start_date": "2025-07-26T07:21:49Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 23.4
     },
     {
       "id": 15209748091,
@@ -789,7 +749,11 @@
           "east": 0.00853
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 1905,
+      "start_date": "2025-07-23T12:56:52Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 29.3
     },
     {
       "id": 15208123272,
@@ -810,7 +774,11 @@
           "east": 0.00982
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 1596,
+      "start_date": "2025-07-23T10:32:19Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 25.5
     },
     {
       "id": 15133898336,
@@ -831,7 +799,11 @@
           "east": 0.00857
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 1916,
+      "start_date": "2025-07-16T13:54:56Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 29.0
     },
     {
       "id": 15132421125,
@@ -852,7 +824,11 @@
           "east": 0.01023
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 1788,
+      "start_date": "2025-07-16T11:27:40Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 26.0
     },
     {
       "id": 15032311747,
@@ -873,7 +849,11 @@
           "east": 0.01059
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 799,
+      "start_date": "2025-07-07T07:32:20Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 24.4
     },
     {
       "id": 15019052884,
@@ -894,7 +874,11 @@
           "east": 0.01042
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 1846,
+      "start_date": "2025-07-05T21:10:20Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 37.2
     },
     {
       "id": 15018895812,
@@ -915,7 +899,11 @@
           "east": 0.01402
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 1453,
+      "start_date": "2025-07-05T11:26:49Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 25.2
     },
     {
       "id": 14859927441,
@@ -936,7 +924,11 @@
           "east": 0.01018
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 1932,
+      "start_date": "2025-06-20T12:50:15Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 31.2
     },
     {
       "id": 14858752762,
@@ -957,7 +949,11 @@
           "east": 0.01027
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 2079,
+      "start_date": "2025-06-20T10:35:11Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 25.5
     },
     {
       "id": 14817386661,
@@ -978,7 +974,11 @@
           "east": 0.0157
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 1700,
+      "start_date": "2025-06-16T14:13:54Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 25.8
     },
     {
       "id": 14787308269,
@@ -999,7 +999,11 @@
           "east": 0.01015
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 2753,
+      "start_date": "2025-06-13T14:06:57Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 31.4
     },
     {
       "id": 14785842272,
@@ -1020,7 +1024,11 @@
           "east": 0.01025
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 1852,
+      "start_date": "2025-06-13T11:25:18Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 25.4
     },
     {
       "id": 14743687303,
@@ -1041,7 +1049,11 @@
           "east": 0.02369
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 2507,
+      "start_date": "2025-06-09T11:36:17Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 37.0
     },
     {
       "id": 14722559232,
@@ -1062,7 +1074,11 @@
           "east": 0.01017
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 1791,
+      "start_date": "2025-06-07T10:55:05Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 29.1
     },
     {
       "id": 14720791333,
@@ -1083,7 +1099,11 @@
           "east": -0.03419
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 1491,
+      "start_date": "2025-06-07T08:06:03Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 29.9
     },
     {
       "id": 14720477687,
@@ -1104,7 +1124,11 @@
           "east": 0.01022
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 1742,
+      "start_date": "2025-06-07T07:19:53Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 23.0
     },
     {
       "id": 14714012937,
@@ -1125,7 +1149,11 @@
           "east": 0.01574
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 1711,
+      "start_date": "2025-06-06T13:06:20Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 25.1
     },
     {
       "id": 14694480038,
@@ -1146,7 +1174,11 @@
           "east": 0.0102
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 2134,
+      "start_date": "2025-06-04T14:02:56Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 35.5
     },
     {
       "id": 14693002853,
@@ -1167,7 +1199,11 @@
           "east": 0.00992
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 1711,
+      "start_date": "2025-06-04T11:23:55Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 24.9
     },
     {
       "id": 14650286562,
@@ -1188,7 +1224,11 @@
           "east": 0.01016
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 2728,
+      "start_date": "2025-05-31T10:21:45Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 27.1
     },
     {
       "id": 14648504789,
@@ -1209,7 +1249,11 @@
           "east": -0.03415
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 1547,
+      "start_date": "2025-05-31T08:04:17Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 32.3
     },
     {
       "id": 14648129727,
@@ -1230,7 +1274,11 @@
           "east": 0.01026
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 1803,
+      "start_date": "2025-05-31T07:15:43Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 23.1
     },
     {
       "id": 14620810712,
@@ -1251,7 +1299,11 @@
           "east": 0.01018
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 2476,
+      "start_date": "2025-05-28T13:05:30Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 32.7
     },
     {
       "id": 14619905481,
@@ -1272,10 +1324,14 @@
           "east": 0.01027
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 1834,
+      "start_date": "2025-05-28T11:29:40Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 25.5
     }
   ],
   "total_fetched": 172,
   "total_filtered": 48,
-  "manual_refresh": true
+  "smart_merge": true
 }
