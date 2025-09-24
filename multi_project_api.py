@@ -18,6 +18,14 @@ from dotenv import load_dotenv
 # Import security middleware
 from projects.fundraising_tracking_app.strava_integration.security import SecurityMiddleware
 
+# Import error handling
+from projects.fundraising_tracking_app.strava_integration.simple_error_handlers import (
+    http_exception_handler,
+    validation_exception_handler,
+    general_exception_handler
+)
+from fastapi.exceptions import RequestValidationError
+
 # Load environment variables
 load_dotenv()
 
@@ -68,6 +76,11 @@ async def add_security_headers(request: Request, call_next):
 # Add security middleware
 security_middleware = SecurityMiddleware()
 app.middleware("http")(security_middleware)
+
+# Register error handlers
+app.add_exception_handler(HTTPException, http_exception_handler)
+app.add_exception_handler(RequestValidationError, validation_exception_handler)
+app.add_exception_handler(Exception, general_exception_handler)
 
 # Project configuration
 PROJECTS = {

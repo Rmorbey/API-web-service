@@ -215,9 +215,21 @@ async def api_exception_handler(request: Request, exc: APIException) -> JSONResp
         request_id=str(uuid.uuid4())
     )
     
+    # Create a simple dict to avoid JSON serialization issues
+    response_content = {
+        "success": False,
+        "error": exc.error_code.value,
+        "message": exc.message,
+        "timestamp": datetime.now().isoformat(),
+        "request_id": exc.request_id
+    }
+    
+    if exc.details:
+        response_content["details"] = exc.details
+    
     return JSONResponse(
         status_code=exc.status_code,
-        content=error_response.dict()
+        content=response_content
     )
 
 
@@ -281,9 +293,21 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
         request_id=str(uuid.uuid4())
     )
     
+    # Create a simple dict to avoid JSON serialization issues
+    response_content = {
+        "success": False,
+        "error": exc.error_code.value,
+        "message": exc.message,
+        "timestamp": datetime.now().isoformat(),
+        "request_id": exc.request_id
+    }
+    
+    if exc.details:
+        response_content["details"] = exc.details
+    
     return JSONResponse(
         status_code=exc.status_code,
-        content=error_response.dict()
+        content=response_content
     )
 
 
@@ -296,14 +320,22 @@ async def general_exception_handler(request: Request, exc: Exception) -> JSONRes
         "method": request.method
     }, exc_info=True)
     
-    error_response = create_error_response(
-        error_code=ErrorCode.INTERNAL_SERVER_ERROR,
-        message="An unexpected error occurred",
-        details={"exception_type": type(exc).__name__},
-        request_id=str(uuid.uuid4())
-    )
+    # Create a simple dict to avoid JSON serialization issues
+    response_content = {
+        "success": False,
+        "error": "INTERNAL_SERVER_ERROR",
+        "message": "An unexpected error occurred",
+        "timestamp": datetime.now().isoformat(),
+        "request_id": str(uuid.uuid4())
+    }
+    
+    if exc:
+        response_content["details"] = {
+            "exception_type": type(exc).__name__,
+            "exception_message": str(exc)
+        }
     
     return JSONResponse(
         status_code=500,
-        content=error_response.dict()
+        content=response_content
     )

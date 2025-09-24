@@ -28,6 +28,13 @@ from .models import (
     CleanupRequest,
     MapTilesRequest
 )
+from .error_handlers import (
+    AuthenticationException,
+    AuthorizationException,
+    ValidationException,
+    ExternalServiceException,
+    APIException
+)
 # Error handling will be implemented in Phase 3 completion
 
 # Configure logging
@@ -50,9 +57,15 @@ if not API_KEY:
 def verify_api_key(x_api_key: Optional[str] = Header(None)):
     """Verify API key for protected endpoints"""
     if not x_api_key:
-        raise HTTPException(status_code=401, detail="API key required")
+        raise HTTPException(
+            status_code=401,
+            detail="API key required - X-API-Key header is missing"
+        )
     if x_api_key != API_KEY:
-        raise HTTPException(status_code=403, detail="Invalid API key")
+        raise HTTPException(
+            status_code=403,
+            detail="Invalid API key - The provided API key is not valid"
+        )
     return x_api_key
 
 # Project endpoints
@@ -447,7 +460,12 @@ async def get_activity_feed(request: FeedRequest = Depends()):
         response.headers["ETag"] = f'"{hash(str(response_data))}"'
         return response
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching activity feed: {str(e)}")
+        raise APIException(
+            error_code="INTERNAL_SERVER_ERROR",
+            message="Error fetching activity feed",
+            detail=f"Failed to retrieve activity data: {str(e)}",
+            status_code=500
+        )
 
 
 
@@ -486,8 +504,12 @@ def get_demo_page():
             html_content = f.read()
         return HTMLResponse(content=html_content)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error loading demo page: {str(e)}")
+        raise APIException(
+            error_code="INTERNAL_SERVER_ERROR",
+            message="Error loading demo page",
+            detail=f"Failed to load demo HTML: {str(e)}",
+            status_code=500
+        )
 
-# Create FastAPI app
-app = FastAPI(title="Strava Integration API", version="1.0.0")
-app.include_router(router, prefix="/api/strava-integration")
+# Router is exported for use in multi_project_api.py
+# No need to create a separate FastAPI app here

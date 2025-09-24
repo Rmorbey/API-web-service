@@ -18,6 +18,11 @@ from .models import (
     CleanupResponse,
     ProjectInfoResponse
 )
+from ..strava_integration.error_handlers import (
+    AuthenticationException,
+    AuthorizationException,
+    APIException
+)
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -37,9 +42,15 @@ if not API_KEY:
 def verify_api_key(x_api_key: Optional[str] = Header(None)):
     """Verify API key for protected endpoints"""
     if not x_api_key:
-        raise HTTPException(status_code=401, detail="API key required")
+        raise HTTPException(
+            status_code=401,
+            detail="API key required - X-API-Key header is missing"
+        )
     if x_api_key != API_KEY:
-        raise HTTPException(status_code=403, detail="Invalid API key")
+        raise HTTPException(
+            status_code=403,
+            detail="Invalid API key - The provided API key is not valid"
+        )
     return x_api_key
 
 @router.get("/", response_model=ProjectInfoResponse)
@@ -102,7 +113,12 @@ def get_fundraising_data() -> FundraisingDataResponse:
         
     except Exception as e:
         logger.error(f"Failed to get fundraising data: {e}")
-        raise HTTPException(status_code=500, detail=f"Error fetching fundraising data: {str(e)}")
+        raise APIException(
+            error_code="INTERNAL_SERVER_ERROR",
+            message="Error fetching fundraising data",
+            detail=f"Failed to retrieve fundraising data: {str(e)}",
+            status_code=500
+        )
 
 @router.post("/refresh", response_model=RefreshResponse)
 def refresh_fundraising_data(api_key: str = Depends(verify_api_key)) -> RefreshResponse:
@@ -150,7 +166,12 @@ def get_donations() -> DonationsResponse:
         
     except Exception as e:
         logger.error(f"Failed to get donations: {e}")
-        raise HTTPException(status_code=500, detail=f"Error fetching donations: {str(e)}")
+        raise APIException(
+            error_code="INTERNAL_SERVER_ERROR",
+            message="Error fetching donations",
+            detail=f"Failed to retrieve donations data: {str(e)}",
+            status_code=500
+        )
 
 @router.post("/cleanup-backups", response_model=CleanupResponse)
 def cleanup_backups(api_key: str = Depends(verify_api_key)) -> CleanupResponse:

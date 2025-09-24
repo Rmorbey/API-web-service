@@ -60,6 +60,7 @@ class ErrorResponse(BaseModel):
         json_encoders = {
             datetime: lambda v: v.isoformat()
         }
+        json_serialize_default_exclude_none = True
 
 
 class ValidationErrorResponse(ErrorResponse):

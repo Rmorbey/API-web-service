@@ -1,5 +1,5 @@
 {
-  "timestamp": "2025-09-24T12:46:22.887239",
+  "timestamp": "2025-09-24T18:57:09.213484",
   "activities": [
     {
       "id": 15806551007,
@@ -32,7 +32,11 @@
           "source": "description"
         },
         "widget_html": "<iframe title=\"deezer-widget\" src=\"https://widget.deezer.com/widget/auto/album/51306182\" width=\"100%\" height=\"300\" frameborder=\"0\" allowtransparency=\"true\" allow=\"encrypted-media; clipboard-write\"></iframe>"
-      }
+      },
+      "elapsed_time": 3967,
+      "start_date": "2025-09-14T09:12:32Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 70.3
     },
     {
       "id": 15723207147,
@@ -65,7 +69,11 @@
           "source": "russell_radio"
         },
         "widget_html": "<iframe title=\"deezer-widget\" src=\"https://widget.deezer.com/widget/auto/track/917717\" width=\"100%\" height=\"300\" frameborder=\"0\" allowtransparency=\"true\" allow=\"encrypted-media; clipboard-write\"></iframe>"
-      }
+      },
+      "elapsed_time": 1509,
+      "start_date": "2025-09-07T00:56:42Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 38.5
     },
     {
       "id": 15720170381,
@@ -98,7 +106,11 @@
           "source": "description"
         },
         "widget_html": "<iframe title=\"deezer-widget\" src=\"https://widget.deezer.com/widget/auto/album/74606742\" width=\"100%\" height=\"300\" frameborder=\"0\" allowtransparency=\"true\" allow=\"encrypted-media; clipboard-write\"></iframe>"
-      }
+      },
+      "elapsed_time": 1555,
+      "start_date": "2025-09-06T17:11:54Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 27.6
     },
     {
       "id": 15714969584,
@@ -131,7 +143,11 @@
           "source": "russell_radio"
         },
         "widget_html": "<iframe title=\"deezer-widget\" src=\"https://widget.deezer.com/widget/auto/track/2454854845\" width=\"100%\" height=\"300\" frameborder=\"0\" allowtransparency=\"true\" allow=\"encrypted-media; clipboard-write\"></iframe>"
-      }
+      },
+      "elapsed_time": 2064,
+      "start_date": "2025-09-06T10:02:35Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 31.2
     },
     {
       "id": 15713457471,
@@ -177,7 +193,11 @@
           "source": "description"
         },
         "widget_html": "<iframe title=\"deezer-widget\" src=\"https://widget.deezer.com/widget/auto/album/673479671\" width=\"100%\" height=\"300\" frameborder=\"0\" allowtransparency=\"true\" allow=\"encrypted-media; clipboard-write\"></iframe>"
-      }
+      },
+      "elapsed_time": 1508,
+      "start_date": "2025-09-06T08:04:18Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 31.9
     },
     {
       "id": 15713093622,
@@ -210,7 +230,11 @@
           "source": "russell_radio"
         },
         "widget_html": "<iframe title=\"deezer-widget\" src=\"https://widget.deezer.com/widget/auto/track/4762041\" width=\"100%\" height=\"300\" frameborder=\"0\" allowtransparency=\"true\" allow=\"encrypted-media; clipboard-write\"></iframe>"
-      }
+      },
+      "elapsed_time": 1840,
+      "start_date": "2025-09-06T07:16:32Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 23.2
     },
     {
       "id": 15706321484,
@@ -256,7 +280,11 @@
           "source": "russell_radio"
         },
         "widget_html": "<iframe title=\"deezer-widget\" src=\"https://widget.deezer.com/widget/auto/track/3550943041\" width=\"100%\" height=\"300\" frameborder=\"0\" allowtransparency=\"true\" allow=\"encrypted-media; clipboard-write\"></iframe>"
-      }
+      },
+      "elapsed_time": 2036,
+      "start_date": "2025-09-05T14:00:19Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 39.7
     },
     {
       "id": 15704873563,
@@ -289,7 +317,11 @@
           "source": "russell_radio"
         },
         "widget_html": "<iframe title=\"deezer-widget\" src=\"https://widget.deezer.com/widget/auto/track/676573\" width=\"100%\" height=\"300\" frameborder=\"0\" allowtransparency=\"true\" allow=\"encrypted-media; clipboard-write\"></iframe>"
-      }
+      },
+      "elapsed_time": 1980,
+      "start_date": "2025-09-05T11:25:13Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 25.8
     },
     {
       "id": 15636264740,
@@ -320,7 +352,11 @@
           "east": 0.01409
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 2705,
+      "start_date": "2025-08-30T11:12:10Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 43.0
     },
     {
       "id": 15633879464,
@@ -351,7 +387,11 @@
           "east": -0.03401
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 1539,
+      "start_date": "2025-08-30T08:03:57Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 32.1
     },
     {
       "id": 15633559560,
@@ -372,7 +412,11 @@
           "east": 0.01021
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 1716,
+      "start_date": "2025-08-30T07:24:24Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 23.5
     },
     {
       "id": 15605376464,
@@ -393,7 +437,11 @@
           "east": 0.0087
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 2177,
+      "start_date": "2025-08-27T14:12:12Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 29.0
     },
     {
       "id": 15603617044,
@@ -414,7 +462,11 @@
           "east": 0.01023
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 1597,
+      "start_date": "2025-08-27T11:24:44Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 25.4
     },
     {
       "id": 15590541911,
@@ -435,7 +487,11 @@
           "east": 0.01055
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 711,
+      "start_date": "2025-08-26T10:28:41Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 18.1
     },
     {
       "id": 15560437957,
@@ -456,7 +512,11 @@
           "east": 0.01042
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 1252,
+      "start_date": "2025-08-23T16:18:21Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 27.4
     },
     {
       "id": 15554608258,
@@ -477,7 +537,11 @@
           "east": -0.03402
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 1586,
+      "start_date": "2025-08-23T08:04:37Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 36.4
     },
     {
       "id": 15554159167,
@@ -498,7 +562,11 @@
           "east": 0.01026
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 1529,
+      "start_date": "2025-08-23T07:12:42Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 23.2
     },
     {
       "id": 15476320831,
@@ -519,7 +587,11 @@
           "east": 0.00867
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 1911,
+      "start_date": "2025-08-16T09:42:22Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 28.9
     },
     {
       "id": 15475138427,
@@ -540,7 +612,11 @@
           "east": -0.03416
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 1607,
+      "start_date": "2025-08-16T08:03:52Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 30.4
     },
     {
       "id": 15311101720,
@@ -561,7 +637,11 @@
           "east": 0.00857
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 2568,
+      "start_date": "2025-08-01T17:33:43Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 29.2
     },
     {
       "id": 15308524070,
@@ -582,7 +662,11 @@
           "east": 0.01032
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 1548,
+      "start_date": "2025-08-01T13:18:22Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 25.8
     },
     {
       "id": 15240308203,
@@ -603,7 +687,11 @@
           "east": 0.00858
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 1767,
+      "start_date": "2025-07-26T10:14:03Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 24.7
     },
     {
       "id": 15238806151,
@@ -624,7 +712,11 @@
           "east": -0.03396
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 1530,
+      "start_date": "2025-07-26T08:02:44Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 30.2
     },
     {
       "id": 15238505684,
@@ -645,7 +737,11 @@
           "east": 0.01015
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 1763,
+      "start_date": "2025-07-26T07:21:49Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 23.4
     },
     {
       "id": 15209748091,
@@ -666,7 +762,11 @@
           "east": 0.00853
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 1905,
+      "start_date": "2025-07-23T12:56:52Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 29.3
     },
     {
       "id": 15208123272,
@@ -687,7 +787,11 @@
           "east": 0.00982
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 1596,
+      "start_date": "2025-07-23T10:32:19Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 25.5
     },
     {
       "id": 15133898336,
@@ -708,7 +812,11 @@
           "east": 0.00857
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 1916,
+      "start_date": "2025-07-16T13:54:56Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 29.0
     },
     {
       "id": 15132421125,
@@ -729,7 +837,11 @@
           "east": 0.01023
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 1788,
+      "start_date": "2025-07-16T11:27:40Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 26.0
     },
     {
       "id": 15032311747,
@@ -750,7 +862,11 @@
           "east": 0.01059
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 799,
+      "start_date": "2025-07-07T07:32:20Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 24.4
     },
     {
       "id": 15019052884,
@@ -771,7 +887,11 @@
           "east": 0.01042
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 1846,
+      "start_date": "2025-07-05T21:10:20Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 37.2
     },
     {
       "id": 15018895812,
@@ -792,7 +912,11 @@
           "east": 0.01402
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 1453,
+      "start_date": "2025-07-05T11:26:49Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 25.2
     },
     {
       "id": 14859927441,
@@ -813,7 +937,11 @@
           "east": 0.01018
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 1932,
+      "start_date": "2025-06-20T12:50:15Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 31.2
     },
     {
       "id": 14858752762,
@@ -834,7 +962,11 @@
           "east": 0.01027
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 2079,
+      "start_date": "2025-06-20T10:35:11Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 25.5
     },
     {
       "id": 14817386661,
@@ -855,7 +987,11 @@
           "east": 0.0157
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 1700,
+      "start_date": "2025-06-16T14:13:54Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 25.8
     },
     {
       "id": 14787308269,
@@ -876,7 +1012,11 @@
           "east": 0.01015
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 2753,
+      "start_date": "2025-06-13T14:06:57Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 31.4
     },
     {
       "id": 14785842272,
@@ -897,7 +1037,11 @@
           "east": 0.01025
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 1852,
+      "start_date": "2025-06-13T11:25:18Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 25.4
     },
     {
       "id": 14743687303,
@@ -918,7 +1062,11 @@
           "east": 0.02369
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 2507,
+      "start_date": "2025-06-09T11:36:17Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 37.0
     },
     {
       "id": 14722559232,
@@ -939,7 +1087,11 @@
           "east": 0.01017
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 1791,
+      "start_date": "2025-06-07T10:55:05Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 29.1
     },
     {
       "id": 14720791333,
@@ -960,7 +1112,11 @@
           "east": -0.03419
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 1491,
+      "start_date": "2025-06-07T08:06:03Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 29.9
     },
     {
       "id": 14720477687,
@@ -981,7 +1137,11 @@
           "east": 0.01022
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 1742,
+      "start_date": "2025-06-07T07:19:53Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 23.0
     },
     {
       "id": 14714012937,
@@ -1002,7 +1162,11 @@
           "east": 0.01574
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 1711,
+      "start_date": "2025-06-06T13:06:20Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 25.1
     },
     {
       "id": 14694480038,
@@ -1023,7 +1187,11 @@
           "east": 0.0102
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 2134,
+      "start_date": "2025-06-04T14:02:56Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 35.5
     },
     {
       "id": 14693002853,
@@ -1044,7 +1212,11 @@
           "east": 0.00992
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 1711,
+      "start_date": "2025-06-04T11:23:55Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 24.9
     },
     {
       "id": 14650286562,
@@ -1065,7 +1237,11 @@
           "east": 0.01016
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 2728,
+      "start_date": "2025-05-31T10:21:45Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 27.1
     },
     {
       "id": 14648504789,
@@ -1086,7 +1262,11 @@
           "east": -0.03415
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 1547,
+      "start_date": "2025-05-31T08:04:17Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 32.3
     },
     {
       "id": 14648129727,
@@ -1107,7 +1287,11 @@
           "east": 0.01026
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 1803,
+      "start_date": "2025-05-31T07:15:43Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 23.1
     },
     {
       "id": 14620810712,
@@ -1128,7 +1312,11 @@
           "east": 0.01018
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 2476,
+      "start_date": "2025-05-28T13:05:30Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 32.7
     },
     {
       "id": 14619905481,
@@ -1149,10 +1337,14 @@
           "east": 0.01027
         }
       },
-      "music": {}
+      "music": {},
+      "elapsed_time": 1834,
+      "start_date": "2025-05-28T11:29:40Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 25.5
     }
   ],
-  "total_fetched": 172,
+  "total_fetched": 173,
   "total_filtered": 48,
-  "emergency_refresh": true
+  "manual_refresh": true
 }
