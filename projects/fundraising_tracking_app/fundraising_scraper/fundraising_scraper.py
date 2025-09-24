@@ -249,7 +249,7 @@ class SmartFundraisingCache:
             raise
     
     def _smart_merge_fundraising_data(self, existing_data: Dict[str, Any], fresh_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Smart merge: preserve all existing donations, update only total raised"""
+        """Smart merge: preserve all existing donations, update dates and total raised"""
         try:
             # Start with existing data
             merged_data = existing_data.copy()
@@ -262,20 +262,39 @@ class SmartFundraisingCache:
                 "version": "1.0"
             })
             
-            # Smart merge donations: preserve existing, add new ones
+            # Smart merge donations: preserve existing, add new ones, update dates
             existing_donations = {self._get_donation_key(d): d for d in merged_data.get("donations", [])}
             fresh_donations = fresh_data.get("donations", [])
             
-            # Add new donations that don't already exist
+            # Process fresh donations: add new ones and update dates for existing ones
             new_donations = []
+            updated_donations = []
+            
             for fresh_donation in fresh_donations:
                 donation_key = self._get_donation_key(fresh_donation)
+                
                 if donation_key not in existing_donations:
+                    # This is a completely new donation
                     new_donations.append(fresh_donation)
                     logger.info(f"New donation found: {fresh_donation.get('donor_name')} - £{fresh_donation.get('amount')}")
+                else:
+                    # This donation exists, check if the date has changed
+                    existing_donation = existing_donations[donation_key]
+                    existing_date = existing_donation.get('date', '')
+                    fresh_date = fresh_donation.get('date', '')
+                    
+                    if existing_date != fresh_date:
+                        # Date has changed, update the existing donation
+                        existing_donation['date'] = fresh_date
+                        existing_donation['scraped_at'] = fresh_donation.get('scraped_at', datetime.now().isoformat())
+                        updated_donations.append(existing_donation)
+                        logger.info(f"Updated donation date: {fresh_donation.get('donor_name')} - {existing_date} → {fresh_date}")
+                    else:
+                        # Date hasn't changed, keep existing donation as-is
+                        updated_donations.append(existing_donation)
             
-            # Combine existing and new donations
-            all_donations = list(existing_donations.values()) + new_donations
+            # Combine all donations (existing with updated dates + new ones)
+            all_donations = updated_donations + new_donations
             
             # Sort by date (most recent first)
             all_donations.sort(key=lambda x: x.get('scraped_at', ''), reverse=True)
@@ -285,7 +304,7 @@ class SmartFundraisingCache:
                 "total_donations": len(all_donations)
             })
             
-            logger.info(f"Smart merge: {len(existing_donations)} existing + {len(new_donations)} new = {len(all_donations)} total donations")
+            logger.info(f"Smart merge: {len(updated_donations)} existing (with date updates) + {len(new_donations)} new = {len(all_donations)} total donations")
             
             return merged_data
             
