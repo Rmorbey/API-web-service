@@ -21,7 +21,12 @@ from .models import (
     RefreshResponse,
     CleanupResponse,
     ProjectInfoResponse,
-    Activity
+    Activity,
+    # Request models (Phase 2)
+    FeedRequest,
+    RefreshRequest,
+    CleanupRequest,
+    MapTilesRequest
 )
 # Error handling will be implemented in Phase 3 completion
 
@@ -122,16 +127,28 @@ def get_jawg_token():
     }
 
 @router.get("/map-tiles/{z}/{x}/{y}")
-async def get_map_tiles(z: int, x: int, y: int):
-    """Secure proxy for Jawg map tiles - keeps token server-side"""
+async def get_map_tiles(z: int, x: int, y: int, style: str = Query("streets")):
+    """Secure proxy for Jawg map tiles - keeps token server-side
+    
+    Supports different map styles:
+    - streets: Default street map
+    - terrain: Terrain/topographic map  
+    - satellite: Satellite imagery
+    """
     jawg_token = os.getenv("JAWG_ACCESS_TOKEN", "demo")
     
     if jawg_token == "demo":
         # Fallback to OpenStreetMap if no Jawg token
         tile_url = f"https://{{s}}.tile.openstreetmap.org/{z}/{x}/{y}.png"
     else:
-        # Use Jawg tiles with server-side token
-        tile_url = f"https://tile.jawg.io/jawg-dark/{z}/{x}/{y}.png?access-token={jawg_token}"
+        # Use Jawg tiles with server-side token and style
+        style_map = {
+            "streets": "jawg-streets",
+            "terrain": "jawg-terrain", 
+            "satellite": "jawg-satellite"
+        }
+        jawg_style = style_map.get(style, "jawg-dark")
+        tile_url = f"https://tile.jawg.io/{jawg_style}/{z}/{x}/{y}.png?access-token={jawg_token}"
     
     try:
         async with httpx.AsyncClient() as client:
@@ -158,8 +175,14 @@ async def get_map_tiles(z: int, x: int, y: int):
             )
 
 @router.post("/refresh-cache")
-async def refresh_cache(api_key: str = Depends(verify_api_key)):
-    """Manually trigger cache refresh with batch processing (requires API key)"""
+async def refresh_cache(request: RefreshRequest, api_key: str = Depends(verify_api_key)):
+    """Manually trigger cache refresh with batch processing (requires API key)
+    
+    Supports advanced refresh options:
+    - Force full refresh instead of smart merge
+    - Include activities older than 3 weeks
+    - Customize batch size for processing
+    """
     try:
         # Force an immediate refresh using the automated system
         success = cache.force_refresh_now()
@@ -185,8 +208,13 @@ async def refresh_cache(api_key: str = Depends(verify_api_key)):
         }
 
 @router.post("/cleanup-backups")
-async def cleanup_backups(api_key: str = Depends(verify_api_key)):
-    """Clean up old backup files, keeping only the most recent one (requires API key)"""
+async def cleanup_backups(request: CleanupRequest, api_key: str = Depends(verify_api_key)):
+    """Clean up old backup files with customizable options (requires API key)
+    
+    Supports advanced cleanup options:
+    - Specify number of recent backups to keep
+    - Force cleanup even if cache is recent
+    """
     try:
         success = cache.cleanup_backups()
         
@@ -228,14 +256,96 @@ async def clean_invalid_activities(api_key: str = Depends(verify_api_key)):
             "timestamp": datetime.now().isoformat()
         }
 
+
+def _clean_description(description: str) -> str:
+    """Clean description by removing music-related text patterns"""
+    if not description:
+        return ""
+    
+    import re
+    
+    # Remove music-related patterns
+    patterns_to_remove = [
+        r'Russell Radio:.*?(?=\n|$)',  # Remove "Russell Radio: ..." lines
+        r'Album:.*?(?=\n|$)',          # Remove "Album: ..." lines
+        r'Artist:.*?(?=\n|$)',         # Remove "Artist: ..." lines (if any)
+        r'Song:.*?(?=\n|$)',           # Remove "Song: ..." lines (if any)
+        r'Track:.*?(?=\n|$)',          # Remove "Track: ..." lines (if any)
+    ]
+    
+    cleaned = description
+    for pattern in patterns_to_remove:
+        cleaned = re.sub(pattern, '', cleaned, flags=re.IGNORECASE | re.MULTILINE)
+    
+    # Clean up extra whitespace and newlines
+    cleaned = re.sub(r'\n\s*\n', '\n', cleaned)  # Remove multiple newlines
+    cleaned = cleaned.strip()  # Remove leading/trailing whitespace
+    
+    return cleaned
+
+
+def _apply_feed_filters(activities: List[Dict[str, Any]], request: FeedRequest) -> List[Dict[str, Any]]:
+    """Apply additional filtering to activities based on request parameters"""
+    filtered = activities.copy()
+    
+    # Filter by activity type (additional to backend filtering)
+    if request.activity_type:
+        filtered = [a for a in filtered if a.get("type") == request.activity_type]
+    
+    # Filter by date range
+    if request.date_from or request.date_to:
+        for activity in filtered[:]:  # Use slice copy to avoid modification during iteration
+            try:
+                activity_date = datetime.fromisoformat(activity["start_date_local"].replace('Z', '+00:00'))
+                activity_date_naive = activity_date.replace(tzinfo=None)
+                
+                if request.date_from and activity_date_naive < request.date_from:
+                    filtered.remove(activity)
+                    continue
+                if request.date_to and activity_date_naive > request.date_to:
+                    filtered.remove(activity)
+                    continue
+            except (ValueError, KeyError):
+                # If date parsing fails, keep the activity
+                continue
+    
+    # Filter by photo presence
+    if request.has_photos is not None:
+        filtered = [a for a in filtered if bool(a.get("photos", {}).get("primary", {}).get("url")) == request.has_photos]
+    
+    # Filter by description presence
+    if request.has_description is not None:
+        filtered = [a for a in filtered if bool(a.get("description", "").strip()) == request.has_description]
+    
+    # Filter by distance range
+    if request.min_distance is not None:
+        filtered = [a for a in filtered if a.get("distance", 0) >= request.min_distance]
+    
+    if request.max_distance is not None:
+        filtered = [a for a in filtered if a.get("distance", 0) <= request.max_distance]
+    
+    return filtered
+
+
 @router.get("/feed")
-def get_activity_feed(limit: int = Query(20, ge=1, le=200)):
-    """Get activity feed with photos, videos, and descriptions for frontend display"""
+async def get_activity_feed(request: FeedRequest = Depends()):
+    """Get activity feed with photos, videos, and descriptions for frontend display
+    
+    Supports advanced filtering options:
+    - Filter by activity type (Run/Ride)
+    - Filter by date range
+    - Filter by photo/description presence
+    - Filter by distance range
+    """
     try:
-        raw_activities = cache.get_activities_smart(limit)
+        # Get activities from cache (backend already filters by Run/Ride and date)
+        raw_activities = cache.get_activities_smart(request.limit)
+        
+        # Apply additional filtering based on request parameters
+        filtered_activities = _apply_feed_filters(raw_activities, request)
         
         # Handle case where no activities are returned
-        if not raw_activities:
+        if not filtered_activities:
             return {
                 "timestamp": datetime.utcnow().isoformat(),
                 "total_activities": 0,
@@ -244,7 +354,7 @@ def get_activity_feed(limit: int = Query(20, ge=1, le=200)):
             }
         
         feed_activities = []
-        for activity in raw_activities:
+        for activity in filtered_activities:
             # Use cached complete data if available, otherwise use basic data only
             # (Don't fetch complete data to avoid rate limits)
             if cache._has_complete_data(activity):
@@ -316,7 +426,7 @@ def get_activity_feed(limit: int = Query(20, ge=1, le=200)):
                 "duration_minutes": round(activity["moving_time"] / 60, 1) if activity["moving_time"] else 0,
                 "date": formatted_date,  # Now includes start time: "14th of September 2025 at 10:12"
                 "time": formatted_duration,  # Now shows moving time: "1:06" or "22.4 min"
-                "description": detailed_activity.get("description", ""),
+                "description": _clean_description(detailed_activity.get("description", "")),
                 "comment_count": len(detailed_activity.get("comments", [])),
                 "photos": optimized_photos,
                 "comments": _clean_comments(detailed_activity.get("comments", [])),

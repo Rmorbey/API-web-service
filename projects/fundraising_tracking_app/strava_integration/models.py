@@ -4,8 +4,8 @@ Pydantic models for Strava Integration API
 Defines request and response models for type safety and validation
 """
 
-from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Any
+from pydantic import BaseModel, Field, validator
+from typing import List, Optional, Dict, Any, Literal
 from datetime import datetime
 
 
@@ -111,3 +111,101 @@ class ProjectInfoResponse(BaseModel):
     features: List[str] = Field(..., description="Available features")
     cache_duration: str = Field(..., description="Cache duration")
     rate_limits: Dict[str, Any] = Field(..., description="Rate limit information")
+
+
+# ============================================================================
+# REQUEST MODELS (Phase 2)
+# ============================================================================
+
+class FeedRequest(BaseModel):
+    """Request model for activity feed endpoint with filtering options"""
+    limit: int = Field(default=20, ge=1, le=200, description="Number of activities to return")
+    activity_type: Optional[Literal["Run", "Ride"]] = Field(
+        default=None, 
+        description="Filter by activity type (Run or Ride)"
+    )
+    date_from: Optional[datetime] = Field(
+        default=None, 
+        description="Filter activities from this date onwards"
+    )
+    date_to: Optional[datetime] = Field(
+        default=None, 
+        description="Filter activities up to this date"
+    )
+    has_photos: Optional[bool] = Field(
+        default=None, 
+        description="Filter activities that have photos (true) or don't have photos (false)"
+    )
+    has_description: Optional[bool] = Field(
+        default=None, 
+        description="Filter activities that have descriptions (true) or don't have descriptions (false)"
+    )
+    min_distance: Optional[float] = Field(
+        default=None, 
+        ge=0, 
+        description="Minimum distance in meters"
+    )
+    max_distance: Optional[float] = Field(
+        default=None, 
+        ge=0, 
+        description="Maximum distance in meters"
+    )
+
+    @validator('date_to')
+    def validate_date_range(cls, v, values):
+        """Validate that date_to is after date_from"""
+        if v and 'date_from' in values and values['date_from']:
+            if v <= values['date_from']:
+                raise ValueError('date_to must be after date_from')
+        return v
+
+    @validator('max_distance')
+    def validate_distance_range(cls, v, values):
+        """Validate that max_distance is greater than min_distance"""
+        if v and 'min_distance' in values and values['min_distance']:
+            if v <= values['min_distance']:
+                raise ValueError('max_distance must be greater than min_distance')
+        return v
+
+
+class RefreshRequest(BaseModel):
+    """Request model for manual refresh endpoint"""
+    force_full_refresh: bool = Field(
+        default=False, 
+        description="Force a full refresh instead of smart merge"
+    )
+    include_old_activities: bool = Field(
+        default=False, 
+        description="Include activities older than 3 weeks in refresh"
+    )
+    batch_size: int = Field(
+        default=20, 
+        ge=1, 
+        le=50, 
+        description="Number of activities to process in each batch"
+    )
+
+
+class CleanupRequest(BaseModel):
+    """Request model for cleanup endpoints"""
+    keep_backups: int = Field(
+        default=1, 
+        ge=0, 
+        le=10, 
+        description="Number of recent backups to keep"
+    )
+    force_cleanup: bool = Field(
+        default=False, 
+        description="Force cleanup even if cache is recent"
+    )
+
+
+class MapTilesRequest(BaseModel):
+    """Request model for map tiles endpoint"""
+    z: int = Field(..., ge=0, le=18, description="Zoom level")
+    x: int = Field(..., ge=0, description="Tile X coordinate")
+    y: int = Field(..., ge=0, description="Tile Y coordinate")
+    style: Optional[Literal["streets", "terrain", "satellite"]] = Field(
+        default="streets", 
+        description="Map style"
+    )
