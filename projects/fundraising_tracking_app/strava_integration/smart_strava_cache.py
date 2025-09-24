@@ -23,7 +23,7 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler(),
-        logging.FileHandler('strava_integration.log')
+        logging.FileHandler('strava_integration_new.log')
     ]
 )
 logger = logging.getLogger(__name__)
@@ -135,6 +135,11 @@ class SmartStravaCache:
         for activity in activities:
             # Filter by activity type
             if activity.get("type") not in self.allowed_activity_types:
+                continue
+            
+            # Filter out invalid/unknown activities
+            if activity.get("name") == "Unknown Activity" or activity.get("type") == "Unknown":
+                logger.warning(f"Filtering out invalid activity: {activity.get('id')} - {activity.get('name')}")
                 continue
             
             # Filter by date (May 22nd, 2025 onwards)
@@ -306,13 +311,13 @@ class SmartStravaCache:
 
 
     def _has_complete_data(self, activity: Dict[str, Any]) -> bool:
-        """Check if activity has complete data (photos, comments, map, description)"""
-        has_description = bool(activity.get("description"))
-        has_photos = bool(activity.get("photos") and activity.get("photos").get("primary"))
-        has_comments = "comments" in activity
-        has_map = bool(activity.get("map") and activity.get("map").get("polyline"))
+        """Check if activity has complete data - for Run/Ride activities, all should have polyline and bounds"""
+        has_polyline = bool(activity.get("map") and activity.get("map").get("polyline"))
+        has_bounds = bool(activity.get("map") and activity.get("map").get("bounds"))
         
-        return has_description and has_photos and has_comments and has_map
+        # For Run/Ride activities, both polyline and bounds should be present
+        # (these are outdoor activities with GPS tracking)
+        return has_polyline and has_bounds
 
     def _fetch_complete_activity_data(self, activity_id: int) -> Dict[str, Any]:
         """Fetch complete activity data from Strava API with enhanced error handling - OPTIMIZED FOR FRONTEND"""
@@ -474,11 +479,36 @@ class SmartStravaCache:
             "bounds": bounds
         }
 
+    def _clean_invalid_activities(self, activities: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Remove invalid/unknown activities from the list"""
+        cleaned = []
+        removed_count = 0
+        
+        for activity in activities:
+            # Check for invalid activities
+            if (activity.get("name") == "Unknown Activity" or 
+                activity.get("type") == "Unknown" or
+                activity.get("distance", 0) == 0 and activity.get("moving_time", 0) == 0):
+                
+                logger.warning(f"Removing invalid activity: ID {activity.get('id')} - {activity.get('name')}")
+                removed_count += 1
+                continue
+            
+            cleaned.append(activity)
+        
+        if removed_count > 0:
+            logger.info(f"Cleaned {removed_count} invalid activities from cache")
+        
+        return cleaned
+
     def _smart_merge_activities(self, existing_activities: List[Dict[str, Any]], fresh_activities: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
         Smart merge: Preserve ALL existing data, update only basic fields from fresh data
         FIXED: Never overwrite existing activities with fresh data to prevent data loss
         """
+        # Clean existing activities first to remove any invalid entries
+        existing_activities = self._clean_invalid_activities(existing_activities)
+        
         # Create lookup maps
         existing_by_id = {activity.get("id"): activity for activity in existing_activities}
         fresh_by_id = {activity.get("id"): activity for activity in fresh_activities}
@@ -996,6 +1026,48 @@ class SmartStravaCache:
         except Exception as e:
             logger.error(f"❌ Backup cleanup failed: {e}")
             return False
+
+    def clean_invalid_activities(self) -> Dict[str, Any]:
+        """Clean invalid activities from the cache"""
+        try:
+            # Load current cache
+            cache_data = self._load_cache()
+            if not cache_data:
+                return {"success": False, "message": "No cache data found"}
+            
+            activities = cache_data.get("activities", [])
+            original_count = len(activities)
+            
+            # Clean invalid activities
+            cleaned_activities = self._clean_invalid_activities(activities)
+            removed_count = original_count - len(cleaned_activities)
+            
+            if removed_count > 0:
+                # Update cache with cleaned activities
+                cache_data["activities"] = cleaned_activities
+                cache_data["timestamp"] = datetime.now().isoformat()
+                cache_data["cleaned_invalid_activities"] = True
+                
+                self._save_cache(cache_data)
+                logger.info(f"Cleaned {removed_count} invalid activities from cache")
+                
+                return {
+                    "success": True,
+                    "message": f"Cleaned {removed_count} invalid activities from cache",
+                    "activities_removed": removed_count,
+                    "activities_remaining": len(cleaned_activities)
+                }
+            else:
+                return {
+                    "success": True,
+                    "message": "No invalid activities found in cache",
+                    "activities_removed": 0,
+                    "activities_remaining": len(cleaned_activities)
+                }
+                
+        except Exception as e:
+            logger.error(f"Error cleaning invalid activities: {e}")
+            return {"success": False, "message": f"Error cleaning invalid activities: {str(e)}"}
     
     def _validate_cache_integrity(self, cache_data: Dict[str, Any]) -> bool:
         """Validate cache integrity - check for data loss indicators"""
@@ -1005,24 +1077,46 @@ class SmartStravaCache:
                 logger.warning("Cache has no activities")
                 return False
             
-            # Check for significant data loss
-            polyline_count = sum(1 for activity in activities if activity.get("map", {}).get("polyline"))
             total_activities = len(activities)
             
-            # If less than 50% of activities have polyline data, consider it corrupted
-            if polyline_count < total_activities * 0.5:
-                logger.warning(f"Cache integrity check failed: Only {polyline_count}/{total_activities} activities have polyline data")
+            # Check for basic data integrity (all activities should have basic fields)
+            basic_data_count = 0
+            for activity in activities:
+                if (activity.get("id") and 
+                    activity.get("name") and 
+                    activity.get("type") and 
+                    activity.get("start_date_local")):
+                    basic_data_count += 1
+            
+            # If less than 90% of activities have basic data, consider it corrupted
+            if basic_data_count < total_activities * 0.9:
+                logger.warning(f"Cache integrity check failed: Only {basic_data_count}/{total_activities} activities have basic data")
                 return False
             
-            # Check for recent activities (should have more data)
+            # Check for polyline and bounds data (Run/Ride activities should have both)
+            polyline_count = sum(1 for activity in activities if activity.get("map", {}).get("polyline"))
+            bounds_count = sum(1 for activity in activities if activity.get("map", {}).get("bounds"))
+            
+            # For Run/Ride activities, most should have polyline data (outdoor GPS activities)
+            # But be more lenient during emergency refresh or initial data collection
+            if polyline_count < total_activities * 0.3:
+                logger.warning(f"Cache integrity check failed: Only {polyline_count}/{total_activities} activities have polyline data (Run/Ride activities should have GPS)")
+                return False
+            
+            # Check for recent activities (should have complete GPS data)
             recent_activities = [a for a in activities if a.get("start_date_local", "").startswith("2025-09")]
             if recent_activities:
                 recent_polyline_count = sum(1 for activity in recent_activities if activity.get("map", {}).get("polyline"))
-                if recent_polyline_count < len(recent_activities) * 0.8:
+                recent_bounds_count = sum(1 for activity in recent_activities if activity.get("map", {}).get("bounds"))
+                # Recent Run/Ride activities should have both polyline and bounds
+                if recent_polyline_count < len(recent_activities) * 0.9:
                     logger.warning(f"Cache integrity check failed: Recent activities missing polyline data ({recent_polyline_count}/{len(recent_activities)})")
                     return False
+                if recent_bounds_count < len(recent_activities) * 0.9:
+                    logger.warning(f"Cache integrity check failed: Recent activities missing bounds data ({recent_bounds_count}/{len(recent_activities)})")
+                    return False
             
-            logger.info(f"Cache integrity check passed: {polyline_count}/{total_activities} activities have polyline data")
+            logger.info(f"Cache integrity check passed: {basic_data_count}/{total_activities} activities have basic data, {polyline_count}/{total_activities} have polyline data, {bounds_count}/{total_activities} have bounds data")
             return True
             
         except Exception as e:
@@ -1122,7 +1216,9 @@ class SmartStravaCache:
             
             logger.info(f"✅ Emergency refresh complete: {len(filtered_activities)} activities restored")
             
-            # Start batch processing for complete data
+            # CRITICAL: Start batch processing immediately to get complete data
+            # This will fetch polyline, bounds, descriptions, photos, comments for all activities
+            logger.info("🔄 Starting immediate batch processing to fetch complete data...")
             self._start_batch_processing()
             
         except Exception as e:

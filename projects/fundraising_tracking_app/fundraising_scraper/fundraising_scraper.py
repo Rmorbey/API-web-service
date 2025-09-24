@@ -298,11 +298,11 @@ class SmartFundraisingCache:
         """Create a unique key for a donation to detect duplicates"""
         donor_name = donation.get("donor_name", "")
         amount = donation.get("amount", 0)
-        date = donation.get("date", "")
         message = donation.get("message", "")
         
-        # Create a key that combines the most identifying features
-        return f"{donor_name}_{amount}_{date}_{message}"
+        # Create a key based on donor name, amount, and message only
+        # This will treat donations with same donor/amount/message as duplicates regardless of date
+        return f"{donor_name}_{amount}_{message}"
     
     def _scrape_fundraising_data(self) -> Dict[str, Any]:
         """Scrape fundraising data from JustGiving page"""

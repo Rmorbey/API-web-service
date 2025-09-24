@@ -15,6 +15,9 @@ import re
 from datetime import datetime
 from dotenv import load_dotenv
 
+# Import security middleware
+from projects.fundraising_tracking_app.strava_integration.security import SecurityMiddleware
+
 # Load environment variables
 load_dotenv()
 
@@ -62,6 +65,10 @@ async def add_security_headers(request: Request, call_next):
     
     return response
 
+# Add security middleware
+security_middleware = SecurityMiddleware()
+app.middleware("http")(security_middleware)
+
 # Project configuration
 PROJECTS = {
     "strava-integration": {
@@ -93,7 +100,7 @@ except ImportError:
 
 # Root endpoint - shows all available projects
 @app.get("/")
-def root():
+def root() -> Dict[str, Any]:
     """Get information about all available projects"""
     return {
         "message": "Russell Morbey - Multi-Project API Service",
@@ -116,7 +123,7 @@ def root():
     }
 
 @app.get("/health")
-def health_check():
+def health_check() -> Dict[str, Any]:
     """Health check endpoint"""
     return {
         "status": "healthy",
@@ -126,7 +133,7 @@ def health_check():
     }
 
 @app.get("/projects")
-def get_projects():
+def get_projects() -> Dict[str, Any]:
     """Get detailed information about all projects"""
     return {
         "projects": PROJECTS,
@@ -134,12 +141,12 @@ def get_projects():
     }
 
 @app.get("/demo")
-def serve_demo():
+def serve_demo() -> FileResponse:
     """Serve the Strava React demo"""
     return FileResponse("examples/strava-react-demo-clean.html")
 
 @app.get("/fundraising-demo")
-def serve_fundraising_demo():
+def serve_fundraising_demo() -> FileResponse:
     """Serve the fundraising demo"""
     return FileResponse("examples/fundraising-demo.html")
 
@@ -160,7 +167,7 @@ if fundraising_router:
 
 # Direct route for the demo HTML file
 @app.get("/examples/strava-react-demo-clean.html")
-async def get_demo_html():
+async def get_demo_html() -> FileResponse:
     """Serve the Strava demo HTML file"""
     return FileResponse("examples/strava-react-demo-clean.html")
 

@@ -13,6 +13,17 @@ import logging
 from datetime import datetime
 from dotenv import load_dotenv
 from .smart_strava_cache import SmartStravaCache
+from .models import (
+    ActivityFeedResponse, 
+    HealthResponse, 
+    MetricsResponse, 
+    JawgTokenResponse,
+    RefreshResponse,
+    CleanupResponse,
+    ProjectInfoResponse,
+    Activity
+)
+# Error handling will be implemented in Phase 3 completion
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -196,7 +207,26 @@ async def cleanup_backups(api_key: str = Depends(verify_api_key)):
             "success": False,
             "error": str(e),
             "timestamp": datetime.now().isoformat()
-    }
+        }
+
+@router.post("/clean-invalid-activities")
+async def clean_invalid_activities(api_key: str = Depends(verify_api_key)):
+    """Clean invalid/unknown activities from the cache (requires API key)"""
+    try:
+        result = cache.clean_invalid_activities()
+        return {
+            "success": result["success"],
+            "message": result["message"],
+            "activities_removed": result.get("activities_removed", 0),
+            "activities_remaining": result.get("activities_remaining", 0),
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }
 
 @router.get("/feed")
 def get_activity_feed(limit: int = Query(20, ge=1, le=200)):
