@@ -440,7 +440,7 @@
                         const tokenData = await tokenResponse.json();
                         
                         if (tokenData.has_token) {
-                            // Use secure proxy for Jawg tiles (token stays server-side)
+                            // Use secure proxy for Jawg tiles (token stays server-side) with dark style
                             L.tileLayer('http://localhost:8000/api/strava-integration/map-tiles/{z}/{x}/{y}', {
                                 attribution: '<a href="https://jawg.io" title="Tiles Courtesy of Jawg Maps" target="_blank">&copy; <b>Jawg</b>Maps</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
                                 minZoom: 0,

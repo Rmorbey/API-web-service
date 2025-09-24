@@ -191,7 +191,10 @@ class SecurityMiddleware:
     """Comprehensive security middleware"""
     
     def __init__(self):
-        self.rate_limiter = RateLimiter(max_requests=100, window_seconds=3600)
+        # Different rate limits for different endpoints
+        self.rate_limiter = RateLimiter(max_requests=100, window_seconds=3600)  # General API (100/hour)
+        # Jawg Maps API allows 100 requests per second, so we'll be more generous
+        self.map_tile_limiter = RateLimiter(max_requests=500, window_seconds=60)  # Map tiles (500/minute)
         self.security_headers = SecurityHeaders()
         self.request_logger = RequestLogger()
     
@@ -203,8 +206,12 @@ class SecurityMiddleware:
         client_ip = request.client.host if request.client else "unknown"
         client_id = self._get_client_id(request, client_ip)
         
-        # Rate limiting
-        allowed, rate_info = self.rate_limiter.is_allowed(client_id)
+        # Rate limiting - use different limits for map tiles
+        if "/map-tiles/" in str(request.url):
+            allowed, rate_info = self.map_tile_limiter.is_allowed(client_id)
+        else:
+            allowed, rate_info = self.rate_limiter.is_allowed(client_id)
+            
         if not allowed:
             logger.warning(f"Rate limit exceeded for {client_ip}")
             return Response(

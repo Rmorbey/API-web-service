@@ -205,7 +205,7 @@ class MapTilesRequest(BaseModel):
     z: int = Field(..., ge=0, le=18, description="Zoom level")
     x: int = Field(..., ge=0, description="Tile X coordinate")
     y: int = Field(..., ge=0, description="Tile Y coordinate")
-    style: Optional[Literal["streets", "terrain", "satellite"]] = Field(
+    style: Optional[Literal["streets", "terrain", "satellite", "dark"]] = Field(
         default="streets", 
         description="Map style"
     )

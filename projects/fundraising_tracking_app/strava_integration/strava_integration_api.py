@@ -140,13 +140,14 @@ def get_jawg_token():
     }
 
 @router.get("/map-tiles/{z}/{x}/{y}")
-async def get_map_tiles(z: int, x: int, y: int, style: str = Query("streets")):
+async def get_map_tiles(z: int, x: int, y: int, style: str = Query("dark")):
     """Secure proxy for Jawg map tiles - keeps token server-side
     
     Supports different map styles:
     - streets: Default street map
     - terrain: Terrain/topographic map  
     - satellite: Satellite imagery
+    - dark: Dark mode street map
     """
     jawg_token = os.getenv("JAWG_ACCESS_TOKEN", "demo")
     
@@ -158,8 +159,10 @@ async def get_map_tiles(z: int, x: int, y: int, style: str = Query("streets")):
         style_map = {
             "streets": "jawg-streets",
             "terrain": "jawg-terrain", 
-            "satellite": "jawg-satellite"
+            "satellite": "jawg-satellite",
+            "dark": "jawg-dark"
         }
+        # Default to dark mode if no style specified
         jawg_style = style_map.get(style, "jawg-dark")
         tile_url = f"https://tile.jawg.io/{jawg_style}/{z}/{x}/{y}.png?access-token={jawg_token}"
     
