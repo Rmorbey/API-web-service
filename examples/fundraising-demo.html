@@ -307,7 +307,10 @@
                 const data = await response.json();
                 
                 // Create scrolling text
-                const scrollingText = data.donations.join(' • ');
+                const scrollingText = data.donations.map(donation => {
+                    const message = donation.message ? ` - "${donation.message}"` : '';
+                    return `${donation.donor_name} donated £${donation.amount}${message}`;
+                }).join(' • ');
                 document.getElementById('scrollingText').innerHTML = scrollingText;
                 
                 // Load detailed donations

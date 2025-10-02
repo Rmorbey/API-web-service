@@ -333,8 +333,8 @@ async def cleanup_backups(request: CleanupRequest, api_key: str = Depends(verify
         }
 
 # Demo endpoints (no API key required for demo pages)
-@router.get("/demo/feed", response_model=ActivityFeedResponse)
-async def get_activity_feed_demo(request: FeedRequest = Depends()) -> ActivityFeedResponse:
+@router.get("/demo/feed")
+async def get_activity_feed_demo(request: FeedRequest = Depends()):
     """Get a list of processed Strava activities for demo page (no API key required)"""
     try:
         cache_instance = get_cache()
@@ -343,12 +343,56 @@ async def get_activity_feed_demo(request: FeedRequest = Depends()) -> ActivityFe
         # Process activities in parallel for better performance
         processed_activities = await async_processor.process_activities_parallel(raw_activities)
         
-        return ActivityFeedResponse(
-            activities=processed_activities,
-            total_activities=len(processed_activities),
-            last_updated=datetime.utcnow(),
-            cache_status="active"
-        )
+        # Build feed items from processed activities (same as main feed endpoint)
+        feed_activities = []
+        for activity in processed_activities:
+            # Use cached data only - no additional API calls
+            detailed_activity = activity
+            
+            # Optimize map data - only use polyline (not summary_polyline)
+            map_data = detailed_activity.get("map", {})
+            optimized_map = {
+                "polyline": map_data.get("polyline"),
+                "bounds": map_data.get("bounds", {})
+            }
+            
+            # Use processed photos from async processor
+            optimized_photos = detailed_activity.get("photos", {})
+            
+            # Use processed date formatting from async processor
+            formatted_date = detailed_activity.get("date_formatted", activity["start_date_local"])
+            formatted_duration = detailed_activity.get("formatted_duration", "00:00:00")
+            
+            feed_item = {
+                "id": activity["id"],
+                "name": activity["name"],
+                "type": activity["type"],
+                "distance_km": round(activity["distance"] / 1000, 2) if activity["distance"] else 0,
+                "duration_minutes": round(activity["moving_time"] / 60, 1) if activity["moving_time"] else 0,
+                "date": formatted_date,  # Now includes start time: "14th of September 2025 at 10:12"
+                "time": formatted_duration,  # Now shows moving time: "1:06" or "22.4 min"
+                "description": _clean_description(detailed_activity.get("description", "")),
+                "comment_count": len(detailed_activity.get("comments", [])),
+                "photos": optimized_photos,
+                "comments": _clean_comments(detailed_activity.get("comments", [])),
+                "map": optimized_map,
+                "music": detailed_activity.get("music", {})
+            }
+            feed_activities.append(feed_item)
+        
+        response_data = {
+            "timestamp": datetime.utcnow().isoformat(),
+            "activities": feed_activities,
+            "total_activities": len(feed_activities),
+            "last_updated": datetime.utcnow().isoformat(),
+            "cache_status": "active"
+        }
+        
+        # Add caching headers for performance
+        response = JSONResponse(content=response_data)
+        response.headers["Cache-Control"] = "public, max-age=300"  # 5 minutes
+        response.headers["ETag"] = f'"{hash(str(response_data))}"'
+        return response
         
     except Exception as e:
         logger.error(f"Failed to get activity feed for demo: {e}")

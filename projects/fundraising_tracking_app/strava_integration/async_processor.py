@@ -300,11 +300,14 @@ class AsyncProcessor:
             seconds = seconds % 60
             
             if hours > 0:
-                formatted['duration_formatted'] = f"{hours}h {minutes}m {seconds}s"
+                formatted['formatted_duration'] = f"{hours}h {minutes}m {seconds}s"
+                formatted['duration_formatted'] = f"{hours}h {minutes}m {seconds}s"  # Keep both for compatibility
             elif minutes > 0:
-                formatted['duration_formatted'] = f"{minutes}m {seconds}s"
+                formatted['formatted_duration'] = f"{minutes}m {seconds}s"
+                formatted['duration_formatted'] = f"{minutes}m {seconds}s"  # Keep both for compatibility
             else:
-                formatted['duration_formatted'] = f"{seconds}s"
+                formatted['formatted_duration'] = f"{seconds}s"
+                formatted['duration_formatted'] = f"{seconds}s"  # Keep both for compatibility
         
         # Format pace (for runs)
         if activity.get('type') == 'Run' and 'distance' in activity and 'moving_time' in activity:
