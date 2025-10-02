@@ -4,7 +4,7 @@ Pydantic models for Fundraising API
 Defines request and response models for type safety and validation
 """
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 
@@ -72,3 +72,95 @@ class ProjectInfoResponse(BaseModel):
     endpoints: Dict[str, str] = Field(..., description="Available endpoints")
     source: str = Field(..., description="Data source")
     scrape_interval: str = Field(..., description="Scraping interval")
+
+
+# ============================================================================
+# REQUEST MODELS (Phase 2)
+# ============================================================================
+
+class FundraisingRefreshRequest(BaseModel):
+    """Request model for fundraising refresh endpoint"""
+    force_refresh: bool = Field(
+        default=True, 
+        description="Force an immediate refresh even if recently updated"
+    )
+    include_metadata: bool = Field(
+        default=True, 
+        description="Include metadata in the refresh response"
+    )
+    
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "force_refresh": True,
+                "include_metadata": True
+            }
+        }
+    )
+
+
+class FundraisingCleanupRequest(BaseModel):
+    """Request model for fundraising cleanup endpoint"""
+    keep_backups: int = Field(
+        default=1, 
+        ge=0, 
+        le=10, 
+        description="Number of recent backups to keep"
+    )
+    force_cleanup: bool = Field(
+        default=False, 
+        description="Force cleanup even if cache is recent"
+    )
+    
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "keep_backups": 1,
+                "force_cleanup": False
+            }
+        }
+    )
+
+
+class DonationsFilterRequest(BaseModel):
+    """Request model for filtering donations"""
+    limit: Optional[int] = Field(
+        default=None, 
+        ge=1, 
+        le=100, 
+        description="Maximum number of donations to return"
+    )
+    min_amount: Optional[float] = Field(
+        default=None, 
+        ge=0, 
+        description="Minimum donation amount to include"
+    )
+    max_amount: Optional[float] = Field(
+        default=None, 
+        ge=0, 
+        description="Maximum donation amount to include"
+    )
+    include_anonymous: bool = Field(
+        default=True, 
+        description="Include donations from anonymous donors"
+    )
+    
+    @field_validator('max_amount')
+    @classmethod
+    def validate_amount_range(cls, v, info):
+        """Validate that max_amount is greater than min_amount"""
+        if v and hasattr(info, 'data') and 'min_amount' in info.data and info.data['min_amount']:
+            if v <= info.data['min_amount']:
+                raise ValueError('max_amount must be greater than min_amount')
+        return v
+    
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "limit": 10,
+                "min_amount": 5.0,
+                "max_amount": 100.0,
+                "include_anonymous": True
+            }
+        }
+    )

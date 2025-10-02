@@ -5,7 +5,7 @@ Scrapes fundraising data from JustGiving page every 15 minutes
 Uses smart caching strategy similar to Strava cache
 """
 
-import requests
+import httpx
 import json
 import time
 import threading
@@ -16,6 +16,7 @@ from bs4 import BeautifulSoup
 import re
 import os
 import glob
+from ..strava_integration.http_clients import get_http_client
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -336,12 +337,13 @@ class SmartFundraisingCache:
                 'Upgrade-Insecure-Requests': '1',
             }
             
-            # Make request to JustGiving page
-            response = requests.get(self.justgiving_url, headers=headers, timeout=30)
+            # Make request to JustGiving page using shared HTTP client
+            http_client = get_http_client()
+            response = http_client.get(self.justgiving_url, headers=headers)
             response.raise_for_status()
             
             # Parse HTML
-            soup = BeautifulSoup(response.content, 'html.parser')
+            soup = BeautifulSoup(response.content, 'lxml')
             
             # Extract total amount raised
             total_raised = self._extract_total_raised(soup)

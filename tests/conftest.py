@@ -3,6 +3,7 @@ Shared pytest fixtures and configuration for the entire test suite.
 """
 
 import os
+import sys
 import tempfile
 import shutil
 from typing import Generator, Dict, Any, List
@@ -10,6 +11,11 @@ from unittest.mock import Mock, patch
 import pytest
 from fastapi.testclient import TestClient
 from httpx import AsyncClient
+
+# Add project root to Python path for imports
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
 # Set test environment variables
 os.environ["STRAVA_API_KEY"] = "test-strava-key-123"
@@ -167,11 +173,26 @@ def test_client():
 def strava_test_client():
     """Create a test client for Strava integration endpoints."""
     from fastapi import FastAPI
+    from fastapi.exceptions import RequestValidationError
     from projects.fundraising_tracking_app.strava_integration.strava_integration_api import router as strava_router
+    from projects.fundraising_tracking_app.strava_integration.error_handlers import (
+        api_exception_handler,
+        validation_exception_handler,
+        http_exception_handler,
+        general_exception_handler
+    )
     
     # Create a test app with the Strava router
     test_app = FastAPI()
     test_app.include_router(strava_router, prefix="/api/strava-integration")
+    
+    # Import APIException and add its handler first (more specific)
+    from projects.fundraising_tracking_app.strava_integration.error_handlers import APIException
+    test_app.add_exception_handler(APIException, api_exception_handler)
+    
+    # Add other error handlers (less specific)
+    test_app.add_exception_handler(RequestValidationError, validation_exception_handler)
+    test_app.add_exception_handler(Exception, general_exception_handler)
     
     with TestClient(test_app) as client:
         yield client

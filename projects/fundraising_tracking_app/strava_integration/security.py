@@ -192,7 +192,7 @@ class SecurityMiddleware:
     
     def __init__(self):
         # Different rate limits for different endpoints
-        self.rate_limiter = RateLimiter(max_requests=100, window_seconds=3600)  # General API (100/hour)
+        self.rate_limiter = RateLimiter(max_requests=1000, window_seconds=3600)  # General API (1000/hour)
         # Jawg Maps API allows 100 requests per second, so we'll be more generous
         self.map_tile_limiter = RateLimiter(max_requests=500, window_seconds=60)  # Map tiles (500/minute)
         self.security_headers = SecurityHeaders()

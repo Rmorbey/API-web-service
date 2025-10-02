@@ -1,251 +1,246 @@
+#!/usr/bin/env python3
 """
-Advanced response caching system for improved performance
+HTTP Response Caching with Proper Cache Headers
+Provides intelligent caching with ETag, Last-Modified, and Cache-Control headers
 """
 
-import time
-import json
 import hashlib
-import logging
-from typing import Any, Dict, Optional, Callable
+import json
+import time
 from datetime import datetime, timedelta
-from functools import wraps
-import threading
-from collections import OrderedDict
+from typing import Dict, Any, Optional, Union
+from fastapi import Request, Response
+from fastapi.responses import JSONResponse
+import logging
 
 logger = logging.getLogger(__name__)
 
-
-class ResponseCache:
-    """High-performance response cache with TTL and LRU eviction"""
-    
-    def __init__(self, max_size: int = 1000, default_ttl: int = 300):
-        self.max_size = max_size
-        self.default_ttl = default_ttl
-        self.cache = OrderedDict()
-        self.access_times = {}
-        self.lock = threading.RLock()
-    
-    def _generate_key(self, endpoint: str, params: Dict[str, Any]) -> str:
-        """Generate cache key from endpoint and parameters"""
-        key_data = {
-            "endpoint": endpoint,
-            "params": sorted(params.items()) if params else []
-        }
-        key_string = json.dumps(key_data, sort_keys=True)
-        return hashlib.sha256(key_string.encode()).hexdigest()[:16]
-    
-    def get(self, endpoint: str, params: Dict[str, Any]) -> Optional[Any]:
-        """Get cached response if valid"""
-        with self.lock:
-            key = self._generate_key(endpoint, params)
-            
-            if key not in self.cache:
-                return None
-            
-            # Check TTL
-            cache_entry = self.cache[key]
-            if time.time() > cache_entry["expires_at"]:
-                del self.cache[key]
-                if key in self.access_times:
-                    del self.access_times[key]
-                return None
-            
-            # Update access time for LRU
-            self.access_times[key] = time.time()
-            
-            # Move to end (most recently used)
-            self.cache.move_to_end(key)
-            
-            logger.debug(f"Cache hit for {endpoint}")
-            return cache_entry["data"]
-    
-    def set(self, endpoint: str, params: Dict[str, Any], data: Any, ttl: Optional[int] = None) -> None:
-        """Cache response data"""
-        with self.lock:
-            key = self._generate_key(endpoint, params)
-            ttl = ttl or self.default_ttl
-            
-            # Evict if at capacity
-            if len(self.cache) >= self.max_size:
-                self._evict_lru()
-            
-            self.cache[key] = {
-                "data": data,
-                "expires_at": time.time() + ttl,
-                "created_at": time.time(),
-                "endpoint": endpoint
-            }
-            self.access_times[key] = time.time()
-            
-            logger.debug(f"Cached response for {endpoint} (TTL: {ttl}s)")
-    
-    def _evict_lru(self) -> None:
-        """Evict least recently used item"""
-        if not self.cache:
-            return
-        
-        # Find LRU item
-        lru_key = min(self.access_times.keys(), key=lambda k: self.access_times[k])
-        
-        # Remove from cache
-        if lru_key in self.cache:
-            del self.cache[lru_key]
-        if lru_key in self.access_times:
-            del self.access_times[lru_key]
-        
-        logger.debug(f"Evicted LRU cache entry: {lru_key}")
-    
-    def invalidate(self, endpoint: str, params: Optional[Dict[str, Any]] = None) -> int:
-        """Invalidate cache entries for endpoint"""
-        with self.lock:
-            if params is None:
-                # Invalidate all entries for endpoint
-                keys_to_remove = [
-                    key for key, entry in self.cache.items()
-                    if entry["endpoint"] == endpoint
-                ]
-            else:
-                # Invalidate specific entry
-                key = self._generate_key(endpoint, params)
-                keys_to_remove = [key] if key in self.cache else []
-            
-            for key in keys_to_remove:
-                if key in self.cache:
-                    del self.cache[key]
-                if key in self.access_times:
-                    del self.access_times[key]
-            
-            logger.debug(f"Invalidated {len(keys_to_remove)} cache entries for {endpoint}")
-            return len(keys_to_remove)
-    
-    def clear(self) -> None:
-        """Clear all cache entries"""
-        with self.lock:
-            self.cache.clear()
-            self.access_times.clear()
-            logger.info("Cache cleared")
-    
-    def get_stats(self) -> Dict[str, Any]:
-        """Get cache statistics"""
-        with self.lock:
-            now = time.time()
-            valid_entries = sum(1 for entry in self.cache.values() if entry["expires_at"] > now)
-            
-            return {
-                "total_entries": len(self.cache),
-                "valid_entries": valid_entries,
-                "max_size": self.max_size,
-                "hit_ratio": getattr(self, "_hit_ratio", 0.0),
-                "memory_usage_mb": self._estimate_memory_usage()
-            }
-    
-    def _estimate_memory_usage(self) -> float:
-        """Estimate cache memory usage in MB"""
-        try:
-            total_size = 0
-            for entry in self.cache.values():
-                total_size += len(json.dumps(entry["data"]).encode())
-            return round(total_size / (1024 * 1024), 2)
-        except:
-            return 0.0
-
-
-class CacheDecorator:
-    """Decorator for caching function responses"""
-    
-    def __init__(self, cache: ResponseCache, ttl: int = 300, key_func: Optional[Callable] = None):
-        self.cache = cache
-        self.ttl = ttl
-        self.key_func = key_func or (lambda *args, **kwargs: str(args) + str(kwargs))
-    
-    def __call__(self, func: Callable) -> Callable:
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            # Generate cache key
-            cache_key = self.key_func(*args, **kwargs)
-            
-            # Try to get from cache
-            cached_result = self.cache.get(func.__name__, {"key": cache_key})
-            if cached_result is not None:
-                return cached_result
-            
-            # Execute function and cache result
-            result = func(*args, **kwargs)
-            self.cache.set(func.__name__, {"key": cache_key}, result, self.ttl)
-            
-            return result
-        
-        return wrapper
-
-
 class CacheManager:
-    """Centralized cache management"""
+    """
+    Manages HTTP response caching with proper cache headers
+    """
     
     def __init__(self):
-        self.caches = {}
-        self.default_cache = ResponseCache(max_size=1000, default_ttl=300)
+        # Cache storage (in production, this could be Redis or similar)
+        self._cache: Dict[str, Dict[str, Any]] = {}
+        
+        # Default cache durations (in seconds)
+        self.default_cache_durations = {
+            "static": 3600,      # 1 hour for static data
+            "dynamic": 300,      # 5 minutes for dynamic data
+            "realtime": 60,      # 1 minute for real-time data
+            "user_data": 1800,   # 30 minutes for user-specific data
+        }
     
-    def get_cache(self, name: str = "default") -> ResponseCache:
-        """Get or create named cache"""
-        if name not in self.caches:
-            self.caches[name] = ResponseCache(max_size=1000, default_ttl=300)
-        return self.caches[name]
+    def _generate_etag(self, data: Any) -> str:
+        """Generate ETag from data content"""
+        if isinstance(data, dict):
+            # Sort keys for consistent hashing
+            data_str = json.dumps(data, sort_keys=True, default=str)
+        else:
+            data_str = str(data)
+        
+        return f'"{hashlib.md5(data_str.encode()).hexdigest()}"'
     
-    def clear_all(self) -> None:
-        """Clear all caches"""
-        for cache in self.caches.values():
-            cache.clear()
-        self.default_cache.clear()
-        logger.info("All caches cleared")
+    def _get_cache_key(self, request: Request, user_id: Optional[str] = None) -> str:
+        """Generate cache key from request"""
+        # Include path, query parameters, and user ID if provided
+        key_parts = [request.url.path]
+        
+        if request.query_params:
+            # Sort query params for consistent keys
+            sorted_params = sorted(request.query_params.items())
+            key_parts.append("&".join(f"{k}={v}" for k, v in sorted_params))
+        
+        if user_id:
+            key_parts.append(f"user:{user_id}")
+        
+        return "|".join(key_parts)
     
-    def get_all_stats(self) -> Dict[str, Any]:
-        """Get statistics for all caches"""
-        stats = {"default": self.default_cache.get_stats()}
-        for name, cache in self.caches.items():
-            stats[name] = cache.get_stats()
-        return stats
+    def _should_cache(self, request: Request, cache_type: str = "dynamic") -> bool:
+        """Determine if request should be cached"""
+        # Don't cache POST, PUT, DELETE requests
+        if request.method not in ["GET", "HEAD"]:
+            return False
+        
+        # Don't cache requests with no-cache headers
+        cache_control = request.headers.get("cache-control", "")
+        if "no-cache" in cache_control or "no-store" in cache_control:
+            return False
+        
+        # Don't cache authenticated requests unless specified
+        if request.headers.get("authorization") and cache_type != "user_data":
+            return False
+        
+        return True
+    
+    def get_cached_response(self, request: Request, user_id: Optional[str] = None) -> Optional[Response]:
+        """Get cached response if available and valid"""
+        if not self._should_cache(request):
+            return None
+        
+        cache_key = self._get_cache_key(request, user_id)
+        cached_data = self._cache.get(cache_key)
+        
+        if not cached_data:
+            return None
+        
+        # Check if cache is still valid
+        if time.time() > cached_data["expires_at"]:
+            del self._cache[cache_key]
+            return None
+        
+        # Check ETag match
+        if_none_match = request.headers.get("if-none-match")
+        if if_none_match and if_none_match == cached_data["etag"]:
+            # Return 304 Not Modified
+            return Response(status_code=304)
+        
+        # Check Last-Modified
+        if_modified_since = request.headers.get("if-modified-since")
+        if if_modified_since:
+            try:
+                if_modified_since_time = datetime.fromisoformat(if_modified_since.replace("Z", "+00:00"))
+                cached_time = datetime.fromisoformat(cached_data["last_modified"].replace("Z", "+00:00"))
+                if cached_time <= if_modified_since_time:
+                    return Response(status_code=304)
+            except ValueError:
+                pass  # Invalid date format, continue with normal response
+        
+        # Return cached response with proper headers
+        response = JSONResponse(content=cached_data["data"])
+        self._add_cache_headers(response, cached_data)
+        return response
+    
+    def cache_response(self, 
+                      request: Request, 
+                      data: Any, 
+                      cache_type: str = "dynamic",
+                      user_id: Optional[str] = None,
+                      custom_max_age: Optional[int] = None) -> None:
+        """Cache response data with proper headers"""
+        if not self._should_cache(request, cache_type):
+            return
+        
+        cache_key = self._get_cache_key(request, user_id)
+        etag = self._generate_etag(data)
+        now = datetime.utcnow()
+        
+        # Determine cache duration
+        max_age = custom_max_age or self.default_cache_durations.get(cache_type, 300)
+        
+        cached_data = {
+            "data": data,
+            "etag": etag,
+            "last_modified": now.isoformat() + "Z",
+            "expires_at": time.time() + max_age,
+            "max_age": max_age,
+            "cache_type": cache_type
+        }
+        
+        self._cache[cache_key] = cached_data
+        logger.debug(f"Cached response for {cache_key} (type: {cache_type}, max_age: {max_age}s)")
+    
+    def _add_cache_headers(self, response: Response, cached_data: Dict[str, Any]) -> None:
+        """Add proper cache headers to response"""
+        response.headers["ETag"] = cached_data["etag"]
+        response.headers["Last-Modified"] = cached_data["last_modified"]
+        response.headers["Cache-Control"] = f"max-age={cached_data['max_age']}, public"
+        
+        # Add Vary header for user-specific content
+        if cached_data["cache_type"] == "user_data":
+            response.headers["Vary"] = "Authorization"
+    
+    def invalidate_cache(self, pattern: Optional[str] = None, user_id: Optional[str] = None) -> int:
+        """Invalidate cache entries matching pattern or user"""
+        if not pattern and not user_id:
+            # Clear all cache
+            count = len(self._cache)
+            self._cache.clear()
+            return count
+        
+        keys_to_remove = []
+        for key in self._cache.keys():
+            if pattern and pattern in key:
+                keys_to_remove.append(key)
+            elif user_id and f"user:{user_id}" in key:
+                keys_to_remove.append(key)
+        
+        for key in keys_to_remove:
+            del self._cache[key]
+        
+        logger.info(f"Invalidated {len(keys_to_remove)} cache entries")
+        return len(keys_to_remove)
+    
+    def get_cache_stats(self) -> Dict[str, Any]:
+        """Get cache statistics"""
+        total_entries = len(self._cache)
+        expired_entries = sum(1 for data in self._cache.values() if time.time() > data["expires_at"])
+        
+        cache_types = {}
+        for data in self._cache.values():
+            cache_type = data["cache_type"]
+            cache_types[cache_type] = cache_types.get(cache_type, 0) + 1
+        
+        return {
+            "total_entries": total_entries,
+            "expired_entries": expired_entries,
+            "active_entries": total_entries - expired_entries,
+            "cache_types": cache_types,
+            "memory_usage_estimate": sum(len(str(data["data"])) for data in self._cache.values())
+        }
 
 
 # Global cache manager instance
 cache_manager = CacheManager()
 
 
-def cached(ttl: int = 300, cache_name: str = "default"):
-    """Decorator for caching function responses"""
-    cache = cache_manager.get_cache(cache_name)
+def get_cache_manager() -> CacheManager:
+    """Get the global cache manager instance"""
+    return cache_manager
+
+
+def cache_response_decorator(cache_type: str = "dynamic", 
+                           max_age: Optional[int] = None,
+                           user_specific: bool = False):
+    """
+    Decorator to automatically cache API responses
     
-    def decorator(func: Callable) -> Callable:
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            # Generate cache key from function name and arguments
-            key_data = {
-                "func": func.__name__,
-                "args": args,
-                "kwargs": kwargs
-            }
-            cache_key = hashlib.sha256(json.dumps(key_data, default=str).encode()).hexdigest()[:16]
+    Args:
+        cache_type: Type of cache (static, dynamic, realtime, user_data)
+        max_age: Custom cache duration in seconds
+        user_specific: Whether cache should be user-specific
+    """
+    def decorator(func):
+        async def wrapper(*args, **kwargs):
+            # Extract request from arguments
+            request = None
+            user_id = None
             
-            # Try to get from cache
-            cached_result = cache.get(func.__name__, {"key": cache_key})
-            if cached_result is not None:
-                return cached_result
+            for arg in args:
+                if isinstance(arg, Request):
+                    request = arg
+                    break
             
-            # Execute function and cache result
-            result = func(*args, **kwargs)
-            cache.set(func.__name__, {"key": cache_key}, result, ttl)
+            # Check for cached response
+            if request:
+                cached_response = cache_manager.get_cached_response(request, user_id)
+                if cached_response:
+                    return cached_response
+            
+            # Execute the original function
+            result = await func(*args, **kwargs) if hasattr(func, '__call__') and hasattr(func, '__code__') and func.__code__.co_flags & 0x80 else func(*args, **kwargs)
+            
+            # Cache the response
+            if request and isinstance(result, (dict, list)):
+                cache_manager.cache_response(
+                    request, 
+                    result, 
+                    cache_type=cache_type,
+                    user_id=user_id,
+                    custom_max_age=max_age
+                )
             
             return result
-        
         return wrapper
-    
     return decorator
-
-
-def invalidate_cache(cache_name: str = "default", endpoint: Optional[str] = None):
-    """Invalidate cache entries"""
-    cache = cache_manager.get_cache(cache_name)
-    if endpoint:
-        return cache.invalidate(endpoint)
-    else:
-        cache.clear()
-        return 0

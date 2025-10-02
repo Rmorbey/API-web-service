@@ -1,6 +1,132 @@
 {
-  "timestamp": "2025-09-24T19:21:59.460135",
+  "timestamp": "2025-10-01T22:34:42.340124",
   "activities": [
+    {
+      "id": 15977095068,
+      "name": "Afternoon Ride",
+      "type": "Ride",
+      "distance": 8428.3,
+      "moving_time": 1564,
+      "start_date_local": "2025-09-29T17:02:32Z",
+      "description": "Russell Radio: The Contract by Twenty One Pilots",
+      "photos": {},
+      "comments": [],
+      "map": {
+        "polyline": "gpwyHot@GICyA@yABOCyAB_@FEDBx@jA~@hAh@z@bAnAjBlBVDHODEDD^`At@v@p@T`Av@`@RXJ`@HpAl@RNNDHFn@pBXvBHpALj@fAvIZpBLVJHJBnA}@hAq@f@Sl@g@LGx@Wx@GJGp@Er@@b@RLBf@TJHFEFLbAbA^h@\\r@pAvBn@|@N^jArANVFTZ^Tb@Pf@h@fAVx@FFDVZp@FT^t@FVj@rA`A|Bz@nCR`@v@|BNv@j@dBFd@JXNp@Xz@j@~BRXz@lCP`@Vt@P\\Hd@BLATSd@[b@In@?NZtAHf@h@|AV|@PnAClAKh@E`AOv@I|@Az@BnC`@|A@NGLFZLRPj@f@dA^b@x@jAJHVd@Rh@\\TN?@E@DABHJdAlAV`@f@d@\\h@LBJJv@pATTT^j@p@FLRVVL|@`AVCP@JADGH@\\Cb@_@JMb@e@f@m@bA{@RKn@On@@f@C`@Gb@WL?h@c@j@[HGrBiAXI`@a@hB{@TQ\\ETBLKR?jAQHGVEVOb@MRSVKHIHCJ@TCTDFHN^|@`DJNFP@RPx@n@dCX~@^v@JC\\Uj@WVO\\KJAJCf@FN?DCh@FBB\\vAJTFBRGHE~@Ad@LJFHJNf@Hf@AhAGvA@^BLJCHIPFBJLLH\\HfBAxACl@?TLnABL@@D?HGF@PC~@i@H?LJj@|AFHHn@DLNRNj@JH@ZNJLb@vAjDBJTXN^JNL`@Vf@Dl@zAtDZh@f@|AFd@N`@Lh@@HEHc@JOP?b@Ev@]tBMvBBRNHhB\\v@h@`@`@ZPv@hA|@bAd@p@PZn@tABLHJX`AJHHPX`AH`@?FXXDLVjAFd@JTdAvDVh@Fb@Zn@NVJVFBh@x@Vn@\\h@XbARtAR\\b@lAFTb@zB@\\VbAJXZdBZ~@Lp@Fb@R|@PbATx@@RJb@NX`@V`@NH`@JVIlA@n@RhAp@zBh@bCHpA@z@Iz@Ov@g@jBSj@[|AINe@rBO~@e@hBObAO`@GX@Jb@Vf@d@pAfA`BnB\\p@x@t@D@TANJd@l@HBd@r@^d@JD^f@RRJDd@`@FNHJF?p@t@RBFDDF@VTbAHHDTVJVKROv@UJOT?FGLYV]\\y@Rs@@ODONc@^[RENMb@QL?HBDEFe@FWAKe@mAESQYUkAJINEDMOcAHKDO@FB?AACDI@ADFDAN@O",
+        "bounds": {
+          "south": 51.52798,
+          "west": -0.05292,
+          "north": 51.57146,
+          "east": 0.01023
+        }
+      },
+      "music": {
+        "track": {
+          "name": "The Contract",
+          "artist": "Twenty One Pilots"
+        },
+        "detected": {
+          "type": "track",
+          "title": "The Contract",
+          "artist": "Twenty One Pilots",
+          "source": "russell_radio"
+        },
+        "widget_html": "<iframe title=\"deezer-widget\" src=\"https://widget.deezer.com/widget/auto/track/3550943061\" width=\"100%\" height=\"300\" frameborder=\"0\" allowtransparency=\"true\" allow=\"encrypted-media; clipboard-write\"></iframe>"
+      },
+      "elapsed_time": 1631,
+      "start_date": "2025-09-29T16:02:32Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 25.7
+    },
+    {
+      "id": 15949905889,
+      "name": "Morning Run",
+      "type": "Run",
+      "distance": 5177.5,
+      "moving_time": 1543,
+      "start_date_local": "2025-09-27T09:05:55Z",
+      "description": "This morning was a surprisingly hot park run, didn't expect this at nearing the end of September. \n\nAlbum: A Kiss for the Whole World by Enter Shikari",
+      "photos": {
+        "primary": {
+          "unique_id": "ecfd8e82-0b89-424f-8139-f4a299c4a834",
+          "type": 1,
+          "url": "https://dgtzuqphqg23d.cloudfront.net/_fb1BpzG3qVfahFA1eolZvHo8qmL3P10RrPfC_6OojE-1536x2048.jpg",
+          "urls": {
+            "600": "https://dgtzuqphqg23d.cloudfront.net/_fb1BpzG3qVfahFA1eolZvHo8qmL3P10RrPfC_6OojE-1536x2048.jpg",
+            "1000": "https://dgtzuqphqg23d.cloudfront.net/_fb1BpzG3qVfahFA1eolZvHo8qmL3P10RrPfC_6OojE-1536x2048.jpg"
+          },
+          "status": 3,
+          "is_placeholder": false,
+          "optimized_url": "https://dgtzuqphqg23d.cloudfront.net/_fb1BpzG3qVfahFA1eolZvHo8qmL3P10RrPfC_6OojE-1536x2048.jpg",
+          "has_photo": true
+        },
+        "count": 1
+      },
+      "comments": [],
+      "map": {
+        "polyline": "ufmyHxxEG?M`@GFMGI@KCIHE?MGSWc@Y}Ac@cAk@k@i@OES@QHc@Lm@Lu@CYIQ?IFINQPILKd@Kr@OzAWz@IJ]NqBl@IGSk@QSm@e@c@Sq@WMK_AMiAJc@G]Bs@d@i@dAOv@@t@d@~BFd@?|@Mv@_@l@WPSFQ?KCa@Sg@[UEs@@i@LQJS\\ITGh@?nBFtAAFGAEQCu@A{@Dy@Ja@JUl@w@NIR?h@L^Ad@F\\L\\BTIJGRSVi@La@?UK_BY_BCW?e@Bk@L_@Ze@hAeAXEXOf@A|ALLDXNpA`AX^RPb@dAD@D?b@_@^GpAg@Rk@Jy@@e@XgBRS|@]`@?LHHBHAXOZMZ@\\HPDl@^tAXf@ZtAf@j@h@CDGAc@w@QQsBu@WGWASGWOSYQCYAc@Ga@FKJUJ[@SA_@PWAa@FS\\OzAQv@Un@MTIH]Ja@VOBM?WLIAKKQo@QSi@UEEgAS[Wi@Ik@@_@Ag@@[F_@Zc@VIJWp@U~@Cn@Hd@ZhAFp@CfAEVM`@]d@QHI@a@Ek@U_@YE?UKIAUBa@EOOG?[HHh@O`@UbBCj@DxA?RCDI@Cc@BeAAm@Dk@b@gAp@}@PGNBNH^B`AZh@Df@MPQPWHWB[Bu@Ei@a@_C?e@DUHEDQ@K\\q@FG\\O\\[P?^UZAh@DdATlAf@t@b@r@p@V`@DAHK^Wl@Wf@YFI^}A^yBTYNEZCTId@?PFHMPE`@SF?RFPPfAn@ZHhALhA`@\\PVRLDF@DA^WJC@K",
+        "bounds": {
+          "south": 51.51867,
+          "west": -0.03948,
+          "north": 51.52719,
+          "east": -0.03413
+        }
+      },
+      "music": {
+        "album": {
+          "name": "A Kiss for the Whole World",
+          "artist": "Enter Shikari"
+        },
+        "detected": {
+          "type": "album",
+          "title": "A Kiss for the Whole World",
+          "artist": "Enter Shikari",
+          "source": "description"
+        },
+        "widget_html": "<iframe title=\"deezer-widget\" src=\"https://widget.deezer.com/widget/auto/album/385245747\" width=\"100%\" height=\"300\" frameborder=\"0\" allowtransparency=\"true\" allow=\"encrypted-media; clipboard-write\"></iframe>"
+      },
+      "elapsed_time": 1543,
+      "start_date": "2025-09-27T08:05:55Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 32.9
+    },
+    {
+      "id": 15949450710,
+      "name": "Morning Ride",
+      "type": "Ride",
+      "distance": 8702.1,
+      "moving_time": 1527,
+      "start_date_local": "2025-09-27T08:23:59Z",
+      "description": "Fresh morning cycle to mile end park run. Looks like a beautiful day.\n\nRussell Radio: Downstairs by twenty one pilots",
+      "photos": {},
+      "comments": [],
+      "map": {
+        "polyline": "kpwyHyt@@@IA?UEEAKAg@B_@Ck@BIJGXyBR\\h@l@P\\vAjBv@z@v@fATN\\^RDFOBFLAD@L`@Vd@`@`@d@\\JRXXDAHBNJPPZLRDR?DBZFRPt@Z`@XL?\\bAPp@b@vD@j@XjBH`ATrAV`CNz@L`@HJZJHMLIz@[r@a@d@a@p@c@JEp@e@XIHCLDV?r@E`@U`BTj@f@Zb@TTPZRPZj@bDfFj@z@\\^LXj@t@DLVTD@BCFD\\p@T|A^lAhAtCz@~A\\jAHNfEnNr@fCNr@\\lA@VJRLFHHlAxD^r@Lb@@PGVi@b@Qh@?RBh@FT\\hAZr@r@bCHh@Ah@KrAO`AWhAKl@Gn@Cp@AVFxAFf@Rz@@PA?ADVd@Pd@t@xA`@`@ZTz@dAHJHZNTVTXBRd@`@l@\\ZX`@d@^d@l@RLL\\f@j@PZh@f@n@|@FNLFFH\\RXXF@|@IHDP?HC^g@v@w@\\a@f@c@f@[^GhAGVKd@If@Yf@ObAw@h@i@d@Ir@k@TIJMJCVQVOJA^Wj@U`@KLDn@Cz@Of@Gz@i@nA_@JFHAJDPVPr@\\dArB`Ib@lADHHDR?RIVCh@[JCRO`@K`@CZIL?LDJERJHPDTEb@@HJND@HCf@En@HZFTRN\\DR@TKzB?h@Bb@HFJATFA^FVNHDH@r@EpEFXHj@FHf@Gn@_@ZGH@HJb@bADX`@hAv@lChBdEHH^t@TVFLHX@VPd@ZlAL\\P\\z@pAd@dBALDDNb@F^?DEJo@XGHGJAdAOjAQp@Gf@Ej@@\\DLHHj@Pj@Dj@Td@^fAlAVZz@tAl@n@T\\RRXj@?NFN@NHJBPP^^tA@PN\\@TJJPb@JHTh@Px@^x@Pt@Rf@P~@P\\Jb@b@~@ZXXp@HHPv@l@bAH^Ph@JlAHVLNHLXdAXn@FR@`@Rl@Db@HVHh@JLJT@b@Jf@JL?TDPDv@ARF^Nb@HJFR?NHd@X|@FNZ`@|@b@RKPETFZBHEX]b@Kj@]LBd@YXWZKDIPMPGNAZSJAj@Yj@Sp@_@l@e@LQJCzAwAJSXQRWFOd@UnAkAfBqBR]TW\\g@fAaADK`@]Xa@PQXUPSZQt@}@ZW\\a@FMZ[JGFK|@k@ZYHENU`@]XMv@Cd@OXBt@Od@?LEL@n@Id@Od@IRMJ@\\A`@Qb@EJCn@GCCA@BJFHD@d@Wb@IRKHD?FDRFDFCT@p@WFOHFVHZNXAZDHA`@Rt@r@ZJJJz@JFDl@NJFH?RFNHLPXNX@FCDCXi@FJBAAC",
+        "bounds": {
+          "south": 51.51858,
+          "west": -0.04148,
+          "north": 51.57151,
+          "east": 0.01009
+        }
+      },
+      "music": {
+        "track": {
+          "name": "Downstairs",
+          "artist": "twenty one pilots"
+        },
+        "detected": {
+          "type": "track",
+          "title": "Downstairs",
+          "artist": "twenty one pilots",
+          "source": "russell_radio"
+        },
+        "widget_html": "<iframe title=\"deezer-widget\" src=\"https://widget.deezer.com/widget/auto/track/3550943071\" width=\"100%\" height=\"300\" frameborder=\"0\" allowtransparency=\"true\" allow=\"encrypted-media; clipboard-write\"></iframe>"
+      },
+      "elapsed_time": 1564,
+      "start_date": "2025-09-27T07:23:59Z",
+      "timezone": "(GMT+00:00) Europe/London",
+      "total_elevation_gain": 22.7
+    },
     {
       "id": 15806551007,
       "name": "Morning Run",
@@ -167,7 +293,9 @@
             "1000": "https://dgtzuqphqg23d.cloudfront.net/DpF7b8mQwAZxKCjbAFtt5VatZMacsgNDRrQInTdmbuM-2048x1536.jpg"
           },
           "status": 3,
-          "is_placeholder": false
+          "is_placeholder": false,
+          "optimized_url": "https://dgtzuqphqg23d.cloudfront.net/DpF7b8mQwAZxKCjbAFtt5VatZMacsgNDRrQInTdmbuM-2048x1536.jpg",
+          "has_photo": true
         },
         "count": 1
       },
@@ -254,7 +382,9 @@
             "1000": "https://dgtzuqphqg23d.cloudfront.net/uPkMYzkm0Gx8r8gYpTHfqsBGs3Hv3XzUPY9xVOOqenA-1536x2048.jpg"
           },
           "status": 3,
-          "is_placeholder": false
+          "is_placeholder": false,
+          "optimized_url": "https://dgtzuqphqg23d.cloudfront.net/uPkMYzkm0Gx8r8gYpTHfqsBGs3Hv3XzUPY9xVOOqenA-1536x2048.jpg",
+          "has_photo": true
         },
         "count": 1
       },
@@ -1344,7 +1474,8 @@
       "total_elevation_gain": 25.5
     }
   ],
-  "total_fetched": 173,
-  "total_filtered": 48,
-  "manual_refresh": true
+  "total_fetched": 40,
+  "total_filtered": 34,
+  "smart_merge": true,
+  "rich_data_updated": true
 }

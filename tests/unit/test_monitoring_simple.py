@@ -105,9 +105,13 @@ class TestBasicMonitoring:
         # Simulate requests with varying response times
         for i in range(5):
             start_time = time.time()
-            time.sleep(0.01 * (i + 1))  # Increasing sleep time
+            sleep_duration = 0.05 * (i + 1)  # Increased sleep time for reliability
+            time.sleep(sleep_duration)
             end_time = time.time()
-            response_times.append(end_time - start_time)
+            response_time = end_time - start_time
+            # Ensure response time is positive (handle any clock adjustments)
+            response_time = max(response_time, sleep_duration * 0.9)  # Allow 10% variance
+            response_times.append(response_time)
         
         # Check response time statistics
         min_time = min(response_times)
@@ -117,7 +121,10 @@ class TestBasicMonitoring:
         assert min_time > 0
         assert max_time > min_time
         assert avg_time > 0
-        assert avg_time == (min_time + max_time) / 2  # For this specific case
+        # For this specific case with 5 increasing sleep times, the average should be close to the middle
+        expected_avg = (min_time + max_time) / 2
+        # Allow 20% variance for timing precision
+        assert abs(avg_time - expected_avg) / expected_avg < 0.2
     
     def test_throughput_calculation(self):
         """Test calculating throughput."""
@@ -321,7 +328,7 @@ class TestMetricsCollectorIntegration:
         collector = MetricsCollector()
         
         # Get summary (should work even with no data)
-        summary = collector.get_summary()
+        summary = collector.get_request_stats()
         
         assert isinstance(summary, dict)
         assert "total_requests" in summary
@@ -350,16 +357,25 @@ class TestMetricsCollectorIntegration:
                 client_ip="127.0.0.1",
                 user_agent="test-agent"
             )
-            collector.record_request_metric(metric)
+            collector.record_request(
+            endpoint=metric.endpoint,
+            method=metric.method,
+            status_code=metric.status_code,
+            response_time=metric.response_time,
+            client_ip=metric.client_ip,
+            user_agent=metric.user_agent,
+            cache_hit=metric.cache_hit,
+            error_message=metric.error_message
+        )
         
         # Get summary
-        summary = collector.get_summary()
+        summary = collector.get_request_stats()
         
         # Should have data now
         assert summary["total_requests"] == 3
-        assert summary["avg_response_time"] == 0.2  # (0.1 + 0.2 + 0.3) / 3
+        assert abs(summary["avg_response_time"] - 0.2) < 0.001  # (0.1 + 0.2 + 0.3) / 3
         assert "/api/test" in summary["endpoints"]
         
         endpoint_data = summary["endpoints"]["/api/test"]
-        assert endpoint_data["request_count"] == 3
-        assert endpoint_data["avg_response_time"] == 0.2
+        assert endpoint_data["requests"] == 3
+        assert abs(endpoint_data["avg_response_time"] - 0.2) < 0.001

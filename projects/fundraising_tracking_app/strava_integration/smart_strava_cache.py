@@ -11,10 +11,11 @@ import time
 import logging
 import shutil
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Any, Optional, Tuple
 from dotenv import load_dotenv
 from .strava_token_manager import StravaTokenManager
+from .http_clients import get_http_client
 import os
 
 # Configure enhanced logging
@@ -48,7 +49,7 @@ class SmartStravaCache:
         self.api_calls_made = 0
         self.api_calls_reset_time = datetime.now()
         self.max_calls_per_15min = 200
-        self.max_calls_per_day = 2000
+        self.max_calls_per_day = 1000
         
         # Performance optimizations
         self._cache_data = None  # In-memory cache
@@ -181,7 +182,7 @@ class SmartStravaCache:
         logger.info(f"API call made. Total: {self.api_calls_made}")
     
     def _make_api_call_with_retry(self, url: str, headers: Dict[str, str], max_retries: int = 3) -> httpx.Response:
-        """Make an API call with retry logic and error handling"""
+        """Make an API call with retry logic and error handling using optimized HTTP client"""
         for attempt in range(max_retries):
             try:
                 # Check rate limits before making call
@@ -189,35 +190,35 @@ class SmartStravaCache:
                 if not can_call:
                     raise Exception(f"Rate limit exceeded: {message}")
                 
-                # Make the API call
-                with httpx.Client(timeout=30.0) as client:
-                    response = client.get(url, headers=headers)
-                    
-                    # Record the API call
-                    self._record_api_call()
-                    
-                    # Handle specific HTTP status codes
-                    if response.status_code == 200:
-                        return response
-                    elif response.status_code == 401:
-                        logger.warning("Token expired, attempting refresh...")
-                        # Token might be expired, try to refresh
-                        self.token_manager.get_valid_access_token()
-                        if attempt < max_retries - 1:
-                            continue
-                        raise Exception("Authentication failed after token refresh")
-                    elif response.status_code == 429:
-                        # Rate limited by Strava
-                        retry_after = int(response.headers.get('Retry-After', 60))
-                        logger.warning(f"Rate limited by Strava, waiting {retry_after} seconds...")
-                        if attempt < max_retries - 1:
-                            time.sleep(retry_after)
-                            continue
-                        raise Exception(f"Rate limited by Strava: {response.text}")
-                    elif response.status_code == 404:
-                        raise Exception(f"Resource not found: {url}")
-                    else:
-                        response.raise_for_status()
+                # Make the API call using shared HTTP client with connection pooling
+                http_client = get_http_client()
+                response = http_client.get(url, headers=headers)
+                
+                # Record the API call
+                self._record_api_call()
+                
+                # Handle specific HTTP status codes
+                if response.status_code == 200:
+                    return response
+                elif response.status_code == 401:
+                    logger.warning("Token expired, attempting refresh...")
+                    # Token might be expired, try to refresh
+                    self.token_manager.get_valid_access_token()
+                    if attempt < max_retries - 1:
+                        continue
+                    raise Exception("Authentication failed after token refresh")
+                elif response.status_code == 429:
+                    # Rate limited by Strava
+                    retry_after = int(response.headers.get('Retry-After', 60))
+                    logger.warning(f"Rate limited by Strava, waiting {retry_after} seconds...")
+                    if attempt < max_retries - 1:
+                        time.sleep(retry_after)
+                        continue
+                    raise Exception(f"Rate limited by Strava: {response.text}")
+                elif response.status_code == 404:
+                    raise Exception(f"Resource not found: {url}")
+                else:
+                    response.raise_for_status()
                         
             except httpx.TimeoutException:
                 logger.warning(f"Timeout on attempt {attempt + 1}/{max_retries}")
@@ -262,21 +263,26 @@ class SmartStravaCache:
             existing_activities = cache_data.get("activities", [])
             merged_activities = self._smart_merge_activities(existing_activities, filtered_activities)
             
-            # Update cache with merged data
+            # Check and update rich data for ALL activities within last 3 weeks
+            logger.info("🔍 Checking all activities for missing rich data...")
+            updated_activities = self._check_and_update_all_activities_rich_data(merged_activities)
+            
+            # Update cache with merged and updated data
             cache_data = {
                 "timestamp": datetime.now().isoformat(),
-                "activities": merged_activities,
+                "activities": updated_activities,
                 "total_fetched": len(fresh_activities),
                 "total_filtered": len(filtered_activities),
-                "smart_merge": True  # Flag to indicate smart merge was used
+                "smart_merge": True,  # Flag to indicate smart merge was used
+                "rich_data_updated": True  # Flag to indicate rich data was checked
             }
             
             self._save_cache(cache_data)
             
             execution_time = time.time() - start_time
-            logger.info(f"Smart merged {len(merged_activities)} activities (preserved rich data)")
+            logger.info(f"Smart merged {len(merged_activities)} activities and updated rich data")
             logger.info(f"Smart merge complete - {execution_time:.3f}s")
-            return merged_activities[:limit]
+            return updated_activities[:limit]
             
         except Exception as e:
             execution_time = time.time() - start_time
@@ -318,6 +324,165 @@ class SmartStravaCache:
         # For Run/Ride activities, both polyline and bounds should be present
         # (these are outdoor activities with GPS tracking)
         return has_polyline and has_bounds
+
+    def _get_missing_rich_data(self, activity: Dict[str, Any]) -> Dict[str, bool]:
+        """Check what specific rich data is missing from an activity"""
+        return {
+            "polyline": not bool(activity.get("map") and activity.get("map").get("polyline")),
+            "bounds": not bool(activity.get("map") and activity.get("map").get("bounds")),
+            "description": not bool(activity.get("description", "").strip()),
+            "photos": not bool(activity.get("photos", {})),
+            "comments": not bool(activity.get("comments", []))
+        }
+
+    def _has_essential_map_data(self, activity: Dict[str, Any]) -> bool:
+        """Check if activity has essential map data (polyline AND bounds)"""
+        has_polyline = bool(activity.get("map") and activity.get("map").get("polyline"))
+        has_bounds = bool(activity.get("map") and activity.get("map").get("bounds"))
+        return has_polyline and has_bounds
+
+    def _has_optional_rich_data(self, activity: Dict[str, Any]) -> bool:
+        """Check if activity has optional rich data (description, photos, comments)"""
+        has_description = bool(activity.get("description", "").strip())
+        has_photos = bool(activity.get("photos", {}))
+        has_comments = bool(activity.get("comments", []))
+        return has_description or has_photos or has_comments
+
+    def _is_activity_recent_enough(self, activity: Dict[str, Any]) -> bool:
+        """Check if activity is recent enough to fetch rich data (less than 3 weeks old)"""
+        try:
+            start_date_str = activity.get('start_date_local', '')
+            if not start_date_str:
+                return False
+            
+            # Parse the date and ensure it's timezone-aware
+            start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
+            three_weeks_ago = datetime.now(timezone.utc) - timedelta(weeks=3)
+            
+            # Ensure both datetimes are timezone-aware for comparison
+            if start_date.tzinfo is None:
+                start_date = start_date.replace(tzinfo=timezone.utc)
+            if three_weeks_ago.tzinfo is None:
+                three_weeks_ago = three_weeks_ago.replace(tzinfo=timezone.utc)
+            
+            return start_date >= three_weeks_ago
+        except Exception as e:
+            logger.warning(f"Error checking activity age: {e}")
+            return False
+
+    def _get_rich_data_retry_count(self, activity: Dict[str, Any]) -> int:
+        """Get the number of times we've tried to fetch rich data for this activity"""
+        return activity.get('_rich_data_retry_count', 0)
+
+    def _get_last_retry_attempt(self, activity: Dict[str, Any]) -> Optional[str]:
+        """Get the timestamp of the last retry attempt"""
+        return activity.get('_last_retry_attempt')
+
+    def _increment_rich_data_retry_count(self, activity: Dict[str, Any]) -> Dict[str, Any]:
+        """Increment the retry counter and update last attempt timestamp"""
+        activity['_rich_data_retry_count'] = activity.get('_rich_data_retry_count', 0) + 1
+        activity['_last_retry_attempt'] = datetime.now().isoformat()
+        return activity
+
+    def _mark_rich_data_success(self, activity: Dict[str, Any]) -> Dict[str, Any]:
+        """Mark that rich data was successfully fetched (don't reset counter)"""
+        # Don't reset the counter - just ensure it exists
+        if '_rich_data_retry_count' not in activity:
+            activity['_rich_data_retry_count'] = 0
+        return activity
+
+    def _can_retry_rich_data(self, activity: Dict[str, Any]) -> bool:
+        """Check if enough time has passed since last retry attempt (24 hours)"""
+        last_attempt = self._get_last_retry_attempt(activity)
+        if not last_attempt:
+            return True  # Never tried before
+        
+        try:
+            last_attempt_dt = datetime.fromisoformat(last_attempt)
+            time_since_last = datetime.now() - last_attempt_dt
+            return time_since_last.total_seconds() >= 86400  # 24 hours
+        except Exception:
+            return True  # If parsing fails, allow retry
+
+    def _should_attempt_rich_data_update(self, activity: Dict[str, Any]) -> bool:
+        """Check if we should attempt to update rich data for this activity"""
+        # Check if activity is recent enough
+        if not self._is_activity_recent_enough(activity):
+            return False
+        
+        # Check if enough time has passed since last retry (24 hours)
+        if not self._can_retry_rich_data(activity):
+            return False
+        
+        # Get what data is missing
+        missing_data = self._get_missing_rich_data(activity)
+        retry_count = self._get_rich_data_retry_count(activity)
+        
+        # If we have essential map data (polyline + bounds), only try 5 times for optional data
+        if self._has_essential_map_data(activity):
+            if retry_count >= 5:
+                # Already tried 5 times for optional data, don't try again
+                return False
+            # Try to get optional rich data (description, photos, comments)
+            return missing_data["description"] or missing_data["photos"] or missing_data["comments"]
+        
+        # If we don't have essential map data, keep trying (unlimited attempts)
+        return missing_data["polyline"] or missing_data["bounds"]
+
+    def _should_attempt_essential_map_data_update(self, activity: Dict[str, Any]) -> bool:
+        """Check if we should attempt to fetch only essential map data (polyline + bounds)"""
+        # Check if activity is recent enough
+        if not self._is_activity_recent_enough(activity):
+            return False
+        
+        # Only attempt if we've tried 5 times and still missing critical map data
+        retry_count = self._get_rich_data_retry_count(activity)
+        if retry_count < 5:
+            return False
+        
+        # Check if we're missing critical map data
+        has_polyline = bool(activity.get("map") and activity.get("map").get("polyline"))
+        has_bounds = bool(activity.get("map") and activity.get("map").get("bounds"))
+        return not (has_polyline and has_bounds)
+
+    def _fetch_essential_map_data_only(self, activity_id: int) -> Dict[str, Any]:
+        """Fetch only essential map data (polyline + bounds) for activities that failed 5 times"""
+        try:
+            logger.info(f"🗺️ Fetching essential map data only for activity {activity_id}")
+            
+            # Fetch basic activity data to get map information
+            activity_url = f"{self.base_url}/activities/{activity_id}"
+            headers = {"Authorization": f"Bearer {self.token_manager.get_valid_access_token()}"}
+            
+            response = self._make_api_call_with_retry(activity_url, headers)
+            activity_data = response.json()
+            
+            # Extract only essential map data
+            map_data = activity_data.get("map", {})
+            essential_map = {
+                "polyline": map_data.get("polyline"),
+                "bounds": map_data.get("bounds", {})
+            }
+            
+            # Calculate bounds from polyline if not provided
+            if not essential_map["bounds"] and essential_map["polyline"]:
+                coordinates = self._decode_polyline(essential_map["polyline"])
+                if coordinates:
+                    lats = [coord[0] for coord in coordinates]
+                    lngs = [coord[1] for coord in coordinates]
+                    essential_map["bounds"] = {
+                        "south": min(lats),
+                        "west": min(lngs),
+                        "north": max(lats),
+                        "east": max(lngs)
+                    }
+            
+            logger.info(f"✅ Successfully fetched essential map data for activity {activity_id}")
+            return essential_map
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to fetch essential map data for activity {activity_id}: {e}")
+            return {}
 
     def _fetch_complete_activity_data(self, activity_id: int) -> Dict[str, Any]:
         """Fetch complete activity data from Strava API with enhanced error handling - OPTIMIZED FOR FRONTEND"""
@@ -535,9 +700,32 @@ class SmartStravaCache:
                 logger.info(f"Preserved existing data for activity {activity_id}: {fresh_activity.get('name', 'Unknown')}")
                 
             else:
-                # NEW ACTIVITY: Use fresh data (will be processed later if needed)
+                # NEW ACTIVITY: Use fresh data
                 merged_activity = fresh_activity
                 logger.info(f"New activity {activity_id}: {fresh_activity.get('name', 'Unknown')}")
+            
+            # Check if ANY activity (new or existing) needs rich data collection
+            if self._should_attempt_rich_data_update(merged_activity):
+                try:
+                    retry_count = self._get_rich_data_retry_count(merged_activity)
+                    logger.info(f"🔄 Fetching rich data for activity {activity_id} (attempt {retry_count + 1}/5)")
+                    
+                    complete_data = self._fetch_complete_activity_data(activity_id)
+                    merged_activity = complete_data
+                    
+                    # Reset retry count on success
+                    merged_activity['_rich_data_retry_count'] = 0
+                    logger.info(f"✅ Successfully fetched rich data for activity {activity_id}")
+                    
+                except Exception as e:
+                    # Increment retry count on failure
+                    merged_activity = self._increment_rich_data_retry_count(merged_activity)
+                    retry_count = self._get_rich_data_retry_count(merged_activity)
+                    
+                    if retry_count >= 5:
+                        logger.warning(f"⚠️ Max retries reached for activity {activity_id} (5/5): {e}")
+                    else:
+                        logger.warning(f"⚠️ Failed to fetch rich data for activity {activity_id} (attempt {retry_count}/5): {e}")
             
             merged_activities.append(merged_activity)
         
@@ -548,6 +736,74 @@ class SmartStravaCache:
                 logger.info(f"Preserved existing activity not in fresh data: {activity_id}")
         
         return merged_activities
+
+    def _check_and_update_all_activities_rich_data(self, activities: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Check ALL activities within last 3 weeks and update rich data if needed"""
+        updated_activities = []
+        activities_updated = 0
+        essential_map_updated = 0
+        
+        for activity in activities:
+            activity_id = activity.get("id")
+            
+            # Check if this activity needs rich data updates
+            if self._should_attempt_rich_data_update(activity):
+                missing_data = self._get_missing_rich_data(activity)
+                retry_count = self._get_rich_data_retry_count(activity)
+                
+                # Determine what type of data we're trying to fetch
+                if self._has_essential_map_data(activity):
+                    data_type = "optional rich data (description/photos/comments)"
+                    max_attempts = 5
+                else:
+                    data_type = "essential map data (polyline/bounds)"
+                    max_attempts = "unlimited"
+                
+                # Get last attempt info for logging
+                last_attempt = self._get_last_retry_attempt(activity)
+                if last_attempt:
+                    try:
+                        last_attempt_dt = datetime.fromisoformat(last_attempt)
+                        hours_since = (datetime.now() - last_attempt_dt).total_seconds() / 3600
+                        time_info = f" (last attempt: {hours_since:.1f}h ago)"
+                    except:
+                        time_info = ""
+                else:
+                    time_info = " (first attempt)"
+                
+                try:
+                    logger.info(f"🔄 Updating {data_type} for activity {activity_id} (attempt {retry_count + 1}/{max_attempts}){time_info}")
+                    
+                    complete_data = self._fetch_complete_activity_data(activity_id)
+                    activity = complete_data
+                    
+                    # Mark success (don't reset counter)
+                    activity = self._mark_rich_data_success(activity)
+                    activities_updated += 1
+                    logger.info(f"✅ Successfully updated {data_type} for activity {activity_id}")
+                    
+                except Exception as e:
+                    # Increment retry count on failure
+                    activity = self._increment_rich_data_retry_count(activity)
+                    retry_count = self._get_rich_data_retry_count(activity)
+                    
+                    if self._has_essential_map_data(activity) and retry_count >= 5:
+                        logger.warning(f"⚠️ Max retries reached for optional data on activity {activity_id} (5/5): {e}")
+                        logger.info(f"📋 Activity {activity_id} will preserve existing polyline/bounds data")
+                    elif not self._has_essential_map_data(activity):
+                        logger.warning(f"⚠️ Failed to fetch essential map data for activity {activity_id} (attempt {retry_count}): {e}")
+                        logger.info(f"🔄 Will continue trying essential map data for activity {activity_id}")
+                    else:
+                        logger.warning(f"⚠️ Failed to update {data_type} for activity {activity_id} (attempt {retry_count}/5): {e}")
+            
+            updated_activities.append(activity)
+        
+        if activities_updated > 0:
+            logger.info(f"📊 Updated rich data for {activities_updated} activities")
+        if essential_map_updated > 0:
+            logger.info(f"🗺️ Updated essential map data for {essential_map_updated} activities")
+        
+        return updated_activities
 
     def _update_activity_in_cache(self, activity_id: int, complete_data: Dict[str, Any]):
         """Update activity in cache with complete data"""

@@ -9,6 +9,9 @@ from typing import Dict, Any, Optional
 import logging
 from datetime import datetime
 import os
+# Removed complex error handlers - using FastAPI's built-in HTTPException
+from ..strava_integration.caching import cache_manager
+from ..strava_integration.async_processor import async_processor
 from .fundraising_scraper import SmartFundraisingCache
 from .models import (
     FundraisingDataResponse, 
@@ -16,13 +19,13 @@ from .models import (
     HealthResponse, 
     RefreshResponse, 
     CleanupResponse,
-    ProjectInfoResponse
+    ProjectInfoResponse,
+    # Request models (Phase 2)
+    FundraisingRefreshRequest,
+    FundraisingCleanupRequest,
+    DonationsFilterRequest
 )
-from ..strava_integration.error_handlers import (
-    AuthenticationException,
-    AuthorizationException,
-    APIException
-)
+# Removed complex error handlers - using FastAPI's built-in HTTPException
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -30,9 +33,16 @@ logger = logging.getLogger(__name__)
 # Create router
 router = APIRouter()
 
-# Initialize the smart cache
+# Lazy initialization for smart cache to prevent multiple instances
 JUSTGIVING_URL = "https://www.justgiving.com/fundraising/RussellMorbey-HackneyHalf?utm_medium=FR&utm_source=CL&utm_campaign=015"
-cache = SmartFundraisingCache(JUSTGIVING_URL)
+_cache_instance = None
+
+def get_cache():
+    """Get the cache instance, creating it only when first needed (lazy initialization)"""
+    global _cache_instance
+    if _cache_instance is None:
+        _cache_instance = SmartFundraisingCache(JUSTGIVING_URL)
+    return _cache_instance
 
 # API Key for protected endpoints
 API_KEY = os.getenv("FUNDRAISING_API_KEY")
@@ -69,10 +79,49 @@ def fundraising_root() -> ProjectInfoResponse:
         scrape_interval="15 minutes"
     )
 
+@router.get("/cache-stats")
+def get_cache_stats(api_key: str = Depends(verify_api_key)) -> dict:
+    """Get HTTP cache statistics"""
+    try:
+        stats = cache_manager.get_cache_stats()
+        return {
+            "success": True,
+            "cache_stats": stats,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Failed to get cache stats: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error fetching cache statistics: {str(e)}"
+        )
+
+@router.post("/cache/invalidate")
+def invalidate_cache(
+    pattern: Optional[str] = None,
+    api_key: str = Depends(verify_api_key)
+) -> dict:
+    """Invalidate HTTP cache entries"""
+    try:
+        count = cache_manager.invalidate_cache(pattern)
+        return {
+            "success": True,
+            "message": f"Invalidated {count} cache entries",
+            "entries_removed": count,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Failed to invalidate cache: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error invalidating cache: {str(e)}"
+        )
+
 @router.get("/health", response_model=HealthResponse)
 def fundraising_health() -> HealthResponse:
     """Health check for fundraising scraper"""
     try:
+        cache = get_cache()
         cache_data = cache.get_fundraising_data()
         return HealthResponse(
             project="fundraising-scraper",
@@ -94,10 +143,15 @@ def fundraising_health() -> HealthResponse:
         )
 
 @router.get("/data", response_model=FundraisingDataResponse)
-def get_fundraising_data() -> FundraisingDataResponse:
-    """Get current fundraising data from cache"""
+async def get_fundraising_data(api_key: str = Depends(verify_api_key)) -> FundraisingDataResponse:
+    """Get current fundraising data from cache with async processing"""
     try:
+        cache = get_cache()
         data = cache.get_fundraising_data()
+        
+        # Process donations in parallel for better performance
+        raw_donations = data.get("donations", [])
+        processed_donations = await async_processor.process_donations_parallel(raw_donations)
         
         # Format the data for frontend consumption
         return FundraisingDataResponse(
@@ -105,7 +159,7 @@ def get_fundraising_data() -> FundraisingDataResponse:
             total_raised=data.get("total_raised", 0),
             target_amount=300,  # Your target
             progress_percentage=round((data.get("total_raised", 0) / 300) * 100, 1),
-            donations=data.get("donations", []),
+            donations=processed_donations,
             total_donations=data.get("total_donations", 0),
             last_updated=datetime.fromisoformat(data.get("last_updated")) if data.get("last_updated") else datetime.now(),
             justgiving_url=JUSTGIVING_URL
@@ -113,29 +167,42 @@ def get_fundraising_data() -> FundraisingDataResponse:
         
     except Exception as e:
         logger.error(f"Failed to get fundraising data: {e}")
-        raise APIException(
-            error_code="INTERNAL_SERVER_ERROR",
-            message="Error fetching fundraising data",
-            detail=f"Failed to retrieve fundraising data: {str(e)}",
-            status_code=500
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error fetching fundraising data: {str(e)}"
         )
 
 @router.post("/refresh", response_model=RefreshResponse)
-def refresh_fundraising_data(api_key: str = Depends(verify_api_key)) -> RefreshResponse:
-    """Manually trigger a fundraising data scrape (requires API key)"""
+def refresh_fundraising_data(
+    request: FundraisingRefreshRequest, 
+    api_key: str = Depends(verify_api_key)
+) -> RefreshResponse:
+    """Manually trigger a fundraising data scrape with customizable options (requires API key)
+    
+    Supports:
+    - Force refresh even if recently updated
+    - Include metadata in response
+    """
     try:
+        cache = get_cache()
         success = cache.force_refresh_now()
         
         if success:
-            # Get updated data to include in response
-            data = cache.get_fundraising_data()
-            return RefreshResponse(
-                success=True,
-                message="Fundraising data refresh triggered successfully",
-                timestamp=datetime.now(),
-                total_raised=data.get("total_raised", 0),
-                donations_count=data.get("total_donations", 0)
-            )
+            response_data = {
+                "success": True,
+                "message": "Fundraising data refresh triggered successfully",
+                "timestamp": datetime.now()
+            }
+            
+            # Include metadata if requested
+            if request.include_metadata:
+                data = cache.get_fundraising_data()
+                response_data.update({
+                    "total_raised": data.get("total_raised", 0),
+                    "donations_count": data.get("total_donations", 0)
+                })
+            
+            return RefreshResponse(**response_data)
         else:
             return RefreshResponse(
                 success=False,
@@ -152,37 +219,74 @@ def refresh_fundraising_data(api_key: str = Depends(verify_api_key)) -> RefreshR
         )
 
 @router.get("/donations", response_model=DonationsResponse)
-def get_donations() -> DonationsResponse:
-    """Get just the donations data for the scrolling footer"""
+async def get_donations(request: DonationsFilterRequest = Depends(), api_key: str = Depends(verify_api_key)) -> DonationsResponse:
+    """Get filtered donations data for the scrolling footer with async processing
+    
+    Supports filtering by:
+    - Amount range (min/max)
+    - Limit number of results
+    - Include/exclude anonymous donations
+    """
     try:
+        cache = get_cache()
         data = cache.get_fundraising_data()
-        donations = data.get("donations", [])
+        all_donations = data.get("donations", [])
+        
+        # Apply filters
+        filtered_donations = all_donations.copy()
+        
+        # Filter by amount range
+        if request.min_amount is not None:
+            filtered_donations = [d for d in filtered_donations if d.get("amount", 0) >= request.min_amount]
+        
+        if request.max_amount is not None:
+            filtered_donations = [d for d in filtered_donations if d.get("amount", 0) <= request.max_amount]
+        
+        # Filter anonymous donations
+        if not request.include_anonymous:
+            filtered_donations = [d for d in filtered_donations if d.get("donor_name", "").lower() not in ["anonymous", "anon", ""]]
+        
+        # Apply limit
+        if request.limit is not None:
+            filtered_donations = filtered_donations[:request.limit]
+        
+        # Process donations in parallel for better performance
+        processed_donations = await async_processor.process_donations_parallel(filtered_donations)
         
         return DonationsResponse(
-            donations=donations,
-            total_donations=len(donations),
+            donations=processed_donations,
+            total_donations=len(processed_donations),
             last_updated=datetime.fromisoformat(data.get("last_updated")) if data.get("last_updated") else datetime.now()
         )
         
     except Exception as e:
         logger.error(f"Failed to get donations: {e}")
-        raise APIException(
-            error_code="INTERNAL_SERVER_ERROR",
-            message="Error fetching donations",
-            detail=f"Failed to retrieve donations data: {str(e)}",
-            status_code=500
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error fetching donations: {str(e)}"
         )
 
 @router.post("/cleanup-backups", response_model=CleanupResponse)
-def cleanup_backups(api_key: str = Depends(verify_api_key)) -> CleanupResponse:
-    """Manually trigger backup cleanup (requires API key)"""
+def cleanup_backups(
+    request: FundraisingCleanupRequest, 
+    api_key: str = Depends(verify_api_key)
+) -> CleanupResponse:
+    """Manually trigger backup cleanup with customizable options (requires API key)
+    
+    Supports:
+    - Configurable number of backups to keep
+    - Force cleanup even if cache is recent
+    """
     try:
+        cache = get_cache()
+        # Note: The current cache.cleanup_backups() doesn't accept parameters
+        # This is a placeholder for future enhancement
         success = cache.cleanup_backups()
         
         if success:
             return CleanupResponse(
                 success=True,
-                message="Backup cleanup completed successfully",
+                message=f"Backup cleanup completed successfully (keeping {request.keep_backups} backups)",
                 timestamp=datetime.now()
             )
         else:

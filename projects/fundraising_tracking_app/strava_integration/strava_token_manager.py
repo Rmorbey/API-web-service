@@ -10,6 +10,7 @@ import asyncio
 import httpx
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional
+from .http_clients import get_http_client
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -103,22 +104,22 @@ class StravaTokenManager:
         """Refresh the access token using the refresh token - FIXED to be synchronous"""
         
         try:
-            # Use synchronous httpx client instead of async
-            with httpx.Client() as client:
-                response = client.post(
-                    "https://www.strava.com/oauth/token",
-                    data={
-                        "client_id": self.client_id,
-                        "client_secret": self.client_secret,
-                        "refresh_token": refresh_token,
-                        "grant_type": "refresh_token"
-                    }
-                )
-                
-                if response.status_code != 200:
-                    raise Exception(f"Failed to refresh token: {response.status_code} - {response.text}")
-                
-                token_data = response.json()
+            # Use shared HTTP client with connection pooling
+            http_client = get_http_client()
+            response = http_client.post(
+                "https://www.strava.com/oauth/token",
+                data={
+                    "client_id": self.client_id,
+                    "client_secret": self.client_secret,
+                    "refresh_token": refresh_token,
+                    "grant_type": "refresh_token"
+                }
+            )
+            
+            if response.status_code != 200:
+                raise Exception(f"Failed to refresh token: {response.status_code} - {response.text}")
+            
+            token_data = response.json()
             
             # Calculate expires_at timestamp
             expires_at = int(datetime.now().timestamp()) + token_data["expires_in"]

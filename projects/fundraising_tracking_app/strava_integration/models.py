@@ -4,7 +4,7 @@ Pydantic models for Strava Integration API
 Defines request and response models for type safety and validation
 """
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 from typing import List, Optional, Dict, Any, Literal
 from datetime import datetime
 
@@ -119,70 +119,102 @@ class ProjectInfoResponse(BaseModel):
 
 class FeedRequest(BaseModel):
     """Request model for activity feed endpoint with filtering options"""
-    limit: int = Field(default=20, ge=1, le=200, description="Number of activities to return")
+    limit: int = Field(
+        default=20, 
+        ge=1, 
+        le=200, 
+        description="Number of activities to return",
+    )
     activity_type: Optional[Literal["Run", "Ride"]] = Field(
         default=None, 
-        description="Filter by activity type (Run or Ride)"
+        description="Filter by activity type (Run or Ride)",
     )
     date_from: Optional[datetime] = Field(
         default=None, 
-        description="Filter activities from this date onwards"
+        description="Filter activities from this date onwards (ISO format)",
     )
     date_to: Optional[datetime] = Field(
         default=None, 
-        description="Filter activities up to this date"
+        description="Filter activities up to this date (ISO format)",
     )
     has_photos: Optional[bool] = Field(
         default=None, 
-        description="Filter activities that have photos (true) or don't have photos (false)"
+        description="Filter activities that have photos (true) or don't have photos (false)",
     )
     has_description: Optional[bool] = Field(
         default=None, 
-        description="Filter activities that have descriptions (true) or don't have descriptions (false)"
+        description="Filter activities that have descriptions (true) or don't have descriptions (false)",
     )
     min_distance: Optional[float] = Field(
         default=None, 
         ge=0, 
-        description="Minimum distance in meters"
+        description="Minimum distance in meters",
     )
     max_distance: Optional[float] = Field(
         default=None, 
         ge=0, 
-        description="Maximum distance in meters"
+        description="Maximum distance in meters",
     )
 
-    @validator('date_to')
-    def validate_date_range(cls, v, values):
+    @field_validator('date_to')
+    @classmethod
+    def validate_date_range(cls, v, info):
         """Validate that date_to is after date_from"""
-        if v and 'date_from' in values and values['date_from']:
-            if v <= values['date_from']:
+        if v and hasattr(info, 'data') and 'date_from' in info.data and info.data['date_from']:
+            if v <= info.data['date_from']:
                 raise ValueError('date_to must be after date_from')
         return v
 
-    @validator('max_distance')
-    def validate_distance_range(cls, v, values):
+    @field_validator('max_distance')
+    @classmethod
+    def validate_distance_range(cls, v, info):
         """Validate that max_distance is greater than min_distance"""
-        if v and 'min_distance' in values and values['min_distance']:
-            if v <= values['min_distance']:
+        if v and hasattr(info, 'data') and 'min_distance' in info.data and info.data['min_distance']:
+            if v <= info.data['min_distance']:
                 raise ValueError('max_distance must be greater than min_distance')
         return v
+    
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "limit": 20,
+                "activity_type": "Run",
+                "date_from": "2025-05-22T00:00:00",
+                "date_to": "2025-09-24T23:59:59",
+                "has_photos": True,
+                "has_description": True,
+                "min_distance": 1000.0,
+                "max_distance": 10000.0
+            }
+        }
+    )
 
 
 class RefreshRequest(BaseModel):
     """Request model for manual refresh endpoint"""
     force_full_refresh: bool = Field(
         default=False, 
-        description="Force a full refresh instead of smart merge"
+        description="Force a full refresh instead of smart merge",
     )
     include_old_activities: bool = Field(
         default=False, 
-        description="Include activities older than 3 weeks in refresh"
+        description="Include activities older than 3 weeks in refresh",
     )
     batch_size: int = Field(
         default=20, 
         ge=1, 
         le=50, 
-        description="Number of activities to process in each batch"
+        description="Number of activities to process in each batch",
+    )
+    
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "force_full_refresh": False,
+                "include_old_activities": False,
+                "batch_size": 20
+            }
+        }
     )
 
 
@@ -192,11 +224,20 @@ class CleanupRequest(BaseModel):
         default=1, 
         ge=0, 
         le=10, 
-        description="Number of recent backups to keep"
+        description="Number of recent backups to keep",
     )
     force_cleanup: bool = Field(
         default=False, 
-        description="Force cleanup even if cache is recent"
+        description="Force cleanup even if cache is recent",
+    )
+    
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "keep_backups": 1,
+                "force_cleanup": False
+            }
+        }
     )
 
 
