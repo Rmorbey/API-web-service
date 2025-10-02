@@ -332,6 +332,54 @@ async def cleanup_backups(request: CleanupRequest, api_key: str = Depends(verify
             "timestamp": datetime.now().isoformat()
         }
 
+# Demo endpoints (no API key required for demo pages)
+@router.get("/demo/feed", response_model=ActivityFeedResponse)
+async def get_activity_feed_demo(request: FeedRequest = Depends()) -> ActivityFeedResponse:
+    """Get a list of processed Strava activities for demo page (no API key required)"""
+    try:
+        cache_instance = get_cache()
+        raw_activities = cache_instance.get_activities_smart(request.limit)
+        
+        # Process activities in parallel for better performance
+        processed_activities = await async_processor.process_activities_parallel(raw_activities)
+        
+        return ActivityFeedResponse(
+            activities=processed_activities,
+            total_activities=len(processed_activities),
+            last_updated=datetime.utcnow(),
+            cache_status="active"
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to get activity feed for demo: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error fetching activity feed: {str(e)}"
+        )
+
+@router.get("/demo/map-tiles/{z}/{x}/{y}")
+def get_map_tiles_demo(z: int = Path(..., ge=0, le=18), x: int = Path(...), y: int = Path(...)):
+    """Get map tiles for demo page (no API key required)"""
+    try:
+        # Use Jawg Maps for demo
+        jawg_token = os.getenv("JAWG_ACCESS_TOKEN")
+        if not jawg_token:
+            raise HTTPException(status_code=500, detail="Jawg token not configured")
+        
+        # Construct Jawg Maps URL
+        tile_url = f"https://tile.jawg.io/jawg-dark/{z}/{x}/{y}.png?access-token={jawg_token}"
+        
+        # Return redirect to tile URL
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url=tile_url, status_code=302)
+        
+    except Exception as e:
+        logger.error(f"Failed to get map tiles for demo: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error fetching map tiles: {str(e)}"
+        )
+
 @router.post("/clean-invalid-activities")
 async def clean_invalid_activities(api_key: str = Depends(verify_api_key)):
     """Clean invalid/unknown activities from the cache (requires API key)"""

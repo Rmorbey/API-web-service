@@ -267,8 +267,8 @@
         // Load fundraising data
         async function loadFundraisingData() {
             try {
-                // Load main data
-                const response = await fetch(`${API_BASE}/data`);
+                // Load main data (using secure demo endpoint - no API key needed)
+                const response = await fetch(`${API_BASE}/demo/data`);
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
@@ -300,7 +300,7 @@
         // Load donations for scrolling text
         async function loadDonations() {
             try {
-                const response = await fetch(`${API_BASE}/donations`);
+                const response = await fetch(`${API_BASE}/demo/donations`);
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
@@ -322,7 +322,7 @@
         // Load detailed donations list
         async function loadDetailedDonations() {
             try {
-                const response = await fetch(`${API_BASE}/data`);
+                const response = await fetch(`${API_BASE}/demo/data`);
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
@@ -351,19 +351,11 @@
             }
         }
         
-        // Refresh data manually
+        // Refresh data manually (reloads from cache)
         async function refreshData() {
             try {
-                // Trigger refresh
-                const refreshResponse = await fetch(`${API_BASE}/refresh`, { method: 'POST' });
-                if (!refreshResponse.ok) {
-                    throw new Error(`HTTP error! status: ${refreshResponse.status}`);
-                }
-                
-                // Wait a moment for the refresh to complete
-                setTimeout(() => {
-                    loadFundraisingData();
-                }, 2000);
+                // Simply reload the data from cache (no API key needed for demo)
+                loadFundraisingData();
                 
             } catch (error) {
                 console.error('Error refreshing data:', error);

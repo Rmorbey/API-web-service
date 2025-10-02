@@ -442,7 +442,7 @@
                         
                         if (tokenData.has_token) {
                             // Use secure proxy for Jawg tiles (token stays server-side) - defaults to dark style
-                            L.tileLayer('http://localhost:8000/api/strava-integration/map-tiles/{z}/{x}/{y}?token=wj3MDjBrMr2GLxltk3zW3GRLJEeBilmLhSIppFf9JLI', {
+                            L.tileLayer('http://localhost:8000/api/strava-integration/demo/map-tiles/{z}/{x}/{y}', {
                                 attribution: '<a href="https://jawg.io" title="Tiles Courtesy of Jawg Maps" target="_blank">&copy; <b>Jawg</b>Maps</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
                                 minZoom: 0,
                                 maxZoom: 22
@@ -564,31 +564,8 @@
             status.innerHTML = 'Starting cache refresh...';
             
             try {
-                // Call the refresh endpoint
-                const response = await fetch('/api/strava-integration/refresh-cache', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-API-Key': 'wj3MDjBrMr2GLxltk3zW3GRLJEeBilmLhSIppFf9JLI'
-                    },
-                    body: JSON.stringify({
-                        force_full_refresh: false,
-                        include_old_activities: false,
-                        batch_size: 20
-                    })
-                });
-                
-                if (response.ok) {
-                    const result = await response.json();
-                    status.innerHTML = `✅ Cache refresh started! ${result.message || 'Processing activities in batches...'}`;
-                    
-                    // Reload activities after a short delay
-                    setTimeout(() => {
-                        loadAllActivities();
-                    }, 2000);
-                } else {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                }
+                // Note: Manual refresh requires API key - disabled for demo
+                status.innerHTML = `ℹ️ Manual refresh is disabled in demo mode. Data will refresh automatically every 6 hours.`;
             } catch (error) {
                 console.error('Cache refresh failed:', error);
                 status.innerHTML = `❌ Refresh failed: ${error.message}`;
@@ -608,11 +585,7 @@
                 console.log('Loading all activities since May 22, 2025...');
                 
                 // Get all activities from the feed (no limit = all cached activities)
-                const feedResponse = await fetch('http://localhost:8000/api/strava-integration/feed?limit=200', {
-                    headers: {
-                        'X-API-Key': 'wj3MDjBrMr2GLxltk3zW3GRLJEeBilmLhSIppFf9JLI'
-                    }
-                });
+                const feedResponse = await fetch('http://localhost:8000/api/strava-integration/demo/feed?limit=200');
                 
                 if (!feedResponse.ok) {
                     throw new Error('Failed to fetch activities feed');

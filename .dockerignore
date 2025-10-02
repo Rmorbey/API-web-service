@@ -55,13 +55,43 @@ DEPLOYMENT_GUIDE.md
 SETUP_GUIDE.md
 PERSONAL_SETUP.md
 
-# Test files
+# Test files and directories
+tests/
 test_*.py
 *_test.py
 my_activities.json
 my_strava_activities.json
 
+# Coverage reports
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+.nyc_output
+
+# Test artifacts
+.pytest_cache/
+.tox/
+.nox/
+
 # Development files
 react_example.jsx
 PersonalStravaComponent.jsx
 stravaTokenManager.js
+
+# Log files
+*.log
+logs/
+
+# Backup files (KEEP THESE - they're essential for production)
+# backups/  # Commented out - we need cache backups in production
+# *_backup_*.json  # Commented out - we need cache backups in production
+
+# Development scripts
+start_dev.sh
+start_server.sh
+
+# Environment files (use production secrets instead)
+.env
+.env.local
+.env.development

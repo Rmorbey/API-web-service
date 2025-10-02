@@ -8,7 +8,7 @@ Your API is now **fully secured** and only accessible to your authorized fronten
 
 ### **1. API Key Authentication**
 - **All endpoints** now require valid API key via `X-API-Key` header
-- **API Key**: `wj3MDjBrMr2GLxltk3zW3GRLJEeBilmLhSIppFf9JLI`
+- **API Key**: `your_api_key_here`
 - **Protection**: Prevents unauthorized access to your personal data
 
 ### **2. Frontend Domain Verification**
@@ -32,26 +32,26 @@ Your API is now **fully secured** and only accessible to your authorized fronten
 // Strava Activities
 const response = await fetch('/api/strava-integration/feed?limit=50', {
     headers: {
-        'X-API-Key': 'wj3MDjBrMr2GLxltk3zW3GRLJEeBilmLhSIppFf9JLI'
+        'X-API-Key': 'your_api_key_here'
     }
 });
 
 // Fundraising Data
 const response = await fetch('/api/fundraising/data', {
     headers: {
-        'X-API-Key': 'wj3MDjBrMr2GLxltk3zW3GRLJEeBilmLhSIppFf9JLI'
+        'X-API-Key': 'your_api_key_here'
     }
 });
 
 // Map Tiles (Leaflet)
-L.tileLayer('http://localhost:8000/api/strava-integration/map-tiles/{z}/{x}/{y}?token=wj3MDjBrMr2GLxltk3zW3GRLJEeBilmLhSIppFf9JLI', {
+L.tileLayer('http://localhost:8000/api/strava-integration/map-tiles/{z}/{x}/{y}?token=your_token_here', {
     attribution: '© Jawg Maps & OpenStreetMap'
 }).addTo(map);
 ```
 
 ### **React/Next.js Example**
 ```jsx
-const API_KEY = 'wj3MDjBrMr2GLxltk3zW3GRLJEeBilmLhSIppFf9JLI';
+const API_KEY = 'your_api_key_here';
 
 const fetchActivities = async () => {
     const response = await fetch('/api/strava-integration/feed', {
@@ -78,8 +78,8 @@ const fetchActivities = async () => {
 
 ```bash
 # Required for API to start
-STRAVA_API_KEY="wj3MDjBrMr2GLxltk3zW3GRLJEeBilmLhSIppFf9JLI"
-FUNDRAISING_API_KEY="wj3MDjBrMr2GLxltk3zW3GRLJEeBilmLhSIppFf9JLI"
+STRAVA_API_KEY="your_strava_api_key_here"
+FUNDRAISING_API_KEY="your_fundraising_api_key_here"
 
 # Optional (for map tiles)
 JAWG_ACCESS_TOKEN="your-jawg-token"
@@ -126,7 +126,7 @@ curl http://localhost:8000/api/strava-integration/feed
 curl -H "X-API-Key: wrong-key" http://localhost:8000/api/strava-integration/feed
 
 # This should work (200 OK)
-curl -H "X-API-Key: wj3MDjBrMr2GLxltk3zW3GRLJEeBilmLhSIppFf9JLI" http://localhost:8000/api/strava-integration/feed
+curl -H "X-API-Key: your_api_key_here" http://localhost:8000/api/strava-integration/feed
 ```
 
 ## 📊 **Security Status**

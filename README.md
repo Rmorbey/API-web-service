@@ -2,6 +2,17 @@
 
 A production-ready FastAPI service that provides multiple integrated services including Strava data integration and JustGiving fundraising tracking with smart caching, security, and monitoring features.
 
+## 📚 Documentation
+
+All comprehensive documentation is available in the [`docs/`](docs/) folder:
+
+- **[Implementation Guide](docs/OPTION_3_IMPLEMENTATION_GUIDE.md)** - Complete step-by-step implementation guide
+- **[DigitalOcean Setup](docs/DIGITALOCEAN_SECRETS_SETUP.md)** - Environment variables and secrets configuration
+- **[Domain Configuration](docs/DOMAIN_SETUP_GUIDE.md)** - Domain routing and reverse proxy setup
+- **[Production Deployment](docs/PRODUCTION_DEPLOYMENT.md)** - Production optimization and deployment
+- **[Security Guide](docs/API_SECURITY.md)** - Security implementation and best practices
+- **[Repository Analysis](docs/REPOSITORY_FILE_ANALYSIS.md)** - File structure and optimization analysis
+
 ## Features
 
 ### Strava Integration

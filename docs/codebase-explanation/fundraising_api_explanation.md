@@ -1,3 +1,24 @@
+# 📚 Fundraising API - Complete Code Explanation
+
+## 🎯 **Overview**
+
+This module provides **API endpoints** for the fundraising integration, allowing you to access JustGiving fundraising data, donations, and manage the fundraising cache. Think of it as the **fundraising service** that handles all donation-related requests and data processing.
+
+## 📁 **File Structure Context**
+
+```
+fundraising_api.py  ← YOU ARE HERE (Fundraising API Endpoints)
+├── fundraising_scraper.py  (Uses this for data scraping)
+├── models.py               (Uses these for data structures)
+├── async_processor.py      (Uses this for data processing)
+└── caching.py              (Uses this for HTTP caching)
+```
+
+## 🔍 **Line-by-Line Code Explanation**
+
+### **1. Imports and Setup (Lines 1-34)**
+
+```python
 #!/usr/bin/env python3
 """
 Fundraising API Module
@@ -25,11 +46,18 @@ from .models import (
     FundraisingCleanupRequest,
     DonationsFilterRequest
 )
-# Removed complex error handlers - using FastAPI's built-in HTTPException
+```
 
-# Configure logging
-logger = logging.getLogger(__name__)
+**What this does:**
+- **FastAPI imports**: Core FastAPI functionality for API endpoints
+- **Standard library**: `logging`, `datetime`, `os` for basic functionality
+- **Cross-module imports**: Uses shared components from Strava integration
+- **Local imports**: Uses fundraising-specific models and scraper
+- **Type hints**: For better code documentation and error catching
 
+### **2. Router and Cache Setup (Lines 33-45)**
+
+```python
 # Create router
 router = APIRouter()
 
@@ -43,7 +71,18 @@ def get_cache():
     if _cache_instance is None:
         _cache_instance = SmartFundraisingCache(JUSTGIVING_URL)
     return _cache_instance
+```
 
+**What this does:**
+- **Router creation**: Creates FastAPI router for fundraising endpoints
+- **JustGiving URL**: Your specific fundraising page URL
+- **Lazy initialization**: Only creates cache when first needed
+- **Singleton pattern**: Ensures only one cache instance exists
+- **URL configuration**: Centralized URL management
+
+### **3. API Key Authentication (Lines 47-64)**
+
+```python
 # API Key for protected endpoints
 API_KEY = os.getenv("FUNDRAISING_API_KEY")
 if not API_KEY:
@@ -62,7 +101,18 @@ def verify_api_key(x_api_key: Optional[str] = Header(None)):
             detail="Invalid API key - The provided API key is not valid"
         )
     return x_api_key
+```
 
+**What this does:**
+- **Environment variable**: Gets API key from environment
+- **Validation**: Ensures API key is configured
+- **Header extraction**: Gets API key from `X-API-Key` header
+- **Authentication**: Validates API key for protected endpoints
+- **Error responses**: Returns appropriate HTTP status codes
+
+### **4. Project Information Endpoint (Lines 66-80)**
+
+```python
 @router.get("/", response_model=ProjectInfoResponse)
 def fundraising_root() -> ProjectInfoResponse:
     """Root endpoint for fundraising project"""
@@ -78,7 +128,17 @@ def fundraising_root() -> ProjectInfoResponse:
         source="JustGiving",
         scrape_interval="15 minutes"
     )
+```
 
+**What this does:**
+- **Project information**: Returns metadata about the fundraising service
+- **Available endpoints**: Lists all available API endpoints
+- **Configuration info**: Shows scrape interval and data source
+- **API documentation**: Helps users understand the service
+
+### **5. Cache Management Endpoints (Lines 82-118)**
+
+```python
 @router.get("/cache-stats")
 def get_cache_stats(api_key: str = Depends(verify_api_key)) -> dict:
     """Get HTTP cache statistics"""
@@ -116,7 +176,18 @@ def invalidate_cache(
             status_code=500,
             detail=f"Error invalidating cache: {str(e)}"
         )
+```
 
+**What this does:**
+- **Cache statistics**: Shows HTTP cache performance metrics
+- **Cache invalidation**: Clears cached responses
+- **Pattern matching**: Can clear specific cache entries
+- **Admin functions**: Only accessible with API key
+- **Error handling**: Graceful error management
+
+### **6. Health Check Endpoint (Lines 120-143)**
+
+```python
 @router.get("/health", response_model=HealthResponse)
 def fundraising_health() -> HealthResponse:
     """Health check for fundraising scraper"""
@@ -141,7 +212,18 @@ def fundraising_health() -> HealthResponse:
             last_scrape=None,
             cache_status="error"
         )
+```
 
+**What this does:**
+- **Health monitoring**: Checks if the fundraising service is working
+- **Scraper status**: Shows if the scraper is running
+- **Last scrape time**: Shows when data was last updated
+- **Cache status**: Shows if cache is active
+- **Error handling**: Returns unhealthy status on errors
+
+### **7. Main Data Endpoint (Lines 145-173)**
+
+```python
 @router.get("/data", response_model=FundraisingDataResponse)
 async def get_fundraising_data(api_key: str = Depends(verify_api_key)) -> FundraisingDataResponse:
     """Get current fundraising data from cache with async processing"""
@@ -171,7 +253,25 @@ async def get_fundraising_data(api_key: str = Depends(verify_api_key)) -> Fundra
             status_code=500,
             detail=f"Error fetching fundraising data: {str(e)}"
         )
+```
 
+**What this does:**
+- **Data retrieval**: Gets fundraising data from cache
+- **Async processing**: Processes donations in parallel
+- **Progress calculation**: Calculates progress percentage
+- **Data formatting**: Formats data for frontend consumption
+- **Target tracking**: Shows progress towards £300 target
+
+**Data Structure:**
+- **`total_raised`**: Amount raised so far
+- **`target_amount`**: Your fundraising target (£300)
+- **`progress_percentage`**: Percentage of target achieved
+- **`donations`**: List of individual donations
+- **`total_donations`**: Number of donations received
+
+### **8. Manual Refresh Endpoint (Lines 175-219)**
+
+```python
 @router.post("/refresh", response_model=RefreshResponse)
 def refresh_fundraising_data(
     request: FundraisingRefreshRequest, 
@@ -217,7 +317,18 @@ def refresh_fundraising_data(
             message=f"Refresh failed: {str(e)}",
             timestamp=datetime.now()
         )
+```
 
+**What this does:**
+- **Manual refresh**: Forces immediate data scraping
+- **Force option**: Can override recent update checks
+- **Metadata inclusion**: Can include current data in response
+- **Success/failure handling**: Returns appropriate responses
+- **Error handling**: Graceful error management
+
+### **9. Donations Filtering Endpoint (Lines 221-267)**
+
+```python
 @router.get("/donations", response_model=DonationsResponse)
 async def get_donations(request: DonationsFilterRequest = Depends(), api_key: str = Depends(verify_api_key)) -> DonationsResponse:
     """Get filtered donations data for the scrolling footer with async processing
@@ -265,80 +376,25 @@ async def get_donations(request: DonationsFilterRequest = Depends(), api_key: st
             status_code=500,
             detail=f"Error fetching donations: {str(e)}"
         )
+```
 
-# Demo endpoints (no API key required for demo pages)
-@router.get("/demo/data", response_model=FundraisingDataResponse)
-async def get_fundraising_data_demo() -> FundraisingDataResponse:
-    """Get fundraising data for demo page (no API key required)"""
-    try:
-        cache = get_cache()
-        data = cache.get_fundraising_data()
-        
-        # Process donations in parallel for better performance
-        raw_donations = data.get("donations", [])
-        processed_donations = await async_processor.process_donations_parallel(raw_donations)
-        
-        # Format the data for frontend consumption
-        return FundraisingDataResponse(
-            timestamp=datetime.fromisoformat(data.get("timestamp")) if data.get("timestamp") else datetime.now(),
-            total_raised=data.get("total_raised", 0),
-            target_amount=300,  # Your target
-            progress_percentage=round((data.get("total_raised", 0) / 300) * 100, 1),
-            donations=processed_donations,
-            total_donations=data.get("total_donations", 0),
-            last_updated=datetime.fromisoformat(data.get("last_updated")) if data.get("last_updated") else datetime.now(),
-            justgiving_url=JUSTGIVING_URL
-        )
-        
-    except Exception as e:
-        logger.error(f"Failed to get fundraising data for demo: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error fetching fundraising data: {str(e)}"
-        )
+**What this does:**
+- **Donation filtering**: Filters donations by various criteria
+- **Amount filtering**: Min/max amount filtering
+- **Anonymous filtering**: Include/exclude anonymous donations
+- **Limit application**: Limits number of results
+- **Async processing**: Processes donations in parallel
+- **Privacy protection**: Handles anonymous donations appropriately
 
-@router.get("/demo/donations", response_model=DonationsResponse)
-async def get_donations_demo(request: DonationsFilterRequest = Depends()) -> DonationsResponse:
-    """Get donations data for demo page (no API key required)"""
-    try:
-        cache = get_cache()
-        data = cache.get_fundraising_data()
-        all_donations = data.get("donations", [])
-        
-        # Apply filters
-        filtered_donations = all_donations.copy()
-        
-        # Filter by amount range
-        if request.min_amount is not None:
-            filtered_donations = [d for d in filtered_donations if d.get("amount", 0) >= request.min_amount]
-        
-        if request.max_amount is not None:
-            filtered_donations = [d for d in filtered_donations if d.get("amount", 0) <= request.max_amount]
-        
-        # Filter anonymous donations
-        if not request.include_anonymous:
-            filtered_donations = [d for d in filtered_donations if d.get("donor_name", "").lower() not in ["anonymous", "anon", ""]]
-        
-        # Apply limit
-        if request.limit is not None:
-            filtered_donations = filtered_donations[:request.limit]
-        
-        # Process donations in parallel for better performance
-        processed_donations = await async_processor.process_donations_parallel(filtered_donations)
-        
-        return DonationsResponse(
-            donations=processed_donations,
-            total_donations=len(processed_donations),
-            last_updated=datetime.fromisoformat(data.get("last_updated")) if data.get("last_updated") else datetime.now()
-        )
-        
-    except Exception as e:
-        logger.error(f"Failed to get donations for demo: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error fetching donations: {str(e)}"
-        )
+**Filtering Options:**
+- **`min_amount`**: Minimum donation amount
+- **`max_amount`**: Maximum donation amount
+- **`include_anonymous`**: Whether to include anonymous donations
+- **`limit`**: Maximum number of donations to return
 
+### **10. Backup Cleanup Endpoint (Lines 269-305)**
+
+```python
 @router.post("/cleanup-backups", response_model=CleanupResponse)
 def cleanup_backups(
     request: FundraisingCleanupRequest, 
@@ -376,3 +432,54 @@ def cleanup_backups(
             message=f"Cleanup failed: {str(e)}",
             timestamp=datetime.now()
         )
+```
+
+**What this does:**
+- **Backup cleanup**: Removes old backup files
+- **Configurable retention**: Can specify how many backups to keep
+- **Force option**: Can force cleanup even if cache is recent
+- **Admin function**: Only accessible with API key
+- **Future enhancement**: Placeholder for parameter support
+
+## 🎯 **Key Learning Points**
+
+### **1. API Design**
+- **RESTful endpoints**: Following REST conventions
+- **Response models**: Consistent response structure
+- **Error handling**: Proper HTTP status codes
+- **Documentation**: Clear endpoint descriptions
+
+### **2. Authentication**
+- **API key protection**: Securing sensitive endpoints
+- **Header validation**: Extracting API keys from headers
+- **Error responses**: Clear authentication error messages
+- **Environment variables**: Secure credential storage
+
+### **3. Data Processing**
+- **Async processing**: Parallel donation processing
+- **Data filtering**: Multiple filtering options
+- **Data formatting**: Frontend-ready data structure
+- **Progress calculation**: Target tracking and percentages
+
+### **4. Cache Management**
+- **Cache statistics**: Performance monitoring
+- **Cache invalidation**: Manual cache clearing
+- **Cache integration**: Using shared cache manager
+- **Admin functions**: Cache management endpoints
+
+### **5. Error Handling**
+- **Try/catch blocks**: Comprehensive error handling
+- **HTTP exceptions**: Proper error responses
+- **Logging**: Error recording for debugging
+- **Graceful degradation**: Fallback responses
+
+## 🚀 **How This Fits Into Your Learning**
+
+This module demonstrates:
+- **FastAPI routing**: Organizing API endpoints
+- **Authentication patterns**: API key validation
+- **Data processing**: Async and parallel processing
+- **Cache management**: HTTP caching integration
+- **API design**: RESTful endpoint design
+
+**Next**: We'll explore the `fundraising_scraper.py` to understand how data is scraped from JustGiving! 🎉
