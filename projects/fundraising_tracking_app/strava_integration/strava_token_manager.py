@@ -33,7 +33,108 @@ class StravaTokenManager:
         }
     
     def _save_tokens_to_env(self, tokens: Dict[str, Any]):
-        """Save tokens to .env file"""
+        """Save tokens in memory and trigger automated update (production-safe)"""
+        # Update in-memory tokens
+        self.tokens = tokens
+        
+        # Log the new tokens
+        print("🔄 NEW STRAVA TOKENS - TRIGGERING AUTOMATED UPDATE:")
+        print(f"STRAVA_ACCESS_TOKEN={tokens['access_token']}")
+        print(f"STRAVA_REFRESH_TOKEN={tokens['refresh_token']}")
+        print(f"STRAVA_EXPIRES_AT={tokens['expires_at']}")
+        print(f"STRAVA_EXPIRES_IN={tokens['expires_in']}")
+        
+        # Also log to file for easier access
+        with open("strava_token_refresh.log", "a") as f:
+            f.write(f"\n=== TOKEN REFRESH - {datetime.now().isoformat()} ===\n")
+            f.write(f"STRAVA_ACCESS_TOKEN={tokens['access_token']}\n")
+            f.write(f"STRAVA_REFRESH_TOKEN={tokens['refresh_token']}\n")
+            f.write(f"STRAVA_EXPIRES_AT={tokens['expires_at']}\n")
+            f.write(f"STRAVA_EXPIRES_IN={tokens['expires_in']}\n")
+            f.write("==========================================\n")
+        
+        # In production, trigger automated update
+        if os.getenv("ENVIRONMENT") == "production":
+            self._trigger_automated_update(tokens)
+        else:
+            # In development, still update .env file
+            self._update_env_file(tokens)
+    
+    def _trigger_automated_update(self, tokens: Dict[str, Any]):
+        """Trigger automated token update via DigitalOcean API"""
+        try:
+            import requests
+            
+            # DigitalOcean API direct update
+            do_token = os.getenv("DIGITALOCEAN_API_TOKEN")
+            app_id = os.getenv("DIGITALOCEAN_APP_ID")
+            
+            if do_token and app_id:
+                # Update DigitalOcean App secrets directly
+                url = f"https://api.digitalocean.com/v2/apps/{app_id}"
+                headers = {
+                    "Authorization": f"Bearer {do_token}",
+                    "Content-Type": "application/json"
+                }
+                
+                # Get current app spec
+                response = requests.get(url, headers=headers)
+                if response.status_code == 200:
+                    app_spec = response.json()["app"]["spec"]
+                    
+                    # Update environment variables
+                    for service in app_spec.get("services", []):
+                        if service.get("name") == "api":
+                            env_vars = service.get("envs", [])
+                            
+                            # Update Strava token environment variables
+                            token_updates = {
+                                "STRAVA_ACCESS_TOKEN": tokens['access_token'],
+                                "STRAVA_REFRESH_TOKEN": tokens['refresh_token'],
+                                "STRAVA_EXPIRES_AT": tokens['expires_at'],
+                                "STRAVA_EXPIRES_IN": tokens['expires_in']
+                            }
+                            
+                            # Update existing env vars or add new ones
+                            for key, value in token_updates.items():
+                                found = False
+                                for env_var in env_vars:
+                                    if env_var.get("key") == key:
+                                        env_var["value"] = value
+                                        found = True
+                                        break
+                                
+                                if not found:
+                                    env_vars.append({
+                                        "key": key,
+                                        "value": value,
+                                        "scope": "RUN_TIME",
+                                        "type": "SECRET"
+                                    })
+                            
+                            service["envs"] = env_vars
+                            break
+                    
+                    # Update the app
+                    update_response = requests.put(url, headers=headers, json={"spec": app_spec})
+                    if update_response.status_code == 200:
+                        print("✅ DigitalOcean secrets updated successfully")
+                        print("🔄 App will restart automatically with new tokens")
+                    else:
+                        print(f"⚠️ Failed to update DigitalOcean secrets: {update_response.status_code}")
+                        print(f"Response: {update_response.text}")
+                else:
+                    print(f"⚠️ Failed to get app spec: {response.status_code}")
+            else:
+                print("⚠️ DIGITALOCEAN_API_TOKEN or DIGITALOCEAN_APP_ID not set")
+                print("📝 Please update DigitalOcean secrets manually")
+                
+        except Exception as e:
+            print(f"⚠️ Failed to trigger automated update: {e}")
+            print("📝 Please update DigitalOcean secrets manually")
+    
+    def _update_env_file(self, tokens: Dict[str, Any]):
+        """Update .env file (development only)"""
         env_file = ".env"
         
         # Read existing .env file

@@ -46,6 +46,15 @@ services:
   - key: PORT
     scope: RUN_TIME
     value: "8080"
+  - key: ENVIRONMENT
+    scope: RUN_TIME
+    value: "production"
+  - key: DIGITALOCEAN_API_TOKEN
+    scope: RUN_TIME
+    type: SECRET
+  - key: DIGITALOCEAN_APP_ID
+    scope: RUN_TIME
+    type: SECRET
   
   # Health check configuration
   health_check:
