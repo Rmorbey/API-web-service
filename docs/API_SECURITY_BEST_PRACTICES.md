@@ -18,7 +18,7 @@ const response = await fetch('/api/endpoint', {
 });
 ```
 
-## ✅ **Proper Security Solution**
+## ✅ **Comprehensive Security Solution**
 
 ### **1. Demo Endpoints (No API Key Required)**
 Created separate demo endpoints that don't require authentication:
@@ -48,6 +48,86 @@ async def get_fundraising_data(api_key: str = Depends(verify_api_key)) -> Fundra
 const response = await fetch('/api/fundraising/demo/data');
 ```
 
+## 🔐 **Multi-Layer Security Architecture**
+
+### **Layer 1: API Key Authentication**
+```python
+def verify_api_key(x_api_key: Optional[str] = Header(None)):
+    """Verify API key for protected endpoints"""
+    if not x_api_key:
+        raise HTTPException(status_code=401, detail="API key required")
+    if x_api_key != API_KEY:
+        raise HTTPException(status_code=403, detail="Invalid API key")
+    return x_api_key
+```
+
+### **Layer 2: Frontend Access Verification**
+```python
+def verify_frontend_access(request: Request):
+    """Verify that requests are coming from allowed frontend domains"""
+    referer = request.headers.get("referer", "")
+    allowed_domains = [
+        "http://localhost:3000",
+        "http://localhost:5173", 
+        "http://localhost:8000",
+        "https://www.russellmorbey.co.uk",
+        "https://russellmorbey.co.uk"
+    ]
+    
+    if not any(domain in referer for domain in allowed_domains):
+        raise HTTPException(status_code=403, detail="Access denied - invalid referer")
+    return True
+```
+
+### **Layer 3: Rate Limiting**
+```python
+# Enhanced rate limiting for better performance
+self.rate_limiter = RateLimiter(max_requests=1000, window_seconds=3600)
+```
+
+**Rate Limiting Configuration:**
+- **1000 requests per hour** (increased from 100 for better performance)
+- **Sliding window** implementation
+- **Per-client tracking** with IP-based identification
+- **Automatic cleanup** of old requests
+
+### **Layer 4: Security Headers**
+```python
+# Comprehensive security headers
+response.headers["X-Content-Type-Options"] = "nosniff"
+response.headers["X-Frame-Options"] = "DENY"
+response.headers["X-XSS-Protection"] = "1; mode=block"
+response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://widget.deezer.com https://unpkg.com; style-src 'self' 'unsafe-inline' https://unpkg.com; img-src 'self' data: https:; connect-src 'self' https://api.strava.com https://api.deezer.com https://widget.deezer.com; frame-src https://widget.deezer.com;"
+```
+
+**Security Headers Explained:**
+- **`X-Content-Type-Options: nosniff`** - Prevents MIME type sniffing
+- **`X-Frame-Options: DENY`** - Prevents clickjacking attacks
+- **`X-XSS-Protection: 1; mode=block`** - Enables XSS filtering
+- **`Referrer-Policy`** - Controls referrer information
+- **`Content-Security-Policy`** - Prevents XSS and code injection
+
+### **Layer 5: Trusted Host Middleware**
+```python
+# Trusted host configuration
+app.add_middleware(
+    TrustedHostMiddleware, 
+    allowed_hosts=[
+        "localhost", 
+        "127.0.0.1", 
+        "*.russellmorbey.co.uk", 
+        "russellmorbey.co.uk"
+    ]
+)
+```
+
+**Trusted Host Protection:**
+- **Domain validation** - Only allows requests from trusted domains
+- **Wildcard support** - Supports subdomain patterns
+- **Localhost access** - Allows local development
+- **Production domains** - Restricts to your specific domains
+
 ## 🔐 **API Key Security Rules**
 
 ### **NEVER Do This:**
@@ -63,18 +143,29 @@ const response = await fetch('/api/fundraising/demo/data');
 - ✅ Rotate keys regularly
 - ✅ Use demo endpoints for public demos
 - ✅ Keep production keys secret
+- ✅ Validate frontend access with referer checking
+- ✅ Implement comprehensive rate limiting
+- ✅ Use security headers for additional protection
 
-## 🏗️ **Architecture Overview**
+## 🏗️ **Enhanced Architecture Overview**
 
 ### **Demo Pages (Public Access):**
 ```
 Frontend Demo → /api/*/demo/* → No Authentication Required
 ```
 
-### **Production API (Protected):**
+### **Production API (Multi-Layer Protection):**
 ```
-Frontend App → /api/*/endpoint → API Key Required
+Frontend App → Trusted Host Check → Referer Validation → API Key Auth → Rate Limiting → Endpoint
 ```
+
+### **Security Flow:**
+1. **Trusted Host Check** - Validates request domain
+2. **Referer Validation** - Ensures request from allowed frontend
+3. **API Key Authentication** - Validates API key
+4. **Rate Limiting** - Enforces request limits
+5. **Security Headers** - Adds protection headers
+6. **Endpoint Access** - Grants access to protected resources
 
 ## 📁 **File Structure**
 
@@ -93,12 +184,16 @@ Frontend App → /api/*/endpoint → API Key Required
 ```bash
 STRAVA_API_KEY=your_actual_strava_key_here
 FUNDRAISING_API_KEY=your_actual_fundraising_key_here
+FRONTEND_ACCESS_TOKEN=your_frontend_token_here
+ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173,http://localhost:8000,https://www.russellmorbey.co.uk,https://russellmorbey.co.uk
 ```
 
 ### **Production (DigitalOcean Secrets):**
 ```bash
 STRAVA_API_KEY=production_strava_key
 FUNDRAISING_API_KEY=production_fundraising_key
+FRONTEND_ACCESS_TOKEN=production_frontend_token
+ALLOWED_ORIGINS=https://www.russellmorbey.co.uk,https://russellmorbey.co.uk
 ```
 
 ## 🚀 **Deployment Security**
@@ -115,38 +210,85 @@ FUNDRAISING_API_KEY=production_fundraising_key
        raise ValueError("STRAVA_API_KEY environment variable is required")
    ```
 
-## 🛡️ **Security Checklist**
+### **Security Middleware Stack:**
+```python
+# Security middleware order (critical for proper functioning)
+app.add_middleware(SmartCompressionMiddleware)  # Compression first
+app.add_middleware(CacheMiddleware)             # Caching second
+app.add_middleware(TrustedHostMiddleware)       # Host validation
+app.add_middleware(CORSMiddleware)              # CORS handling
+app.add_middleware(SecurityMiddleware)          # Security last
+```
+
+## 🛡️ **Enhanced Security Checklist**
 
 ### **Before Deployment:**
 - [ ] No API keys in client-side code
 - [ ] No API keys in committed files
 - [ ] Demo endpoints work without authentication
 - [ ] Production endpoints require API keys
+- [ ] Frontend access verification configured
+- [ ] Rate limiting set to 1000 requests/hour
+- [ ] Security headers properly configured
+- [ ] Trusted host domains configured
 - [ ] Environment variables properly configured
 - [ ] Secrets set in deployment platform
 
 ### **After Deployment:**
 - [ ] Test demo pages work without API keys
 - [ ] Test production endpoints require API keys
+- [ ] Test frontend access verification works
+- [ ] Test rate limiting prevents abuse
+- [ ] Verify security headers are present
+- [ ] Verify trusted host validation works
 - [ ] Verify keys are not visible in browser
 - [ ] Confirm keys are not in repository
+- [ ] Test all security layers function correctly
+
+## 🔍 **Security Monitoring**
+
+### **Rate Limiting Monitoring:**
+```python
+# Rate limiting provides detailed information
+{
+    "limit": 1000,
+    "remaining": 847,
+    "reset_time": 1640995200
+}
+```
+
+### **Security Event Logging:**
+- **Failed API key attempts** - Logged for monitoring
+- **Rate limit violations** - Tracked per client
+- **Invalid referer attempts** - Monitored for security
+- **Trusted host violations** - Logged for analysis
 
 ## 📚 **Additional Resources**
 
 - [FastAPI Security Documentation](https://fastapi.tiangolo.com/tutorial/security/)
 - [OWASP API Security Top 10](https://owasp.org/www-project-api-security/)
 - [DigitalOcean App Platform Secrets](https://docs.digitalocean.com/products/app-platform/how-to/use-secrets/)
+- [OWASP Security Headers](https://owasp.org/www-project-secure-headers/)
 
 ## 🎯 **Summary**
 
-**The fix ensures:**
+**The comprehensive security solution ensures:**
 1. **Demo pages work** without exposing API keys
-2. **Production APIs remain secure** with proper authentication
+2. **Production APIs remain secure** with multi-layer protection
 3. **API keys stay secret** and are never committed
-4. **Best practices are followed** for API security
+4. **Frontend access is validated** through referer checking
+5. **Rate limiting prevents abuse** with generous but controlled limits
+6. **Security headers provide additional protection** against common attacks
+7. **Trusted host validation** ensures requests come from authorized domains
+8. **Best practices are followed** for enterprise-grade API security
 
-**This approach provides:**
+**This multi-layer approach provides:**
 - ✅ Public demo access (no API keys needed)
-- ✅ Secure production access (API keys required)
+- ✅ Secure production access (multi-layer authentication)
+- ✅ Frontend domain validation (referer checking)
+- ✅ Rate limiting protection (1000 requests/hour)
+- ✅ Security header protection (XSS, clickjacking, etc.)
+- ✅ Trusted host validation (domain restrictions)
 - ✅ No security vulnerabilities
 - ✅ Clean separation of concerns
+- ✅ Enterprise-grade security standards

@@ -14,12 +14,43 @@
 
 ### **3. API Layer**
 - **FastAPI Application** (`multi_project_api.py`)
-- **Security Middleware** (`security.py`)
+- **Multi-Layer Security** (`security.py`)
 - **Error Handling** (`simple_error_handlers.py`)
+- **Compression Middleware** (`compression_middleware.py`)
+- **Cache Middleware** (`cache_middleware.py`)
 
-### **4. Frontend Layer**
-- **Demo Pages** (`examples/`)
+### **4. Security Layer**
+- **API Key Authentication** - All production endpoints protected
+- **Frontend Access Verification** - Referer header validation
+- **Rate Limiting** - 1000 requests per hour
+- **Security Headers** - XSS, clickjacking protection
+- **Trusted Host Middleware** - Domain validation
+
+### **5. Frontend Layer**
+- **Demo Pages** (`examples/`) - No API keys required
 - **Static File Serving**
+- **Public Access Endpoints** - `/demo/*` routes
+
+---
+
+## 🛡️ **Enhanced Security Flow**
+
+### **Multi-Layer Security Architecture:**
+```
+Request → Trusted Host Check → Referer Validation → API Key Auth → Rate Limiting → Security Headers → Endpoint
+```
+
+### **Security Layers Explained:**
+1. **Trusted Host Check** - Validates request domain against allowed hosts
+2. **Referer Validation** - Ensures request comes from authorized frontend domains
+3. **API Key Authentication** - Validates API key for protected endpoints
+4. **Rate Limiting** - Enforces 1000 requests per hour limit
+5. **Security Headers** - Adds protection headers (XSS, clickjacking, etc.)
+6. **Endpoint Access** - Grants access to protected resources
+
+### **Demo vs Production Access:**
+- **Demo Endpoints** (`/demo/*`) - No authentication required, public access
+- **Production Endpoints** (`/api/*`) - Full multi-layer security required
 
 ---
 
