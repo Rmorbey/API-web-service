@@ -49,11 +49,12 @@ venv.bak/
 ehthumbs.db
 Thumbs.db
 
-# Documentation
+# Documentation (keep in repo, exclude from production)
 README.md
-DEPLOYMENT_GUIDE.md
-SETUP_GUIDE.md
-PERSONAL_SETUP.md
+API_DOCUMENTATION.md
+PROJECT_ROADMAP.md
+STARTUP_COMMANDS.md
+docs/
 
 # Test files and directories
 tests/
@@ -78,6 +79,9 @@ coverage.xml
 react_example.jsx
 PersonalStravaComponent.jsx
 stravaTokenManager.js
+examples/
+start_production.sh
+pytest.ini
 
 # Log files
 *.log
@@ -90,6 +94,7 @@ logs/
 # Development scripts
 start_dev.sh
 start_server.sh
+start_production.sh
 
 # Environment files (use production secrets instead)
 .env
