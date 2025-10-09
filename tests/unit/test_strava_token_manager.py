@@ -118,8 +118,11 @@ class TestSaveTokensToEnv:
         
         manager._save_tokens_to_env(tokens)
         
-        # Verify file was opened for writing
-        mock_file.assert_called_once_with('.env', 'w')
+        # Verify file was opened for writing (log file + .env file)
+        assert mock_file.call_count == 2  # Once for log file, once for .env file
+        # Check that .env file was written
+        env_calls = [call for call in mock_file.call_args_list if call[0][0] == '.env']
+        assert len(env_calls) == 1
         
         # Verify content was written
         written_content = ''.join(mock_file().writelines.call_args[0][0])
@@ -157,8 +160,8 @@ class TestSaveTokensToEnv:
         
         manager._save_tokens_to_env(tokens)
         
-        # Verify file was opened for reading and writing
-        assert mock_file.call_count == 2  # Once for read, once for write
+        # Verify file was opened for reading and writing (log file + read + write)
+        assert mock_file.call_count == 3  # Once for log file, once for read, once for write
         
         # Verify old Strava tokens were removed and new ones added
         written_content = ''.join(mock_file().writelines.call_args[0][0])
@@ -489,7 +492,12 @@ class TestEdgeCases:
         mock_file.side_effect = IOError("Permission denied")
         
         manager = StravaTokenManager()
-        tokens = {'access_token': 'test_token'}
+        tokens = {
+            'access_token': 'test_token',
+            'refresh_token': 'test_refresh',
+            'expires_at': '1234567890',
+            'expires_in': '3600'
+        }
         
         with pytest.raises(IOError, match="Permission denied"):
             manager._save_tokens_to_env(tokens)

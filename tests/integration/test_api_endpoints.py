@@ -32,8 +32,8 @@ class TestStravaAPIEndpoints:
     
     def test_feed_endpoint_without_auth(self, strava_test_client):
         """Test feed endpoint without authentication."""
-        response = strava_test_client.get("/api/strava-integration/feed")
-        assert response.status_code in [200, 500]  # Public endpoint, may return data or error
+        response = strava_test_client.get("/api/strava-integration/demo/feed")
+        assert response.status_code in [200, 500]  # Demo endpoint is public, may return data or error
     
     def test_feed_endpoint_with_valid_auth(self, strava_test_client, valid_api_headers):
         """Test feed endpoint with valid authentication (optional)."""
@@ -43,8 +43,8 @@ class TestStravaAPIEndpoints:
     
     def test_feed_endpoint_with_invalid_auth(self, strava_test_client, invalid_api_headers):
         """Test feed endpoint with invalid authentication (ignored since endpoint is public)."""
-        response = strava_test_client.get("/api/strava-integration/feed", headers=invalid_api_headers)
-        assert response.status_code in [200, 500]  # Public endpoint ignores invalid auth
+        response = strava_test_client.get("/api/strava-integration/demo/feed", headers=invalid_api_headers)
+        assert response.status_code in [200, 500]  # Demo endpoint ignores invalid auth
     
     def test_refresh_endpoint_without_auth(self, strava_test_client):
         """Test refresh endpoint without authentication."""
@@ -86,8 +86,8 @@ class TestFundraisingAPIEndpoints:
     
     def test_data_endpoint_without_auth(self, fundraising_test_client):
         """Test data endpoint without authentication."""
-        response = fundraising_test_client.get("/api/fundraising/data")
-        assert response.status_code == 200  # Now public endpoint
+        response = fundraising_test_client.get("/api/fundraising/demo/data")
+        assert response.status_code == 200  # Demo endpoint is public
     
     def test_data_endpoint_with_valid_auth(self, fundraising_test_client, valid_api_headers):
         """Test data endpoint with valid authentication."""
@@ -97,13 +97,13 @@ class TestFundraisingAPIEndpoints:
     
     def test_data_endpoint_with_invalid_auth(self, fundraising_test_client, invalid_api_headers):
         """Test data endpoint with invalid authentication."""
-        response = fundraising_test_client.get("/api/fundraising/data", headers=invalid_api_headers)
-        assert response.status_code == 200  # Now public endpoint, ignores invalid auth
+        response = fundraising_test_client.get("/api/fundraising/demo/data", headers=invalid_api_headers)
+        assert response.status_code == 200  # Demo endpoint is public, ignores invalid auth
     
     def test_donations_endpoint_without_auth(self, fundraising_test_client):
         """Test donations endpoint without authentication."""
-        response = fundraising_test_client.get("/api/fundraising/donations")
-        assert response.status_code == 200  # Now public endpoint
+        response = fundraising_test_client.get("/api/fundraising/demo/donations")
+        assert response.status_code == 200  # Demo endpoint is public
     
     def test_donations_endpoint_with_valid_auth(self, fundraising_test_client, valid_api_headers):
         """Test donations endpoint with valid authentication."""
@@ -113,8 +113,8 @@ class TestFundraisingAPIEndpoints:
     
     def test_donations_endpoint_with_invalid_auth(self, fundraising_test_client, invalid_api_headers):
         """Test donations endpoint with invalid authentication."""
-        response = fundraising_test_client.get("/api/fundraising/donations", headers=invalid_api_headers)
-        assert response.status_code == 200  # Now public endpoint, ignores invalid auth
+        response = fundraising_test_client.get("/api/fundraising/demo/donations", headers=invalid_api_headers)
+        assert response.status_code == 200  # Demo endpoint is public, ignores invalid auth
     
     def test_refresh_endpoint_without_auth(self, fundraising_test_client):
         """Test refresh endpoint without authentication."""

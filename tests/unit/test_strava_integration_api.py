@@ -8,7 +8,7 @@ import os
 os.environ["STRAVA_API_KEY"] = "test-api-key"
 
 import pytest
-from unittest.mock import Mock, patch, AsyncMock
+from unittest.mock import Mock, patch, AsyncMock, MagicMock
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from fastapi import FastAPI
@@ -114,9 +114,13 @@ class TestProjectInfoEndpoint:
 class TestFeedEndpoint:
     """Test /feed endpoint"""
     
-    @patch('projects.fundraising_tracking_app.strava_integration.strava_integration_api.cache')
-    def test_feed_endpoint_success(self, mock_cache):
+    @patch('projects.fundraising_tracking_app.strava_integration.strava_integration_api.get_cache')
+    def test_feed_endpoint_success(self, mock_get_cache):
         """Test feed endpoint returns success with mock data"""
+        
+        # Mock the cache instance returned by get_cache()
+        mock_cache_instance = MagicMock()
+        mock_get_cache.return_value = mock_cache_instance
         
         # Mock the get_activities_smart method (actual method name)
         mock_activities = [
@@ -149,10 +153,13 @@ class TestFeedEndpoint:
                 "music": {}
             }
         ]
-        mock_cache.get_activities_smart.return_value = mock_activities
-        mock_cache._has_complete_data.return_value = True
+        mock_cache_instance.get_activities_smart.return_value = mock_activities
+        mock_cache_instance._has_complete_data.return_value = True
         
-        response = client.get("/api/strava-integration/feed")
+        response = client.get("/api/strava-integration/feed", headers={
+            "X-API-Key": "test-api-key",
+            "Referer": "http://localhost:8000"
+        })
         
         assert response.status_code == 200
         data = response.json()
@@ -161,9 +168,13 @@ class TestFeedEndpoint:
         assert data["activities"][0]["name"] == "Morning Run"
         assert data["activities"][1]["name"] == "Evening Walk"
     
-    @patch('projects.fundraising_tracking_app.strava_integration.strava_integration_api.cache')
-    def test_feed_endpoint_with_filters(self, mock_cache):
+    @patch('projects.fundraising_tracking_app.strava_integration.strava_integration_api.get_cache')
+    def test_feed_endpoint_with_filters(self, mock_get_cache):
         """Test feed endpoint with query parameters"""
+        
+        # Mock the cache instance returned by get_cache()
+        mock_cache_instance = MagicMock()
+        mock_get_cache.return_value = mock_cache_instance
         
         # Mock the get_activities_smart method
         mock_activities = [
@@ -182,11 +193,14 @@ class TestFeedEndpoint:
                 "music": {}
             }
         ]
-        mock_cache.get_activities_smart.return_value = mock_activities
-        mock_cache._has_complete_data.return_value = True
+        mock_cache_instance.get_activities_smart.return_value = mock_activities
+        mock_cache_instance._has_complete_data.return_value = True
         
         # Test with query parameters
-        response = client.get("/api/strava-integration/feed?limit=10&activity_type=Run&has_photos=true")
+        response = client.get("/api/strava-integration/feed?limit=10&activity_type=Run&has_photos=true", headers={
+            "X-API-Key": "test-api-key",
+            "Referer": "http://localhost:8000"
+        })
         
         assert response.status_code == 200
         data = response.json()
@@ -194,36 +208,42 @@ class TestFeedEndpoint:
         assert len(data["activities"]) == 1
         
         # Verify the cache was called
-        mock_cache.get_activities_smart.assert_called_once()
+        mock_cache_instance.get_activities_smart.assert_called_once()
     
-    @patch('projects.fundraising_tracking_app.strava_integration.strava_integration_api.cache')
-    def test_feed_endpoint_cache_error(self, mock_cache):
+    @patch('projects.fundraising_tracking_app.strava_integration.strava_integration_api.get_cache')
+    def test_feed_endpoint_cache_error(self, mock_get_cache):
         """Test feed endpoint handles cache errors"""
         
-        # Mock the cache instance to raise an exception
-        mock_cache.get_activities_smart.side_effect = Exception("Cache error")
+        # Mock the cache instance returned by get_cache()
+        mock_cache_instance = MagicMock()
+        mock_get_cache.return_value = mock_cache_instance
         
-        # This test expects the APIException to be raised as an exception
-        # because the test client doesn't properly handle APIException
-        try:
-            response = client.get("/api/strava-integration/feed")
-            # If we get here, the error wasn't raised as expected
-            assert False, "Expected APIException but got response"
-        except Exception as e:
-            # Check that it's an APIException
-            assert "APIException" in str(type(e))
-            assert "Error fetching activity feed" in str(e)
+        # Mock the cache instance to raise an exception
+        mock_cache_instance.get_activities_smart.side_effect = Exception("Cache error")
+        
+        # The endpoint should return a 500 error when cache fails
+        response = client.get("/api/strava-integration/feed", headers={
+            "X-API-Key": "test-api-key",
+            "Referer": "http://localhost:8000"
+        })
+        
+        # Should return 500 error due to cache failure
+        assert response.status_code == 500
 
 
 class TestRefreshEndpoint:
     """Test /refresh endpoint"""
     
-    @patch('projects.fundraising_tracking_app.strava_integration.strava_integration_api.cache')
-    def test_refresh_endpoint_success(self, mock_cache):
+    @patch('projects.fundraising_tracking_app.strava_integration.strava_integration_api.get_cache')
+    def test_refresh_endpoint_success(self, mock_get_cache):
         """Test refresh endpoint returns success"""
         
+        # Mock the cache instance returned by get_cache()
+        mock_cache_instance = MagicMock()
+        mock_get_cache.return_value = mock_cache_instance
+        
         # Mock the force_refresh_now method (actual method name)
-        mock_cache.force_refresh_now.return_value = True
+        mock_cache_instance.force_refresh_now.return_value = True
         
         # Test with request body
         request_data = {
@@ -233,24 +253,28 @@ class TestRefreshEndpoint:
         
         response = client.post("/api/strava-integration/refresh-cache", 
                              json=request_data,
-                             headers={"X-API-Key": "test-api-key"})
+                             headers={"X-API-Key": "test-api-key", "Referer": "http://localhost:8000"})
         
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True
         assert "Cache refresh started" in data["message"]
     
-    @patch('projects.fundraising_tracking_app.strava_integration.strava_integration_api.cache')
-    def test_refresh_endpoint_default_values(self, mock_cache):
+    @patch('projects.fundraising_tracking_app.strava_integration.strava_integration_api.get_cache')
+    def test_refresh_endpoint_default_values(self, mock_get_cache):
         """Test refresh endpoint with default values"""
         
+        # Mock the cache instance returned by get_cache()
+        mock_cache_instance = MagicMock()
+        mock_get_cache.return_value = mock_cache_instance
+        
         # Mock the force_refresh_now method
-        mock_cache.force_refresh_now.return_value = True
+        mock_cache_instance.force_refresh_now.return_value = True
         
         # Test with empty request body (should use defaults)
         response = client.post("/api/strava-integration/refresh-cache", 
                              json={},
-                             headers={"X-API-Key": "test-api-key"})
+                             headers={"X-API-Key": "test-api-key", "Referer": "http://localhost:8000"})
         
         assert response.status_code == 200
         data = response.json()
@@ -258,19 +282,23 @@ class TestRefreshEndpoint:
         assert "Cache refresh started" in data["message"]
         
         # Verify the cache was called
-        mock_cache.force_refresh_now.assert_called_once()
+        mock_cache_instance.force_refresh_now.assert_called_once()
     
-    @patch('projects.fundraising_tracking_app.strava_integration.strava_integration_api.cache')
-    def test_refresh_endpoint_cache_error(self, mock_cache):
+    @patch('projects.fundraising_tracking_app.strava_integration.strava_integration_api.get_cache')
+    def test_refresh_endpoint_cache_error(self, mock_get_cache):
         """Test refresh endpoint handles cache errors"""
         
+        # Mock the cache instance returned by get_cache()
+        mock_cache_instance = MagicMock()
+        mock_get_cache.return_value = mock_cache_instance
+        
         # Mock the cache instance to raise an exception
-        mock_cache.force_refresh_now.side_effect = Exception("Refresh error")
+        mock_cache_instance.force_refresh_now.side_effect = Exception("Refresh error")
         
         request_data = {"force_refresh": True}
         response = client.post("/api/strava-integration/refresh-cache", 
                              json=request_data,
-                             headers={"X-API-Key": "test-api-key"})
+                             headers={"X-API-Key": "test-api-key", "Referer": "http://localhost:8000"})
         
         assert response.status_code == 200
         data = response.json()
@@ -281,12 +309,16 @@ class TestRefreshEndpoint:
 class TestCleanupEndpoint:
     """Test /cleanup endpoint"""
     
-    @patch('projects.fundraising_tracking_app.strava_integration.strava_integration_api.cache')
-    def test_cleanup_endpoint_success(self, mock_cache):
+    @patch('projects.fundraising_tracking_app.strava_integration.strava_integration_api.get_cache')
+    def test_cleanup_endpoint_success(self, mock_get_cache):
         """Test cleanup endpoint returns success"""
         
+        # Mock the cache instance returned by get_cache()
+        mock_cache_instance = MagicMock()
+        mock_get_cache.return_value = mock_cache_instance
+        
         # Mock the cleanup_backups method (actual method name)
-        mock_cache.cleanup_backups.return_value = True
+        mock_cache_instance.cleanup_backups.return_value = True
         
         # Test with request body
         request_data = {
@@ -296,24 +328,28 @@ class TestCleanupEndpoint:
         
         response = client.post("/api/strava-integration/cleanup-backups", 
                              json=request_data,
-                             headers={"X-API-Key": "test-api-key"})
+                             headers={"X-API-Key": "test-api-key", "Referer": "http://localhost:8000"})
         
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True
         assert "Backup cleanup completed" in data["message"]
     
-    @patch('projects.fundraising_tracking_app.strava_integration.strava_integration_api.cache')
-    def test_cleanup_endpoint_default_values(self, mock_cache):
+    @patch('projects.fundraising_tracking_app.strava_integration.strava_integration_api.get_cache')
+    def test_cleanup_endpoint_default_values(self, mock_get_cache):
         """Test cleanup endpoint with default values"""
         
+        # Mock the cache instance returned by get_cache()
+        mock_cache_instance = MagicMock()
+        mock_get_cache.return_value = mock_cache_instance
+        
         # Mock the cleanup_backups method
-        mock_cache.cleanup_backups.return_value = True
+        mock_cache_instance.cleanup_backups.return_value = True
         
         # Test with empty request body (should use defaults)
         response = client.post("/api/strava-integration/cleanup-backups", 
                              json={},
-                             headers={"X-API-Key": "test-api-key"})
+                             headers={"X-API-Key": "test-api-key", "Referer": "http://localhost:8000"})
         
         assert response.status_code == 200
         data = response.json()
@@ -321,19 +357,23 @@ class TestCleanupEndpoint:
         assert "Backup cleanup completed" in data["message"]
         
         # Verify the cache was called
-        mock_cache.cleanup_backups.assert_called_once()
+        mock_cache_instance.cleanup_backups.assert_called_once()
     
-    @patch('projects.fundraising_tracking_app.strava_integration.strava_integration_api.cache')
-    def test_cleanup_endpoint_cache_error(self, mock_cache):
+    @patch('projects.fundraising_tracking_app.strava_integration.strava_integration_api.get_cache')
+    def test_cleanup_endpoint_cache_error(self, mock_get_cache):
         """Test cleanup endpoint handles cache errors"""
         
+        # Mock the cache instance returned by get_cache()
+        mock_cache_instance = MagicMock()
+        mock_get_cache.return_value = mock_cache_instance
+        
         # Mock the cache instance to raise an exception
-        mock_cache.cleanup_backups.side_effect = Exception("Cleanup error")
+        mock_cache_instance.cleanup_backups.side_effect = Exception("Cleanup error")
         
         request_data = {"keep_backups": 2}
         response = client.post("/api/strava-integration/cleanup-backups", 
                              json=request_data,
-                             headers={"X-API-Key": "test-api-key"})
+                             headers={"X-API-Key": "test-api-key", "Referer": "http://localhost:8000"})
         
         assert response.status_code == 200
         data = response.json()
@@ -353,7 +393,7 @@ class TestMapTilesEndpoint:
         mock_response.headers = {"content-type": "image/png"}
         mock_get.return_value = mock_response
         
-        response = client.get("/api/strava-integration/map-tiles/10/512/384")
+        response = client.get("/api/strava-integration/map-tiles/10/512/384?token=test-api-key")
         
         assert response.status_code == 200
         assert response.content == b"fake_tile_data"
@@ -368,7 +408,7 @@ class TestMapTilesEndpoint:
         mock_response.headers = {"content-type": "image/png"}
         mock_get.return_value = mock_response
         
-        response = client.get("/api/strava-integration/map-tiles/10/512/384?style=dark")
+        response = client.get("/api/strava-integration/map-tiles/10/512/384?style=dark&token=test-api-key")
         
         assert response.status_code == 200
         assert response.content == b"fake_tile_data"
@@ -386,7 +426,7 @@ class TestMapTilesEndpoint:
         
         mock_get.side_effect = [Exception("HTTP error"), mock_response]
         
-        response = client.get("/api/strava-integration/map-tiles/10/512/384")
+        response = client.get("/api/strava-integration/map-tiles/10/512/384?token=test-api-key")
         
         # Should fallback to OpenStreetMap and still return 200
         assert response.status_code == 200
@@ -412,7 +452,10 @@ class TestValidationErrors:
     
     def test_feed_endpoint_invalid_date_range(self):
         """Test feed endpoint with invalid date range"""
-        response = client.get("/api/strava-integration/feed?date_from=2023-01-02&date_to=2023-01-01")
+        response = client.get("/api/strava-integration/feed?date_from=2023-01-02&date_to=2023-01-01", headers={
+            "X-API-Key": "test-api-key",
+            "Referer": "http://localhost:8000"
+        })
         
         # Should return 422 Validation Error
         assert response.status_code == 422
@@ -428,7 +471,7 @@ class TestValidationErrors:
         
         response = client.post("/api/strava-integration/refresh-cache", 
                              json=invalid_data,
-                             headers={"X-API-Key": "test-api-key"})
+                             headers={"X-API-Key": "test-api-key", "Referer": "http://localhost:8000"})
         
         assert response.status_code == 422  # Validation error
         data = response.json()
@@ -443,7 +486,7 @@ class TestValidationErrors:
         
         response = client.post("/api/strava-integration/cleanup-backups", 
                              json=invalid_data,
-                             headers={"X-API-Key": "test-api-key"})
+                             headers={"X-API-Key": "test-api-key", "Referer": "http://localhost:8000"})
         
         assert response.status_code == 422  # Validation error
         data = response.json()
@@ -453,24 +496,35 @@ class TestValidationErrors:
 class TestEdgeCases:
     """Test edge cases and boundary conditions"""
     
-    @patch('projects.fundraising_tracking_app.strava_integration.strava_integration_api.cache')
-    def test_feed_endpoint_empty_result(self, mock_cache):
+    @patch('projects.fundraising_tracking_app.strava_integration.strava_integration_api.get_cache')
+    def test_feed_endpoint_empty_result(self, mock_get_cache):
         """Test feed endpoint with empty result"""
         
-        # Mock empty activities list
-        mock_cache.get_activities_smart.return_value = []
-        mock_cache._has_complete_data.return_value = True
+        # Mock the cache instance returned by get_cache()
+        mock_cache_instance = MagicMock()
+        mock_get_cache.return_value = mock_cache_instance
         
-        response = client.get("/api/strava-integration/feed")
+        # Mock empty activities list
+        mock_cache_instance.get_activities_smart.return_value = []
+        mock_cache_instance._has_complete_data.return_value = True
+        
+        response = client.get("/api/strava-integration/feed", headers={
+            "X-API-Key": "test-api-key",
+            "Referer": "http://localhost:8000"
+        })
         
         assert response.status_code == 200
         data = response.json()
         assert "activities" in data
         assert data["activities"] == []
     
-    @patch('projects.fundraising_tracking_app.strava_integration.strava_integration_api.cache')
-    def test_feed_endpoint_max_limit(self, mock_cache):
+    @patch('projects.fundraising_tracking_app.strava_integration.strava_integration_api.get_cache')
+    def test_feed_endpoint_max_limit(self, mock_get_cache):
         """Test feed endpoint with maximum limit"""
+        
+        # Mock the cache instance returned by get_cache()
+        mock_cache_instance = MagicMock()
+        mock_get_cache.return_value = mock_cache_instance
         
         # Mock activities data with all required fields
         mock_activities = []
@@ -489,11 +543,14 @@ class TestEdgeCases:
                 "comments": [],
                 "music": {}
             })
-        mock_cache.get_activities_smart.return_value = mock_activities
-        mock_cache._has_complete_data.return_value = True
+        mock_cache_instance.get_activities_smart.return_value = mock_activities
+        mock_cache_instance._has_complete_data.return_value = True
         
         # Test with maximum limit
-        response = client.get("/api/strava-integration/feed?limit=200")
+        response = client.get("/api/strava-integration/feed?limit=200", headers={
+            "X-API-Key": "test-api-key",
+            "Referer": "http://localhost:8000"
+        })
         
         assert response.status_code == 200
         data = response.json()

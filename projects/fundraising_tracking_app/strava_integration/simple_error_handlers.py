@@ -70,6 +70,25 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         content=response_content
     )
 
+async def api_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Handle API-specific exceptions"""
+    logger.error(f"API Exception: {type(exc).__name__}: {str(exc)}")
+    
+    response_content = create_error_response(
+        status_code=500,
+        message="API error",
+        details={
+            "exception_type": type(exc).__name__,
+            "exception_message": str(exc)
+        },
+        request_id=str(uuid.uuid4())
+    )
+    
+    return JSONResponse(
+        status_code=500,
+        content=response_content
+    )
+
 async def general_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """Handle unexpected exceptions"""
     logger.error(f"Unexpected error: {type(exc).__name__}: {str(exc)}", exc_info=True)

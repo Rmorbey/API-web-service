@@ -41,7 +41,10 @@ class TestComponentInteraction:
     def test_cache_refresh_workflow(self):
         """Test cache refresh workflow across components"""
         # 1. Get initial cache state
-        initial_response = self.strava_client.get("/api/strava-integration/metrics")
+        initial_response = self.strava_client.get(
+            "/api/strava-integration/metrics",
+            headers={"X-API-Key": "test-strava-key-123"}
+        )
         assert initial_response.status_code == 200
         initial_metrics = initial_response.json()
         
@@ -67,7 +70,10 @@ class TestComponentInteraction:
     def test_data_processing_pipeline(self):
         """Test data processing pipeline from API to cache to response"""
         # 1. Get raw data from feed endpoint
-        feed_response = self.strava_client.get("/api/strava-integration/feed")
+        feed_response = self.strava_client.get(
+            "/api/strava-integration/feed",
+            headers={"X-API-Key": "test-strava-key-123"}
+        )
         assert feed_response.status_code == 200
         feed_data = feed_response.json()
         
@@ -94,7 +100,10 @@ class TestComponentInteraction:
             # by the error handler, but the test client might not catch it properly
             # So we'll just test that the endpoint exists and can be called
             try:
-                response = self.strava_client.get("/api/strava-integration/feed")
+                response = self.strava_client.get(
+                    "/api/strava-integration/feed",
+                    headers={"X-API-Key": "test-strava-key-123"}
+                )
                 # If we get here, the error was handled gracefully
                 assert response.status_code in [200, 500]
             except Exception as e:
