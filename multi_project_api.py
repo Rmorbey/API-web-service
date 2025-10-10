@@ -7,7 +7,7 @@ A FastAPI application that can handle multiple different API projects
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import os
@@ -97,6 +97,18 @@ app.add_middleware(SmartCompressionMiddleware)
 
 # Cache middleware (add second)
 app.add_middleware(CacheMiddleware)
+
+# Public health check bypass (runs before host/security checks)
+@app.middleware("http")
+async def public_health_bypass(request: Request, call_next):
+    if request.method == "GET" and request.url.path == "/api/health":
+        return JSONResponse({
+            "status": "healthy",
+            "timestamp": datetime.utcnow().isoformat(),
+            "projects_loaded": len([p for p in PROJECTS.values() if p["enabled"]]),
+            "total_projects": len(PROJECTS)
+        })
+    return await call_next(request)
 
 # Security middleware
 app.add_middleware(
