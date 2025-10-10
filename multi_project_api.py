@@ -98,17 +98,6 @@ app.add_middleware(SmartCompressionMiddleware)
 # Cache middleware (add second)
 app.add_middleware(CacheMiddleware)
 
-# Public health check bypass (runs before host/security checks)
-@app.middleware("http")
-async def public_health_bypass(request: Request, call_next):
-    if request.method == "GET" and request.url.path == "/api/health":
-        return JSONResponse({
-            "status": "healthy",
-            "timestamp": datetime.utcnow().isoformat(),
-            "projects_loaded": len([p for p in PROJECTS.values() if p["enabled"]]),
-            "total_projects": len(PROJECTS)
-        })
-    return await call_next(request)
 
 # Security middleware
 app.add_middleware(
@@ -121,6 +110,18 @@ app.add_middleware(
         "*.ondigitalocean.app"  # allow DO App Platform health probes and default domain
     ]
 )
+
+# Public health check bypass (must be added AFTER TrustedHost so it runs first)
+@app.middleware("http")
+async def public_health_bypass(request: Request, call_next):
+    if request.method == "GET" and request.url.path in ("/api/health", "/health"):
+        return JSONResponse({
+            "status": "healthy",
+            "timestamp": datetime.utcnow().isoformat(),
+            "projects_loaded": len([p for p in PROJECTS.values() if p["enabled"]]),
+            "total_projects": len(PROJECTS)
+        })
+    return await call_next(request)
 
 # CORS middleware for React frontend and local HTML files
 app.add_middleware(
