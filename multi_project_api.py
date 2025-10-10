@@ -101,7 +101,13 @@ app.add_middleware(CacheMiddleware)
 # Security middleware
 app.add_middleware(
     TrustedHostMiddleware, 
-    allowed_hosts=["localhost", "127.0.0.1", "*.russellmorbey.co.uk", "russellmorbey.co.uk"]
+    allowed_hosts=[
+        "localhost",
+        "127.0.0.1",
+        "*.russellmorbey.co.uk",
+        "russellmorbey.co.uk",
+        "*.ondigitalocean.app"  # allow DO App Platform health probes and default domain
+    ]
 )
 
 # CORS middleware for React frontend and local HTML files
