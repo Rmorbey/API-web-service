@@ -294,7 +294,7 @@ class SmartFundraisingCache:
                 "total_raised": fresh_data.get("total_raised", 0),
                 "donations": fresh_data.get("donations", []),
                 "total_donations": fresh_data.get("total_donations", 0),
-                "emergency_refresh": False,  # Clear the flag after successful refresh
+                "emergency_refresh": True,
                 "last_updated": datetime.now().isoformat()
             }
             
@@ -371,97 +371,152 @@ class SmartFundraisingCache:
             logger.error(f"❌ Failed to refresh fundraising cache: {e}")
     
     def _scrape_fundraising_data(self) -> Dict[str, Any]:
-        """Scrape fundraising data from JustGiving"""
+        """Scrape fundraising data from JustGiving page"""
         try:
-            logger.info(f"🔍 Scraping fundraising data from: {self.justgiving_url}")
+            # Set headers to mimic a real browser
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.5',
+                'Accept-Encoding': 'gzip, deflate',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1',
+            }
+
+            # Make request to JustGiving page using shared HTTP client
+            http_client = get_http_client()
+            response = http_client.get(self.justgiving_url, headers=headers)
+            response.raise_for_status()
             
-            # Use httpx directly instead of the shared client to avoid reuse issues
-            with httpx.Client(timeout=30.0) as client:
-                response = client.get(self.justgiving_url)
-                response.raise_for_status()
-                
-                soup = BeautifulSoup(response.content, 'html.parser')
-                
-                # Extract JSON data from script tags (modern JustGiving uses React/Next.js)
-                total_raised = 0.0
-                donations = []
-                target_amount = 0.0
-                
-                # Look for JSON data in script tags using regex patterns
-                script_tags = soup.find_all('script')
-                for script in script_tags:
-                    if script.string and 'donationSummary' in script.string and 'Gabriella Cook' in script.string:
-                        script_content = script.string
-                        logger.info("Found script with donation data")
-                        
-                        # Extract total amount using regex - updated pattern
-                        total_match = re.search(r'"totalAmount":\{"value":(\d+),"currencyCode":"GBP"', script_content)
-                        if total_match:
-                            total_raised = float(total_match.group(1)) / 100  # Convert from pence
-                            logger.info(f"Found total amount: £{total_raised:.2f}")
-                        
-                        # Extract donation count
-                        count_match = re.search(r'"donationCount":(\d+)', script_content)
-                        if count_match:
-                            donation_count = int(count_match.group(1))
-                            logger.info(f"Found donation count: {donation_count}")
-                        
-                        # Extract target amount - updated pattern
-                        target_match = re.search(r'"targetWithCurrency":\{"value":(\d+),"currencyCode":"GBP"', script_content)
-                        if target_match:
-                            target_amount = float(target_match.group(1)) / 100
-                            logger.info(f"Found target amount: £{target_amount:.2f}")
-                        
-                        # Extract individual donations using regex - updated pattern
-                        donation_pattern = r'"displayName":"([^"]+)","avatar":"[^"]*","message":"([^"]*)"[^}]*"amount":\{"value":(\d+),"currencyCode":"GBP"'
-                        donation_matches = re.findall(donation_pattern, script_content)
-                        
-                        for name, message, amount_str in donation_matches:
-                            try:
-                                amount = float(amount_str) / 100
-                                donation_data_item = {
-                                    "amount": amount,
-                                    "name": name,
-                                    "message": message,
-                                    "timestamp": datetime.now().isoformat()
-                                }
-                                donations.append(donation_data_item)
-                                logger.info(f"Found donation: {name} - £{amount:.2f} - {message}")
-                            except Exception as e:
-                                logger.warning(f"Error parsing donation: {e}")
-                                continue
-                        
-                        if total_raised > 0 or donations:
-                            logger.info(f"✅ Successfully parsed fundraising data: £{total_raised:.2f} raised from {len(donations)} donations")
-                            break
-                
-                # Fallback to old method if JSON parsing failed
-                if total_raised == 0.0 and not donations:
-                    logger.info("🔄 JSON parsing failed, trying fallback HTML parsing...")
-                    
-                    # Try to find total in HTML
-                    total_elements = soup.find_all(text=re.compile(r'£\d+\.?\d*'))
-                    for element in total_elements:
-                        if 'total' in element.parent.get_text().lower() or 'raised' in element.parent.get_text().lower():
-                            total_text = re.sub(r'[£$€,]', '', element.strip())
-                            try:
-                                total_raised = float(total_text)
-                                break
-                            except ValueError:
-                                continue
-                
-                return {
-                    "timestamp": datetime.now().isoformat(),
-                    "total_raised": total_raised,
-                    "target_amount": target_amount,
-                    "donations": donations,
-                    "total_donations": len(donations),
-                    "last_updated": datetime.now().isoformat(),
-                    "justgiving_url": self.justgiving_url
-                }
-                
+            # Parse HTML
+            soup = BeautifulSoup(response.content, 'lxml')
+            
+            # Extract total amount raised
+            total_raised = self._extract_total_raised(soup)
+
+            # Extract donations
+            donations = self._extract_donations(soup)
+
+            # Create fresh data (will be merged with existing)
+            fresh_data = {
+                "timestamp": datetime.now().isoformat(),
+                "total_raised": total_raised,
+                "donations": donations,
+                "total_donations": len(donations),
+                "last_updated": datetime.now().isoformat()
+            }
+
+            logger.info(f"💰 Scraped: £{total_raised} raised, {len(donations)} donations")
+            return fresh_data
+
         except Exception as e:
-            logger.error(f"❌ Failed to scrape fundraising data: {e}")
+            logger.error(f"Failed to scrape fundraising data: {e}")
+            raise
+    
+    def _extract_total_raised(self, soup: BeautifulSoup) -> float:
+        """Extract total amount raised from the page"""
+        try:
+            # Try multiple selectors for the total raised amount
+            selectors = [
+                # Main total display
+                'p.branded-text.cp-heading-medium.m-0',
+                # Alternative total display
+                'div.cp-body-large',
+                # Fallback to any branded-text with amount
+                'p.branded-text',
+                'div.branded-text'
+            ]
+            
+            for selector in selectors:
+                elements = soup.select(selector)
+                for element in elements:
+                    amount_text = element.get_text(strip=True)
+                    # Look for amount pattern like "£15" or "£15.00" or "£1,234"
+                    amount_match = re.search(r'£([\d,]+\.?\d*)', amount_text)
+                    if amount_match:
+                        # Remove commas and convert to float
+                        amount_str = amount_match.group(1).replace(',', '')
+                        amount = float(amount_str)
+                        logger.info(f"Found total raised: £{amount}")
+                        return amount
+            
+            # If no branded text found, look for any element containing £ symbol
+            all_elements = soup.find_all(text=re.compile(r'£[\d,]+\.?\d*'))
+            for element in all_elements:
+                amount_match = re.search(r'£([\d,]+\.?\d*)', element.strip())
+                if amount_match:
+                    amount_str = amount_match.group(1).replace(',', '')
+                    amount = float(amount_str)
+                    logger.info(f"Found total raised in text: £{amount}")
+                    return amount
+
+            logger.warning("Could not find total raised amount")
+            return 0.0
+
+        except Exception as e:
+            logger.error(f"Error extracting total raised: {e}")
+            return 0.0
+
+    def _extract_donations(self, soup: BeautifulSoup) -> List[Dict[str, Any]]:
+        """Extract individual donations from the page"""
+        donations = []
+
+        try:
+            # Find all supporter detail sections
+            supporter_sections = soup.find_all('header', class_='SupporterDetails_header__3czW_')
+            
+            for section in supporter_sections:
+                try:
+                    donation = self._extract_single_donation(section)
+                    if donation:
+                        donations.append(donation)
+                except Exception as e:
+                    logger.warning(f"Error extracting single donation: {e}")
+                    continue
+            
+            logger.info(f"Extracted {len(donations)} donations")
+            return donations
+            
+        except Exception as e:
+            logger.error(f"Error extracting donations: {e}")
+            return []
+
+    def _extract_single_donation(self, header_section) -> Optional[Dict[str, Any]]:
+        """Extract data from a single donation section"""
+        try:
+            # Find the parent container
+            supporter_container = header_section.find_parent()
+            if not supporter_container:
+                return None
+            
+            # Extract donor name
+            name_element = header_section.find('h2', class_='SupporterDetails_donorName__f_tha')
+            donor_name = name_element.get_text(strip=True) if name_element else "Anonymous"
+            
+            # Extract donation date
+            date_element = header_section.find('span', class_='SupporterDetails_date__zEBmC')
+            donation_date = date_element.get_text(strip=True) if date_element else "Unknown"
+            
+            # Extract donation amount
+            amount_element = supporter_container.find('div', class_='SupporterDetails_amount__LzYvS')
+            amount_text = amount_element.get_text(strip=True) if amount_element else "£0"
+            amount_match = re.search(r'£([\d,]+\.?\d*)', amount_text)
+            amount = float(amount_match.group(1).replace(',', '')) if amount_match else 0.0
+            
+            # Extract donation message (optional)
+            message_element = supporter_container.find('span', class_='SupporterDetails_donationMessage__IPPow')
+            message = message_element.get_text(strip=True) if message_element else ""
+            
+            return {
+                "donor_name": donor_name,
+                "amount": amount,
+                "message": message,
+                "date": donation_date,
+                "scraped_at": datetime.now().isoformat()
+            }
+
+        except Exception as e:
+            logger.warning(f"Error extracting single donation: {e}")
             return None
     
     def get_fundraising_data(self) -> Dict[str, Any]:

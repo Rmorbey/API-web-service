@@ -1712,5 +1712,7 @@
   "total_filtered": 51,
   "emergency_refresh": true,
   "last_rich_fetch": "2025-10-12T21:56:34.846701",
-  "last_saved": "2025-10-12T22:16:03.809840"
+  "last_saved": "2025-10-13T00:11:15.121996",
+  "batching_in_progress": true,
+  "batching_status_updated": "2025-10-13T00:11:15.120698"
 }
