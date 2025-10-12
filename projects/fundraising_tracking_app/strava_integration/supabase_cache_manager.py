@@ -277,9 +277,13 @@ class SecureSupabaseCacheManager:
                 }
                 
                 with httpx.Client() as client:
+                    # Use upsert with proper headers for conflict resolution
+                    upsert_headers = self.headers.copy()
+                    upsert_headers['Prefer'] = 'resolution=merge-duplicates'
+                    
                     response = client.post(
                         f"{self.base_url}cache_storage",
-                        headers=self.headers,
+                        headers=upsert_headers,
                         json=upsert_data
                     )
                     response.raise_for_status()

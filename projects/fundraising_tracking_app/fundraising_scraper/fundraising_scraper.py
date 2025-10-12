@@ -382,48 +382,82 @@ class SmartFundraisingCache:
                 
                 soup = BeautifulSoup(response.content, 'html.parser')
                 
-                # Extract total raised
+                # Extract JSON data from script tags (modern JustGiving uses React/Next.js)
                 total_raised = 0.0
-                total_element = soup.find('span', {'class': 'total-amount'})
-                if total_element:
-                    total_text = total_element.get_text().strip()
-                    # Remove currency symbols and extract number
-                    total_text = re.sub(r'[£$€,]', '', total_text)
-                    try:
-                        total_raised = float(total_text)
-                    except ValueError:
-                        logger.warning(f"Could not parse total amount: {total_text}")
-                
-                # Extract donations (simplified - you may need to adjust based on actual page structure)
                 donations = []
-                donation_elements = soup.find_all('div', {'class': 'donation'})
-                for donation in donation_elements:
-                    try:
-                        amount_elem = donation.find('span', {'class': 'amount'})
-                        name_elem = donation.find('span', {'class': 'name'})
-                        message_elem = donation.find('p', {'class': 'message'})
+                target_amount = 0.0
+                
+                # Look for JSON data in script tags using regex patterns
+                script_tags = soup.find_all('script')
+                for script in script_tags:
+                    if script.string and 'donationSummary' in script.string and 'Gabriella Cook' in script.string:
+                        script_content = script.string
+                        logger.info("Found script with donation data")
                         
-                        if amount_elem and name_elem:
-                            amount_text = amount_elem.get_text().strip()
-                            amount_text = re.sub(r'[£$€,]', '', amount_text)
-                            
-                            donation_data = {
-                                "amount": float(amount_text) if amount_text else 0.0,
-                                "name": name_elem.get_text().strip(),
-                                "message": message_elem.get_text().strip() if message_elem else "",
-                                "timestamp": datetime.now().isoformat()
-                            }
-                            donations.append(donation_data)
-                    except Exception as e:
-                        logger.warning(f"Error parsing donation: {e}")
-                        continue
+                        # Extract total amount using regex
+                        total_match = re.search(r'"totalAmount":\{"value":(\d+)', script_content)
+                        if total_match:
+                            total_raised = float(total_match.group(1)) / 100  # Convert from pence
+                            logger.info(f"Found total amount: £{total_raised:.2f}")
+                        
+                        # Extract donation count
+                        count_match = re.search(r'"donationCount":(\d+)', script_content)
+                        if count_match:
+                            donation_count = int(count_match.group(1))
+                            logger.info(f"Found donation count: {donation_count}")
+                        
+                        # Extract target amount
+                        target_match = re.search(r'"targetWithCurrency":\{"value":(\d+)', script_content)
+                        if target_match:
+                            target_amount = float(target_match.group(1)) / 100
+                            logger.info(f"Found target amount: £{target_amount:.2f}")
+                        
+                        # Extract individual donations using regex
+                        donation_pattern = r'"displayName":"([^"]+)","avatar":"[^"]*","message":"([^"]*)"[^}]*"amount":\{"value":(\d+)'
+                        donation_matches = re.findall(donation_pattern, script_content)
+                        
+                        for name, message, amount_str in donation_matches:
+                            try:
+                                amount = float(amount_str) / 100
+                                donation_data_item = {
+                                    "amount": amount,
+                                    "name": name,
+                                    "message": message,
+                                    "timestamp": datetime.now().isoformat()
+                                }
+                                donations.append(donation_data_item)
+                                logger.info(f"Found donation: {name} - £{amount:.2f} - {message}")
+                            except Exception as e:
+                                logger.warning(f"Error parsing donation: {e}")
+                                continue
+                        
+                        if total_raised > 0 or donations:
+                            logger.info(f"✅ Successfully parsed fundraising data: £{total_raised:.2f} raised from {len(donations)} donations")
+                            break
+                
+                # Fallback to old method if JSON parsing failed
+                if total_raised == 0.0 and not donations:
+                    logger.info("🔄 JSON parsing failed, trying fallback HTML parsing...")
+                    
+                    # Try to find total in HTML
+                    total_elements = soup.find_all(text=re.compile(r'£\d+\.?\d*'))
+                    for element in total_elements:
+                        if 'total' in element.parent.get_text().lower() or 'raised' in element.parent.get_text().lower():
+                            total_text = re.sub(r'[£$€,]', '', element.strip())
+                            try:
+                                total_raised = float(total_text)
+                                break
+                            except ValueError:
+                                continue
                 
                 return {
                     "timestamp": datetime.now().isoformat(),
                     "total_raised": total_raised,
+                    "target_amount": target_amount,
                     "donations": donations,
                     "total_donations": len(donations),
-                    "last_updated": datetime.now().isoformat()
+                    "last_updated": datetime.now().isoformat(),
+                    "justgiving_url": self.justgiving_url
                 }
                 
         except Exception as e:

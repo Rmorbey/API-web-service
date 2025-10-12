@@ -170,15 +170,19 @@ async def get_fundraising_data(api_key: str = Depends(verify_api_key)) -> Fundra
         processed_donations = await async_processor.process_donations_parallel(raw_donations)
         
         # Format the data for frontend consumption
+        total_raised = data.get("total_raised", 0)
+        target_amount = data.get("target_amount", 300)  # Use scraped target or default to 300
+        progress_percentage = round((total_raised / target_amount) * 100, 1) if target_amount > 0 else 0
+        
         return FundraisingDataResponse(
             timestamp=datetime.fromisoformat(data.get("timestamp")) if data.get("timestamp") else datetime.now(),
-            total_raised=data.get("total_raised", 0),
-            target_amount=300,  # Your target
-            progress_percentage=round((data.get("total_raised", 0) / 300) * 100, 1),
+            total_raised=total_raised,
+            target_amount=target_amount,
+            progress_percentage=progress_percentage,
             donations=processed_donations,
             total_donations=data.get("total_donations", 0),
             last_updated=datetime.fromisoformat(data.get("last_updated")) if data.get("last_updated") else datetime.now(),
-            justgiving_url=JUSTGIVING_URL
+            justgiving_url=data.get("justgiving_url", JUSTGIVING_URL)
         )
         
     except Exception as e:
