@@ -415,25 +415,25 @@ class SmartFundraisingCache:
                 # Extract individual donations using regex - updated pattern
                 donation_pattern = r'"displayName":"([^"]+)","avatar":"[^"]*","message":"([^"]*)"[^}]*"amount":\{"value":(\d+),"currencyCode":"GBP"'
                 donation_matches = re.findall(donation_pattern, script_content)
-                        
-                        for name, message, amount_str in donation_matches:
-                            try:
-                                amount = float(amount_str) / 100
-                                donation_data_item = {
-                                    "amount": amount,
-                                    "name": name,
-                                    "message": message,
-                                    "timestamp": datetime.now().isoformat()
-                                }
-                                donations.append(donation_data_item)
-                                logger.info(f"Found donation: {name} - £{amount:.2f} - {message}")
-                            except Exception as e:
-                                logger.warning(f"Error parsing donation: {e}")
-                                continue
-                        
-                        if total_raised > 0 or donations:
-                            logger.info(f"✅ Successfully parsed fundraising data: £{total_raised:.2f} raised from {len(donations)} donations")
-                            break
+                
+                for name, message, amount_str in donation_matches:
+                    try:
+                        amount = float(amount_str) / 100
+                        donation_data_item = {
+                            "amount": amount,
+                            "name": name,
+                            "message": message,
+                            "timestamp": datetime.now().isoformat()
+                        }
+                        donations.append(donation_data_item)
+                        logger.info(f"Found donation: {name} - £{amount:.2f} - {message}")
+                    except Exception as e:
+                        logger.warning(f"Error parsing donation: {e}")
+                        continue
+                
+                if total_raised > 0 or donations:
+                    logger.info(f"✅ Successfully parsed fundraising data: £{total_raised:.2f} raised from {len(donations)} donations")
+                    break
                 
                 # Fallback to old method if JSON parsing failed
                 if total_raised == 0.0 and not donations:
