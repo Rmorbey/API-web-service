@@ -16,6 +16,7 @@ from typing import List, Dict, Any, Optional, Tuple
 from dotenv import load_dotenv
 from .strava_token_manager import StravaTokenManager
 from .http_clients import get_http_client
+from .supabase_cache_manager import SecureSupabaseCacheManager
 import os
 
 # Configure enhanced logging
@@ -38,6 +39,9 @@ class SmartStravaCache:
         self.token_manager = StravaTokenManager()
         self.base_url = "https://www.strava.com/api/v3"
         self.cache_file = "projects/fundraising_tracking_app/strava_integration/strava_cache.json"
+        
+        # Initialize Supabase cache manager for persistence
+        self.supabase_cache = SecureSupabaseCacheManager()
         
         # Allow custom cache duration, default to 6 hours
         self.cache_duration_hours = cache_duration_hours or int(os.getenv("STRAVA_CACHE_HOURS", "6"))
@@ -68,17 +72,55 @@ class SmartStravaCache:
         # Start the automated refresh system
         self._start_automated_refresh()
         
+        # Initialize cache system on startup
+        self.initialize_cache_system()
+    
+    def initialize_cache_system(self):
+        """Initialize cache system on server startup"""
+        logger.info("🔄 Initializing cache system on startup...")
+        
+        if self.supabase_cache.enabled:
+            try:
+                # Load from Supabase and populate JSON files
+                supabase_result = self.supabase_cache.get_cache('strava', 'fundraising-app')
+                if supabase_result and supabase_result.get('data'):
+                    cache_data = supabase_result['data']
+                    
+                    # Validate data integrity
+                    if self._validate_cache_integrity(cache_data):
+                        # Populate JSON file
+                        self._save_cache_to_file(cache_data)
+                        logger.info("✅ Cache system initialized from Supabase")
+                        
+                        # Check if immediate refresh is needed using smart logic
+                        should_refresh, reason = self._should_refresh_cache(cache_data)
+                        if should_refresh:
+                            logger.info(f"🔄 Cache needs refresh: {reason}")
+                            self._trigger_emergency_refresh()
+                        else:
+                            logger.info("✅ Cache is fresh and valid")
+                    else:
+                        logger.warning("❌ Supabase data integrity check failed, triggering refresh...")
+                        self._trigger_emergency_refresh()
+                else:
+                    logger.info("📭 No Supabase data found, will populate on first refresh")
+            except Exception as e:
+                logger.error(f"❌ Cache system initialization failed: {e}")
+        else:
+            logger.info("📝 Supabase disabled, using file-based cache only")
+        
     def _load_cache(self) -> Dict[str, Any]:
-        """Load cache from file with in-memory optimization and corruption detection"""
+        """Load cache: In-Memory → JSON File → Supabase → Emergency Refresh"""
         now = datetime.now()
         
-        # Check if in-memory cache is still valid
+        # 1. Check in-memory cache first (fastest)
         if (self._cache_data is not None and 
             self._cache_loaded_at is not None and 
             (now - self._cache_loaded_at).total_seconds() < self._cache_ttl):
+            logger.debug("✅ Using in-memory cache")
             return self._cache_data
         
-        # Load from file
+        # 2. Try JSON file (populated from Supabase at startup)
         try:
             with open(self.cache_file, 'r') as f:
                 self._cache_data = json.load(f)
@@ -86,48 +128,211 @@ class SmartStravaCache:
                 
                 # Validate cache integrity
                 if self._validate_cache_integrity(self._cache_data):
+                    logger.info("✅ Loaded cache from JSON file")
                     return self._cache_data
                 else:
-                    logger.warning("Cache integrity check failed, attempting to restore from backup...")
-                    if self._restore_from_backup():
+                    logger.warning("❌ JSON cache integrity check failed")
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            logger.warning(f"❌ JSON cache file error: {e}")
+        
+        # 3. Fallback to Supabase (source of truth)
+        if self.supabase_cache.enabled:
+            try:
+                supabase_result = self.supabase_cache.get_cache('strava', 'fundraising-app')
+                if supabase_result and supabase_result.get('data'):
+                    self._cache_data = supabase_result['data']
+                    self._cache_loaded_at = now
+                    
+                    # Validate Supabase data integrity
+                    if self._validate_cache_integrity(self._cache_data):
+                        logger.info("✅ Loaded cache from Supabase database")
+                        # Populate JSON file for faster future access
+                        self._save_cache_to_file(self._cache_data)
                         return self._cache_data
                     else:
-                        logger.error("All backups failed, triggering immediate refresh to rebuild cache...")
-                        self._cache_data = {"timestamp": None, "activities": []}
-                        # Trigger immediate refresh to rebuild cache
-                        self._trigger_emergency_refresh()
-                        return self._cache_data
-                        
-        except (FileNotFoundError, json.JSONDecodeError) as e:
-            logger.warning(f"Cache file error: {e}, attempting to restore from backup...")
-            if self._restore_from_backup():
-                return self._cache_data
-            else:
-                logger.error("All backups failed, triggering immediate refresh to rebuild cache...")
-                self._cache_data = {"timestamp": None, "activities": []}
-                self._cache_loaded_at = now
-                # Trigger immediate refresh to rebuild cache
-                self._trigger_emergency_refresh()
-                return self._cache_data
+                        logger.warning("❌ Supabase cache integrity check failed")
+                else:
+                    logger.info("📭 No cache data found in Supabase")
+            except Exception as e:
+                logger.error(f"❌ Supabase read failed: {e}")
+        
+        # 4. Emergency refresh (all sources failed)
+        logger.warning("🚨 All cache sources failed, triggering emergency refresh...")
+        self._cache_data = {"timestamp": None, "activities": []}
+        self._trigger_emergency_refresh()
+        return self._cache_data
+    
+    def _save_cache_to_file(self, data: Dict[str, Any]):
+        """Helper method to save cache to JSON file"""
+        try:
+            with open(self.cache_file, 'w') as f:
+                json.dump(data, f, indent=2)
+            logger.debug("✅ Saved cache to JSON file")
+        except Exception as e:
+            logger.error(f"❌ Failed to save cache to file: {e}")
     
     def _save_cache(self, data: Dict[str, Any]):
-        """Save cache to file and update in-memory cache"""
-        with open(self.cache_file, 'w') as f:
-            json.dump(data, f, indent=2)
+        """Save cache: Validate → File → Memory → Supabase (with retry)"""
+        # 1. Validate data first
+        if not self._validate_cache_integrity(data):
+            logger.error("❌ Cache data validation failed, not saving")
+            return
         
-        # Update in-memory cache
-        self._cache_data = data
+        # 2. Add timestamps to data
+        data_with_timestamps = data.copy()
+        data_with_timestamps['last_saved'] = datetime.now().isoformat()
+        
+        # 3. Save to JSON file (fast, reliable)
+        self._save_cache_to_file(data_with_timestamps)
+        
+        # 4. Update in-memory cache
+        self._cache_data = data_with_timestamps
         self._cache_loaded_at = datetime.now()
+        
+        # 5. Save to Supabase (with retry logic)
+        if self.supabase_cache.enabled:
+            try:
+                # Extract timestamps for Supabase
+                last_fetch = None
+                last_rich_fetch = None
+                
+                if data_with_timestamps.get('timestamp'):
+                    last_fetch = datetime.fromisoformat(data_with_timestamps['timestamp'])
+                
+                if data_with_timestamps.get('last_rich_fetch'):
+                    last_rich_fetch = datetime.fromisoformat(data_with_timestamps['last_rich_fetch'])
+                
+                # Save to Supabase
+                success = self.supabase_cache.save_cache(
+                    'strava',
+                    data_with_timestamps,
+                    last_fetch=last_fetch,
+                    last_rich_fetch=last_rich_fetch,
+                    project_id='fundraising-app'
+                )
+                
+                if success:
+                    logger.info("✅ Cache saved to Supabase successfully")
+                else:
+                    logger.warning("⚠️ Failed to save to Supabase, will retry in background")
+                    
+            except Exception as e:
+                logger.error(f"❌ Supabase save error: {e}")
+                # Queue for background retry
+                self._queue_supabase_save(data_with_timestamps, last_fetch, last_rich_fetch)
+    
+    def _queue_supabase_save(self, data: Dict[str, Any], last_fetch: Optional[datetime] = None, last_rich_fetch: Optional[datetime] = None):
+        """Queue data for background Supabase save"""
+        if self.supabase_cache.enabled:
+            self.supabase_cache._queue_supabase_save(
+                'strava',
+                data,
+                last_fetch=last_fetch,
+                last_rich_fetch=last_rich_fetch,
+                project_id='fundraising-app'
+            )
     
     def _is_cache_valid(self, cache_data: Dict[str, Any]) -> bool:
-        """Check if cache is still valid"""
+        """Smart cache validation with multiple criteria"""
         if not cache_data.get("timestamp"):
             return False
         
         cache_time = datetime.fromisoformat(cache_data["timestamp"])
         expiry_time = cache_time + timedelta(hours=self.cache_duration_hours)
+        now = datetime.now()
         
-        return datetime.now() < expiry_time
+        # Basic time-based validation
+        if now >= expiry_time:
+            return False
+        
+        # Smart validation: Check if we have recent rich data
+        last_rich_fetch = cache_data.get("last_rich_fetch")
+        if last_rich_fetch:
+            rich_fetch_time = datetime.fromisoformat(last_rich_fetch)
+            rich_expiry_time = rich_fetch_time + timedelta(hours=self.cache_duration_hours)
+            
+            # If rich data is also expired, definitely need refresh
+            if now >= rich_expiry_time:
+                return False
+        
+        # Additional smart checks
+        activities = cache_data.get("activities", [])
+        if not activities:
+            return False
+        
+        # Check if we have a reasonable number of activities
+        if len(activities) < 10:  # Arbitrary threshold
+            logger.warning(f"Cache has only {len(activities)} activities, may need refresh")
+        
+        return True
+    
+    def _should_refresh_cache(self, cache_data: Dict[str, Any]) -> Tuple[bool, str]:
+        """Determine if cache should be refreshed and why"""
+        if not cache_data.get("timestamp"):
+            return True, "No timestamp in cache"
+        
+        cache_time = datetime.fromisoformat(cache_data["timestamp"])
+        expiry_time = cache_time + timedelta(hours=self.cache_duration_hours)
+        now = datetime.now()
+        
+        # Check basic expiry
+        if now >= expiry_time:
+            return True, f"Cache expired {now - expiry_time} ago"
+        
+        # Check rich data expiry
+        last_rich_fetch = cache_data.get("last_rich_fetch")
+        if last_rich_fetch:
+            rich_fetch_time = datetime.fromisoformat(last_rich_fetch)
+            rich_expiry_time = rich_fetch_time + timedelta(hours=self.cache_duration_hours)
+            
+            if now >= rich_expiry_time:
+                return True, f"Rich data expired {now - rich_expiry_time} ago"
+        
+        # Check data quality
+        activities = cache_data.get("activities", [])
+        if len(activities) < 5:
+            return True, f"Too few activities ({len(activities)})"
+        
+        # Check for emergency refresh flag
+        if cache_data.get("emergency_refresh"):
+            return True, "Emergency refresh flag set"
+        
+        return False, "Cache is valid"
+    
+    def get_cache_status(self) -> Dict[str, Any]:
+        """Get comprehensive cache status for monitoring"""
+        try:
+            cache_data = self._load_cache()
+            should_refresh, reason = self._should_refresh_cache(cache_data)
+            
+            status = {
+                "cache_valid": not should_refresh,
+                "should_refresh": should_refresh,
+                "refresh_reason": reason,
+                "activities_count": len(cache_data.get("activities", [])),
+                "last_fetch": cache_data.get("timestamp"),
+                "last_rich_fetch": cache_data.get("last_rich_fetch"),
+                "last_saved": cache_data.get("last_saved"),
+                "cache_duration_hours": self.cache_duration_hours,
+                "supabase_enabled": self.supabase_cache.enabled,
+                "in_memory_cache_age": None,
+                "emergency_refresh_flag": cache_data.get("emergency_refresh", False)
+            }
+            
+            # Calculate in-memory cache age
+            if self._cache_loaded_at:
+                age_seconds = (datetime.now() - self._cache_loaded_at).total_seconds()
+                status["in_memory_cache_age"] = f"{age_seconds:.1f}s"
+            
+            return status
+            
+        except Exception as e:
+            return {
+                "error": str(e),
+                "cache_valid": False,
+                "should_refresh": True,
+                "refresh_reason": f"Error loading cache: {e}"
+            }
     
     def _filter_activities(self, activities: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Filter activities based on type and date"""
@@ -1426,12 +1631,9 @@ class SmartStravaCache:
             return False
     
     def _trigger_emergency_refresh(self):
-        """Trigger an immediate refresh when all data is lost"""
+        """Emergency refresh - rebuild from APIs when all sources fail"""
         try:
-            logger.info("🚨 EMERGENCY REFRESH: All data lost, triggering immediate refresh...")
-            
-            # Create a backup of the empty cache before refresh
-            self._create_backup()
+            logger.info("🚨 EMERGENCY REFRESH: Rebuilding cache from APIs...")
             
             # Start emergency refresh in a separate thread to avoid blocking
             import threading
@@ -1444,7 +1646,7 @@ class SmartStravaCache:
             logger.error(f"Failed to trigger emergency refresh: {e}")
     
     def _perform_emergency_refresh(self):
-        """Perform the actual emergency refresh"""
+        """Emergency refresh - rebuild from APIs when all sources fail"""
         try:
             logger.info("🔄 Performing emergency refresh...")
             
@@ -1460,10 +1662,11 @@ class SmartStravaCache:
                 "activities": filtered_activities,
                 "total_fetched": len(fresh_activities),
                 "total_filtered": len(filtered_activities),
-                "emergency_refresh": True
+                "emergency_refresh": True,
+                "last_rich_fetch": datetime.now().isoformat()  # Mark as needing rich data
             }
             
-            # Save the emergency cache
+            # Save the emergency cache (this will save to both file and Supabase)
             self._save_cache(emergency_cache)
             
             # Update in-memory cache

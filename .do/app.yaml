@@ -54,6 +54,18 @@ services:
   - key: DIGITALOCEAN_APP_ID
     scope: RUN_TIME
     type: SECRET
+  - key: SUPABASE_URL
+    scope: RUN_TIME
+    type: SECRET
+  - key: SUPABASE_SERVICE_KEY
+    scope: RUN_TIME
+    type: SECRET
+  - key: SUPABASE_ENABLED
+    scope: RUN_TIME
+    value: "true"
+  - key: PROJECT_ID
+    scope: RUN_TIME
+    value: "fundraising-app"
   
   # Health check configuration
   health_check:

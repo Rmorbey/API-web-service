@@ -136,6 +136,22 @@ def health_check():
         "cache_status": "active" if get_cache()._cache_data else "inactive"
     }
 
+@router.get("/cache-status")
+def get_cache_status():
+    """Get detailed cache status and health information"""
+    try:
+        cache = get_cache()
+        status = cache.get_cache_status()
+        
+        return {
+            "project": "strava-integration",
+            "timestamp": datetime.utcnow().isoformat(),
+            "cache_status": status
+        }
+    except Exception as e:
+        logger.error(f"Failed to get cache status: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get cache status: {str(e)}")
+
 @router.get("/cache-stats")
 def get_cache_stats(api_key: str = Depends(verify_api_key)) -> dict:
     """Get HTTP cache statistics"""

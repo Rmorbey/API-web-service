@@ -142,6 +142,22 @@ def fundraising_health() -> HealthResponse:
             cache_status="error"
         )
 
+@router.get("/cache-status")
+def get_fundraising_cache_status():
+    """Get detailed fundraising cache status and health information"""
+    try:
+        cache = get_cache()
+        status = cache.get_cache_status()
+        
+        return {
+            "project": "fundraising-scraper",
+            "timestamp": datetime.now().isoformat(),
+            "cache_status": status
+        }
+    except Exception as e:
+        logger.error(f"Failed to get fundraising cache status: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get fundraising cache status: {str(e)}")
+
 @router.get("/data", response_model=FundraisingDataResponse)
 async def get_fundraising_data(api_key: str = Depends(verify_api_key)) -> FundraisingDataResponse:
     """Get current fundraising data from cache with async processing"""
