@@ -25,6 +25,10 @@ fi
 echo "🔑 Loading environment variables..."
 export $(cat .env | grep -v '^#' | xargs)
 
+# Force production environment
+echo "🔧 Setting production environment..."
+export ENVIRONMENT=production
+
 # Install/update dependencies
 echo "📋 Installing production dependencies..."
 pip install -r requirements.txt --quiet
@@ -32,7 +36,9 @@ pip install -r requirements.txt --quiet
 # Start the server in production mode (no reload, proper logging)
 echo "🌐 Starting production server on http://0.0.0.0:8000"
 echo "📊 API Documentation: http://0.0.0.0:8000/docs"
-echo "🎯 Demo Page: http://0.0.0.0:8000/demo"
+echo "🚫 Demo Page: http://0.0.0.0:8000/demo (DISABLED)"
+echo "🚫 Fundraising Demo: http://0.0.0.0:8000/fundraising-demo (DISABLED)"
+echo "🔧 Environment: PRODUCTION (Demo endpoints disabled)"
 echo ""
 
 # Production settings: single worker for rate-limited APIs, proper logging

@@ -26,14 +26,25 @@ Our initial plan had **SIGNIFICANT SECURITY GAPS** that could lead to:
 
 ## 🏗️ **Architecture Overview**
 
+### **Cache Flow (Final Design):**
 ```
 Request → In-Memory Cache (5min TTL) → Response
          ↓ (if expired)
-         JSON File Cache (6hr TTL) → Response  
-         ↓ (if expired)
+         JSON File Cache (populated from Supabase) → Response  
+         ↓ (if expired/corrupted)
          Supabase Database (persistent) → Response
-         ↓ (if expired)
-         API Calls (Strava/JustGiving) → Response
+         ↓ (if expired/corrupted)
+         Emergency Refresh (API Calls) → Response
+```
+
+### **Save Flow (Final Design):**
+```
+New Data → Validate → Save to JSON File → Update Memory → Save to Supabase (with retry)
+```
+
+### **Server Startup Flow:**
+```
+Server Start → Load from Supabase → Populate JSON Files → Check Timestamps → Refresh if Needed
 ```
 
 ## 📅 **Implementation Phases**
@@ -92,21 +103,37 @@ Request → In-Memory Cache (5min TTL) → Response
 
 ### **1.2 Database Schema Design**
 ```sql
--- Cache storage table
+-- Projects table (for multi-project support)
+CREATE TABLE projects (
+    id SERIAL PRIMARY KEY,
+    project_name VARCHAR(100) NOT NULL UNIQUE,
+    description TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    is_active BOOLEAN DEFAULT true
+);
+
+-- Cache storage table (project-aware)
 CREATE TABLE cache_storage (
     id SERIAL PRIMARY KEY,
-    cache_type VARCHAR(50) NOT NULL, -- 'strava' or 'fundraising'
+    project_id INTEGER REFERENCES projects(id),
+    cache_type VARCHAR(50) NOT NULL, -- 'strava', 'fundraising', 'custom'
     data JSONB NOT NULL,
     last_fetch TIMESTAMP WITH TIME ZONE,
     last_rich_fetch TIMESTAMP WITH TIME ZONE,
+    data_size INTEGER, -- Track data size for monitoring
+    cache_version VARCHAR(20) DEFAULT '1.0', -- Version control for cache format
+    retention_days INTEGER DEFAULT 30, -- Data retention policy
+    metadata JSONB DEFAULT '{}', -- Flexible metadata storage
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    UNIQUE(cache_type)
+    UNIQUE(project_id, cache_type)
 );
 
 -- Indexes for performance
 CREATE INDEX idx_cache_type ON cache_storage(cache_type);
+CREATE INDEX idx_project_id ON cache_storage(project_id);
 CREATE INDEX idx_updated_at ON cache_storage(updated_at);
+CREATE INDEX idx_data_size ON cache_storage(data_size);
 
 -- Row Level Security (RLS)
 ALTER TABLE cache_storage ENABLE ROW LEVEL SECURITY;
@@ -271,90 +298,91 @@ def __init__(self, cache_duration_hours: int = None):
 #### **Update `_load_cache` method:**
 ```python
 def _load_cache(self) -> Dict[str, Any]:
-    """Load cache with Supabase → File → API fallback"""
+    """Load cache: In-Memory → JSON File → Supabase → Emergency"""
     now = datetime.now()
     
-    # Check in-memory cache first (5 min TTL)
+    # 1. Check in-memory cache first (fastest)
     if (self._cache_data is not None and 
         self._cache_loaded_at is not None and 
         (now - self._cache_loaded_at).total_seconds() < self._cache_ttl):
         return self._cache_data
     
-    # Try Supabase first
-    supabase_data = self.supabase_manager.get_cache('strava')
-    if supabase_data:
-        cache_data = supabase_data['data']
-        self._last_fetch_time = supabase_data.get('last_fetch')
-        self._last_rich_fetch_time = supabase_data.get('last_rich_fetch')
-        
-        if self._validate_cache_integrity(cache_data):
-            self._cache_data = cache_data
-            self._cache_loaded_at = now
-            logger.info("✅ Loaded cache from Supabase")
-            return cache_data
-        else:
-            logger.warning("⚠️ Supabase cache failed integrity check")
-    
-    # Fallback to file system
+    # 2. Try JSON file (populated from Supabase at startup)
     try:
         with open(self.cache_file, 'r') as f:
             self._cache_data = json.load(f)
             self._cache_loaded_at = now
             
             if self._validate_cache_integrity(self._cache_data):
-                # Save to Supabase for next time
-                self.supabase_manager.save_cache('strava', self._cache_data)
-                logger.info("✅ Loaded cache from file, saved to Supabase")
+                logger.info("✅ Loaded cache from JSON file")
                 return self._cache_data
             else:
-                logger.warning("Cache integrity check failed, attempting to restore from backup...")
-                if self._restore_from_backup():
-                    return self._cache_data
-                else:
-                    logger.error("All backups failed, triggering immediate refresh...")
-                    self._cache_data = {"timestamp": None, "activities": []}
-                    self._trigger_emergency_refresh()
-                    return self._cache_data
-                    
+                logger.warning("⚠️ JSON file corrupted, trying Supabase...")
+                
     except (FileNotFoundError, json.JSONDecodeError) as e:
-        logger.warning(f"Cache file error: {e}, attempting to restore from backup...")
-        if self._restore_from_backup():
-            return self._cache_data
+        logger.warning(f"JSON file error: {e}, trying Supabase...")
+    
+    # 3. Fallback to Supabase (source of truth)
+    supabase_data = self.supabase_manager.get_cache('strava', project_id=self.project_id)
+    if supabase_data:
+        cache_data = supabase_data['data']
+        if self._validate_cache_integrity(cache_data):
+            self._cache_data = cache_data
+            self._cache_loaded_at = now
+            # Repopulate JSON file from Supabase
+            self._save_cache_to_file(cache_data)
+            logger.info("✅ Loaded cache from Supabase, repopulated JSON file")
+            return cache_data
         else:
-            logger.error("All backups failed, triggering immediate refresh...")
-            self._cache_data = {"timestamp": None, "activities": []}
-            self._trigger_emergency_refresh()
-            return self._cache_data
+            logger.error("❌ Supabase data corrupted!")
+    
+    # 4. Emergency refresh (all sources failed)
+    logger.error("All cache sources failed, triggering emergency refresh...")
+    self._cache_data = {"timestamp": None, "activities": []}
+    self._trigger_emergency_refresh()
+    return self._cache_data
 ```
 
 #### **Update `_save_cache` method:**
 ```python
 def _save_cache(self, data: Dict[str, Any]):
-    """Save cache to both file system and Supabase"""
+    """Save cache: Validate → File → Memory → Supabase (with retry)"""
+    # 1. Validate data first
+    if not self._validate_cache_integrity(data):
+        logger.error("Invalid data, not saving")
+        return False
+    
+    # 2. Add timestamps to data
+    data_with_timestamps = {
+        **data,
+        "last_fetch": self._last_fetch_time.isoformat() if self._last_fetch_time else None,
+        "last_rich_fetch": self._last_rich_fetch_time.isoformat() if self._last_rich_fetch_time else None
+    }
+    
+    # 3. Save to JSON file (fast, reliable)
+    with open(self.cache_file, 'w') as f:
+        json.dump(data_with_timestamps, f, indent=2)
+    
+    # 4. Update in-memory cache
+    self._cache_data = data_with_timestamps
+    self._cache_loaded_at = datetime.now()
+    
+    # 5. Save to Supabase (with retry logic)
+    self._save_to_supabase_with_retry(data_with_timestamps)
+    
+    logger.info("💾 Cache saved to file and memory")
+
+def _save_to_supabase_with_retry(self, data: Dict[str, Any]):
+    """Save to Supabase with background retry until success"""
     try:
-        # Save to file system (existing logic)
-        with open(self.cache_file, 'w') as f:
-            json.dump(data, f, indent=2)
-        
-        # Create backup
-        self._create_backup()
-        
-        # Update in-memory cache
-        self._cache_data = data
-        self._cache_loaded_at = datetime.now()
-        
-        # Save to Supabase with timestamps
-        self.supabase_manager.save_cache(
-            'strava', 
-            data,
-            last_fetch=self._last_fetch_time,
-            last_rich_fetch=self._last_rich_fetch_time
-        )
-        
-        logger.info("💾 Cache saved to file system and Supabase")
+        # Try immediate save
+        self.supabase_manager.save_cache('strava', data, project_id=self.project_id)
+        logger.info("✅ Saved to Supabase immediately")
         
     except Exception as e:
-        logger.error(f"Failed to save cache: {e}")
+        logger.warning(f"Supabase save failed: {e}, queuing for retry")
+        # Queue for background retry
+        self._queue_supabase_save(data)
 ```
 
 ### **3.2 Update SmartFundraisingCache**
@@ -375,7 +403,31 @@ Apply similar changes to the fundraising cache:
 
 #### **Add smart startup logic to SmartStravaCache:**
 ```python
-def _should_fetch_immediately(self) -> bool:
+def initialize_cache_system(self):
+    """Initialize cache system on server startup"""
+    logger.info("🚀 Initializing cache system...")
+    
+    # 1. Load from Supabase (empty JSON files on restart)
+    supabase_data = self.supabase_manager.get_cache('strava', project_id=self.project_id)
+    
+    if supabase_data:
+        # 2. Populate JSON files from Supabase
+        self._save_cache_to_file(supabase_data['data'])
+        self._last_fetch_time = supabase_data.get('last_fetch')
+        self._last_rich_fetch_time = supabase_data.get('last_rich_fetch')
+        
+        # 3. Check if immediate refresh is needed
+        if self._should_refresh_immediately():
+            logger.info("🔄 Cache is stale, triggering immediate refresh")
+            self._trigger_immediate_refresh()
+        
+        logger.info("✅ Cache system initialized from Supabase")
+    else:
+        # 4. No Supabase data, start fresh
+        logger.info("ℹ️ No Supabase data, will populate on first refresh")
+        self._cache_data = {"timestamp": None, "activities": []}
+
+def _should_refresh_immediately(self) -> bool:
     """Check if we need to fetch data immediately on startup"""
     if not self._last_fetch_time:
         return True  # No previous data, fetch immediately
@@ -383,29 +435,28 @@ def _should_fetch_immediately(self) -> bool:
     time_since_fetch = datetime.now() - self._last_fetch_time
     return time_since_fetch.total_seconds() > (self.cache_duration_hours * 3600)
 
-def _start_automated_refresh(self):
-    """Start refresh system with smart timing"""
-    # Check if we need immediate refresh
-    if self._should_fetch_immediately():
-        logger.info("🔄 Cache is stale, triggering immediate refresh")
-        self._trigger_immediate_refresh()
-    
-    # Start normal scheduled refresh
-    if self._refresh_thread and self._refresh_thread.is_alive():
-        return
-    
-    self._refresh_thread = threading.Thread(target=self._automated_refresh_loop, daemon=True)
-    self._refresh_thread.start()
-    logger.info("🔄 Automated refresh system started with smart timing")
-
-def _trigger_immediate_refresh(self):
-    """Trigger immediate refresh on startup if needed"""
+def _trigger_emergency_refresh(self):
+    """Emergency refresh - rebuild from APIs when all sources fail"""
     try:
-        logger.info("🔄 Starting immediate refresh...")
-        self._perform_scheduled_refresh()
-        self._last_refresh = datetime.now()
+        logger.info("🔄 Starting emergency refresh...")
+        
+        # 1. Rebuild from APIs (Strava/JustGiving)
+        fresh_data = self._fetch_from_apis()
+        
+        # 2. Update timestamps (CRITICAL!)
+        self._last_fetch_time = datetime.now()
+        self._last_rich_fetch_time = datetime.now()
+        
+        # 3. Populate JSON caches with fresh data
+        self._save_cache(fresh_data)
+        
+        # 4. Update Supabase when connection restored
+        self._sync_to_supabase_when_available()
+        
+        logger.info("✅ Emergency refresh completed")
+        
     except Exception as e:
-        logger.error(f"❌ Immediate refresh failed: {e}")
+        logger.error(f"❌ Emergency refresh failed: {e}")
 ```
 
 #### **Update fundraising cache with similar logic:**
@@ -572,12 +623,16 @@ SUPABASE_ENABLED=true
 STRAVA_CACHE_HOURS=6
 FUNDRAISING_CACHE_MINUTES=15
 CACHE_TTL_SECONDS=300
+
+# Project Configuration
+PROJECT_ID=fundraising-app
 ```
 
 ### **Feature Flags**
 - `SUPABASE_ENABLED` - Enable/disable Supabase integration
-- `FALLBACK_TO_FILE` - Enable file system fallback
-- `IMMEDIATE_REFRESH` - Enable smart refresh on startup
+- `GRACEFUL_SHUTDOWN` - Enable graceful shutdown with pending save completion
+- `EMERGENCY_REFRESH` - Enable emergency refresh when all sources fail
+- `BACKGROUND_RETRY` - Enable background retry for failed Supabase saves
 
 ---
 
@@ -608,10 +663,11 @@ CACHE_TTL_SECONDS=300
 ## **🚨 Risk Mitigation**
 
 ### **Technical Risks**
-- **Supabase downtime** → File system fallback
-- **Data corruption** → Integrity validation + backup restore
-- **Performance degradation** → In-memory cache optimization
-- **Concurrency issues** → Thread-safe implementation
+- **Supabase downtime** → Emergency refresh from APIs + background retry
+- **Data corruption** → Integrity validation + emergency refresh
+- **Performance degradation** → In-memory cache optimization + JSON file fallback
+- **Concurrency issues** → Thread-safe implementation + file locking
+- **Server restarts** → Graceful shutdown + pending save completion
 
 ### **Operational Risks**
 - **Deployment issues** → Feature flags + gradual rollout
