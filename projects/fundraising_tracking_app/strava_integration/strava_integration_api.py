@@ -332,10 +332,13 @@ async def cleanup_backups(request: CleanupRequest, api_key: str = Depends(verify
             "timestamp": datetime.now().isoformat()
         }
 
-# Demo endpoints (no API key required for demo pages)
+# Demo endpoints (development only - no API key required for demo pages)
 @router.get("/demo/feed")
 async def get_activity_feed_demo(request: FeedRequest = Depends()):
-    """Get a list of processed Strava activities for demo page (no API key required)"""
+    """Get a list of processed Strava activities for demo page (development environment only)"""
+    # Verify we're in development environment
+    from .environment_utils import verify_development_access
+    verify_development_access()
     try:
         cache_instance = get_cache()
         raw_activities = cache_instance.get_activities_smart(request.limit)
@@ -403,7 +406,10 @@ async def get_activity_feed_demo(request: FeedRequest = Depends()):
 
 @router.get("/demo/map-tiles/{z}/{x}/{y}")
 def get_map_tiles_demo(z: int = Path(..., ge=0, le=18), x: int = Path(...), y: int = Path(...)):
-    """Get map tiles for demo page (no API key required)"""
+    """Get map tiles for demo page (development environment only)"""
+    # Verify we're in development environment
+    from .environment_utils import verify_development_access
+    verify_development_access()
     try:
         # Use Jawg Maps for demo
         jawg_token = os.getenv("JAWG_ACCESS_TOKEN")

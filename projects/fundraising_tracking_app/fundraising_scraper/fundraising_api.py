@@ -266,10 +266,13 @@ async def get_donations(request: DonationsFilterRequest = Depends(), api_key: st
             detail=f"Error fetching donations: {str(e)}"
         )
 
-# Demo endpoints (no API key required for demo pages)
+# Demo endpoints (development only - no API key required for demo pages)
 @router.get("/demo/data", response_model=FundraisingDataResponse)
 async def get_fundraising_data_demo() -> FundraisingDataResponse:
-    """Get fundraising data for demo page (no API key required)"""
+    """Get fundraising data for demo page (development environment only)"""
+    # Verify we're in development environment
+    from ..strava_integration.environment_utils import verify_development_access
+    verify_development_access()
     try:
         cache = get_cache()
         data = cache.get_fundraising_data()
@@ -299,7 +302,10 @@ async def get_fundraising_data_demo() -> FundraisingDataResponse:
 
 @router.get("/demo/donations", response_model=DonationsResponse)
 async def get_donations_demo(request: DonationsFilterRequest = Depends()) -> DonationsResponse:
-    """Get donations data for demo page (no API key required)"""
+    """Get donations for demo page (development environment only)"""
+    # Verify we're in development environment
+    from ..strava_integration.environment_utils import verify_development_access
+    verify_development_access()
     try:
         cache = get_cache()
         data = cache.get_fundraising_data()

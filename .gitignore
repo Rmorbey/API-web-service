@@ -201,3 +201,6 @@ Dockerfile.local
 *.bak
 *.backup
 *.old
+
+# Internal documentation (not for public sharing)
+docs/internal/
