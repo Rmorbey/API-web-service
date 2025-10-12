@@ -406,9 +406,12 @@ class SmartStravaCache:
                 if response.status_code == 200:
                     return response
                 elif response.status_code == 401:
-                    logger.warning("Token expired, attempting refresh...")
+                    logger.warning("🔄 Access token expired, refreshing...")
                     # Token might be expired, try to refresh
-                    self.token_manager.get_valid_access_token()
+                    new_token = self.token_manager.get_valid_access_token()
+                    # Update headers with new token for retry
+                    headers = headers.copy()
+                    headers["Authorization"] = f"Bearer {new_token}"
                     if attempt < max_retries - 1:
                         continue
                     raise Exception("Authentication failed after token refresh")
@@ -1352,6 +1355,9 @@ class SmartStravaCache:
         if self._batch_thread and self._batch_thread.is_alive():
             return
         
+        # Mark batching as in progress
+        self._mark_batching_in_progress(True)
+        
         self._batch_thread = threading.Thread(target=self._batch_processing_loop, daemon=True)
         self._batch_thread.start()
         logger.info("🔄 Batch processing started (20 activities every 15 minutes)")
@@ -1383,8 +1389,64 @@ class SmartStravaCache:
             
             logger.info("✅ Batch processing complete")
             
+            # Mark batching as complete and validate results
+            self._mark_batching_in_progress(False)
+            self._validate_post_batch_results()
+            
         except Exception as e:
             logger.error(f"❌ Batch processing failed: {e}")
+            # Mark batching as complete even on failure
+            self._mark_batching_in_progress(False)
+    
+    def _mark_batching_in_progress(self, in_progress: bool):
+        """Mark batching as in progress or complete in cache"""
+        try:
+            cache_data = self._load_cache()
+            cache_data["batching_in_progress"] = in_progress
+            cache_data["batching_status_updated"] = datetime.now().isoformat()
+            
+            # Save to file and Supabase
+            self._save_cache(cache_data)
+            
+            status = "started" if in_progress else "completed"
+            logger.info(f"🔄 Batching process {status}")
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to update batching status: {e}")
+    
+    def _validate_post_batch_results(self):
+        """Validate results after batch processing completes"""
+        try:
+            cache_data = self._load_cache()
+            activities = cache_data.get("activities", [])
+            
+            if not activities:
+                logger.warning("No activities to validate after batch processing")
+                return
+            
+            total_activities = len(activities)
+            polyline_count = sum(1 for activity in activities if activity.get("map", {}).get("polyline"))
+            bounds_count = sum(1 for activity in activities if activity.get("map", {}).get("bounds"))
+            
+            polyline_percentage = (polyline_count / total_activities) * 100
+            bounds_percentage = (bounds_count / total_activities) * 100
+            
+            logger.info(f"📊 Post-batch validation: {polyline_count}/{total_activities} activities have polyline data ({polyline_percentage:.1f}%)")
+            logger.info(f"📊 Post-batch validation: {bounds_count}/{total_activities} activities have bounds data ({bounds_percentage:.1f}%)")
+            
+            # If polyline data is still below 30%, trigger another batch process
+            if polyline_percentage < 30.0:
+                logger.warning(f"⚠️ Polyline data coverage is only {polyline_percentage:.1f}%, triggering second batch process")
+                logger.info("🔄 Starting second batch process to collect missing polyline/bounds data")
+                
+                # Reset batching status and start again
+                self._mark_batching_in_progress(True)
+                self._start_batch_processing()
+            else:
+                logger.info(f"✅ Polyline data coverage is {polyline_percentage:.1f}%, batch processing successful")
+                
+        except Exception as e:
+            logger.error(f"❌ Post-batch validation failed: {e}")
     
     def _get_activities_needing_update(self) -> List[Dict[str, Any]]:
         """Get activities that need updating (not older than 3 weeks)"""
@@ -1531,7 +1593,7 @@ class SmartStravaCache:
             return {"success": False, "message": f"Error cleaning invalid activities: {str(e)}"}
     
     def _validate_cache_integrity(self, cache_data: Dict[str, Any]) -> bool:
-        """Validate cache integrity - check for data loss indicators"""
+        """Validate cache integrity - check for data loss indicators with proper batching support"""
         try:
             activities = cache_data.get("activities", [])
             if not activities:
@@ -1558,10 +1620,21 @@ class SmartStravaCache:
             polyline_count = sum(1 for activity in activities if activity.get("map", {}).get("polyline"))
             bounds_count = sum(1 for activity in activities if activity.get("map", {}).get("bounds"))
             
-            # For Run/Ride activities, most should have polyline data (outdoor GPS activities)
-            # But be more lenient during emergency refresh or initial data collection
+            # Determine if we're in the middle of batching process
+            is_emergency_refresh = cache_data.get("emergency_refresh", False)
+            is_fresh_cache = cache_data.get("timestamp") and (datetime.now() - datetime.fromisoformat(cache_data["timestamp"])).total_seconds() < 3600  # Less than 1 hour old
+            is_batching_in_progress = cache_data.get("batching_in_progress", False)
+            
+            # During emergency refresh or fresh cache, allow batching to complete
+            if is_emergency_refresh or is_fresh_cache or is_batching_in_progress:
+                logger.info(f"Cache validation: Allowing batching process to complete (emergency: {is_emergency_refresh}, fresh: {is_fresh_cache}, batching: {is_batching_in_progress})")
+                logger.info(f"Cache integrity check passed: {basic_data_count}/{total_activities} activities have basic data, {polyline_count}/{total_activities} have polyline data, {bounds_count}/{total_activities} have bounds data")
+                return True
+            
+            # After batching should be complete, enforce the 30% polyline threshold
             if polyline_count < total_activities * 0.3:
                 logger.warning(f"Cache integrity check failed: Only {polyline_count}/{total_activities} activities have polyline data (Run/Ride activities should have GPS)")
+                logger.warning("This indicates batching may not have completed successfully or needs to be re-run")
                 return False
             
             # Check for recent activities (should have complete GPS data)
@@ -1662,7 +1735,8 @@ class SmartStravaCache:
                 "activities": filtered_activities,
                 "total_fetched": len(fresh_activities),
                 "total_filtered": len(filtered_activities),
-                "emergency_refresh": True,
+                "emergency_refresh": False,  # Clear the flag after successful refresh
+                "batching_in_progress": True,  # Mark batching as in progress
                 "last_rich_fetch": datetime.now().isoformat()  # Mark as needing rich data
             }
             

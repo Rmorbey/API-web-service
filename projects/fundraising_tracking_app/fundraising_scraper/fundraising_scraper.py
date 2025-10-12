@@ -294,7 +294,7 @@ class SmartFundraisingCache:
                 "total_raised": fresh_data.get("total_raised", 0),
                 "donations": fresh_data.get("donations", []),
                 "total_donations": fresh_data.get("total_donations", 0),
-                "emergency_refresh": True,
+                "emergency_refresh": False,  # Clear the flag after successful refresh
                 "last_updated": datetime.now().isoformat()
             }
             
@@ -375,7 +375,8 @@ class SmartFundraisingCache:
         try:
             logger.info(f"🔍 Scraping fundraising data from: {self.justgiving_url}")
             
-            with get_http_client() as client:
+            # Use httpx directly instead of the shared client to avoid reuse issues
+            with httpx.Client(timeout=30.0) as client:
                 response = client.get(self.justgiving_url)
                 response.raise_for_status()
                 
