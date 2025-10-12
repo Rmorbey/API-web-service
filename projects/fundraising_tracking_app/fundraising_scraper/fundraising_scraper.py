@@ -394,46 +394,46 @@ class SmartFundraisingCache:
                         script_content = script.string
                         logger.info("Found script with donation data")
                         
-                # Extract total amount using regex - updated pattern
-                total_match = re.search(r'"totalAmount":\{"value":(\d+),"currencyCode":"GBP"', script_content)
-                if total_match:
-                    total_raised = float(total_match.group(1)) / 100  # Convert from pence
-                    logger.info(f"Found total amount: £{total_raised:.2f}")
-                
-                # Extract donation count
-                count_match = re.search(r'"donationCount":(\d+)', script_content)
-                if count_match:
-                    donation_count = int(count_match.group(1))
-                    logger.info(f"Found donation count: {donation_count}")
-                
-                # Extract target amount - updated pattern
-                target_match = re.search(r'"targetWithCurrency":\{"value":(\d+),"currencyCode":"GBP"', script_content)
-                if target_match:
-                    target_amount = float(target_match.group(1)) / 100
-                    logger.info(f"Found target amount: £{target_amount:.2f}")
-                
-                # Extract individual donations using regex - updated pattern
-                donation_pattern = r'"displayName":"([^"]+)","avatar":"[^"]*","message":"([^"]*)"[^}]*"amount":\{"value":(\d+),"currencyCode":"GBP"'
-                donation_matches = re.findall(donation_pattern, script_content)
-                
-                for name, message, amount_str in donation_matches:
-                    try:
-                        amount = float(amount_str) / 100
-                        donation_data_item = {
-                            "amount": amount,
-                            "name": name,
-                            "message": message,
-                            "timestamp": datetime.now().isoformat()
-                        }
-                        donations.append(donation_data_item)
-                        logger.info(f"Found donation: {name} - £{amount:.2f} - {message}")
-                    except Exception as e:
-                        logger.warning(f"Error parsing donation: {e}")
-                        continue
-                
-                if total_raised > 0 or donations:
-                    logger.info(f"✅ Successfully parsed fundraising data: £{total_raised:.2f} raised from {len(donations)} donations")
-                    break
+                        # Extract total amount using regex - updated pattern
+                        total_match = re.search(r'"totalAmount":\{"value":(\d+),"currencyCode":"GBP"', script_content)
+                        if total_match:
+                            total_raised = float(total_match.group(1)) / 100  # Convert from pence
+                            logger.info(f"Found total amount: £{total_raised:.2f}")
+                        
+                        # Extract donation count
+                        count_match = re.search(r'"donationCount":(\d+)', script_content)
+                        if count_match:
+                            donation_count = int(count_match.group(1))
+                            logger.info(f"Found donation count: {donation_count}")
+                        
+                        # Extract target amount - updated pattern
+                        target_match = re.search(r'"targetWithCurrency":\{"value":(\d+),"currencyCode":"GBP"', script_content)
+                        if target_match:
+                            target_amount = float(target_match.group(1)) / 100
+                            logger.info(f"Found target amount: £{target_amount:.2f}")
+                        
+                        # Extract individual donations using regex - updated pattern
+                        donation_pattern = r'"displayName":"([^"]+)","avatar":"[^"]*","message":"([^"]*)"[^}]*"amount":\{"value":(\d+),"currencyCode":"GBP"'
+                        donation_matches = re.findall(donation_pattern, script_content)
+                        
+                        for name, message, amount_str in donation_matches:
+                            try:
+                                amount = float(amount_str) / 100
+                                donation_data_item = {
+                                    "amount": amount,
+                                    "name": name,
+                                    "message": message,
+                                    "timestamp": datetime.now().isoformat()
+                                }
+                                donations.append(donation_data_item)
+                                logger.info(f"Found donation: {name} - £{amount:.2f} - {message}")
+                            except Exception as e:
+                                logger.warning(f"Error parsing donation: {e}")
+                                continue
+                        
+                        if total_raised > 0 or donations:
+                            logger.info(f"✅ Successfully parsed fundraising data: £{total_raised:.2f} raised from {len(donations)} donations")
+                            break
                 
                 # Fallback to old method if JSON parsing failed
                 if total_raised == 0.0 and not donations:
