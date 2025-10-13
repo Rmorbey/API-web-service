@@ -51,7 +51,7 @@ class SmartStravaCache:
         
         # Rate limiting tracking
         self.api_calls_made = 0
-        self.api_calls_reset_time = datetime.now()
+        self.api_calls_reset_time = datetime.utcnow()
         self.max_calls_per_15min = 200
         self.max_calls_per_day = 1000
         

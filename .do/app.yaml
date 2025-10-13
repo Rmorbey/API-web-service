@@ -66,6 +66,9 @@ services:
   - key: PROJECT_ID
     scope: RUN_TIME
     value: "fundraising-app"
+  - key: TZ
+    scope: RUN_TIME
+    value: "Europe/London"
   
   # Health check configuration
   health_check:
