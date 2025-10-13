@@ -169,14 +169,14 @@ class SmartFundraisingCache:
         
         # 2. Add timestamps to data
         data_with_timestamps = data.copy()
-        data_with_timestamps['last_saved'] = datetime.now().isoformat()
+        data_with_timestamps['last_saved'] = datetime.utcnow().isoformat()
         
         # 3. Save to JSON file (fast, reliable)
         self._save_cache_to_file(data_with_timestamps)
         
         # 4. Update in-memory cache
         self._cache_data = data_with_timestamps
-        self._cache_loaded_at = datetime.now()
+        self._cache_loaded_at = datetime.utcnow()
         
         # 5. Save to Supabase (with retry logic)
         if self.supabase_cache.enabled:
@@ -217,8 +217,13 @@ class SmartFundraisingCache:
             return True, "No timestamp in cache"
         
         cache_time = datetime.fromisoformat(cache_data["timestamp"])
+        # Ensure we're comparing times in the same timezone (UTC)
+        if cache_time.tzinfo is None:
+            # If cache time has no timezone info, assume it's UTC
+            cache_time = cache_time.replace(tzinfo=None)
+        
         expiry_time = cache_time + timedelta(minutes=15)  # 15-minute refresh for fundraising
-        now = datetime.now()
+        now = datetime.utcnow()  # Use UTC consistently
         
         # Debug logging to understand time comparison
         logger.info(f"🕐 Cache time: {cache_time}")
@@ -297,18 +302,18 @@ class SmartFundraisingCache:
             logger.info(f"✅ Emergency refresh: Scraped fundraising data")
             
             emergency_cache = {
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": datetime.utcnow().isoformat(),
                 "total_raised": fresh_data.get("total_raised", 0),
                 "donations": fresh_data.get("donations", []),
                 "total_donations": fresh_data.get("total_donations", 0),
                 "emergency_refresh": True,
-                "last_updated": datetime.now().isoformat()
+                "last_updated": datetime.utcnow().isoformat()
             }
             
             self._save_cache(emergency_cache)
             
             self._cache_data = emergency_cache
-            self._cache_loaded_at = datetime.now()
+            self._cache_loaded_at = datetime.utcnow()
             
             logger.info(f"✅ Emergency fundraising refresh complete")
             
@@ -406,11 +411,11 @@ class SmartFundraisingCache:
 
             # Create fresh data (will be merged with existing)
             fresh_data = {
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": datetime.utcnow().isoformat(),
                 "total_raised": total_raised,
                 "donations": donations,
                 "total_donations": len(donations),
-                "last_updated": datetime.now().isoformat()
+                "last_updated": datetime.utcnow().isoformat()
             }
 
             logger.info(f"💰 Scraped: £{total_raised} raised, {len(donations)} donations")
