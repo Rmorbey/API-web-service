@@ -155,7 +155,7 @@ projects/fundraising_tracking_app/
 
 ### **Current Status**
 - **Production Deployed**: DigitalOcean App Platform
-- **Domain**: `https://api.russellmorbey.co.uk/`
+- **Domain**: `https://api.your-domain.com/`
 - **Environment**: Production with automated token refresh
 - **Monitoring**: Health checks and performance metrics
 
