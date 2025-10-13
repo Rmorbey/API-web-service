@@ -98,7 +98,7 @@ class SmartStravaCache:
                             logger.info(f"🔄 Cache needs refresh: {reason}")
                             self._trigger_emergency_refresh()
                         else:
-                            logger.info("✅ Cache is fresh and valid")
+                            logger.debug("✅ Cache is fresh and valid")  # Reduce log spam for valid cache
                     else:
                         logger.warning("❌ Supabase data integrity check failed, triggering refresh...")
                         self._trigger_emergency_refresh()

@@ -220,12 +220,14 @@ class SmartFundraisingCache:
         expiry_time = cache_time + timedelta(minutes=15)  # 15-minute refresh for fundraising
         now = datetime.now()  # Use server timezone (will be Europe/London)
         
-        # Debug logging to understand time comparison
-        logger.info(f"🕐 Cache time: {cache_time}")
-        logger.info(f"🕐 Current time: {now}")
-        logger.info(f"🕐 Expiry time: {expiry_time}")
-        logger.info(f"🕐 Time until expiry: {expiry_time - now}")
-        logger.info(f"🕐 Cache age: {now - cache_time}")
+        # Debug logging to understand time comparison (only log when cache is about to expire)
+        time_until_expiry = expiry_time - now
+        if time_until_expiry.total_seconds() < 300:  # Less than 5 minutes
+            logger.info(f"⏰ Cache expiring soon: {time_until_expiry} remaining")
+            logger.info(f"🕐 Cache time: {cache_time}")
+            logger.info(f"🕐 Current time: {now}")
+            logger.info(f"🕐 Expiry time: {expiry_time}")
+            logger.info(f"🕐 Cache age: {now - cache_time}")
         
         if now >= expiry_time:
             return True, f"Cache expired {now - expiry_time} ago"

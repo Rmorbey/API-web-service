@@ -182,9 +182,12 @@ class RequestLogger:
         }
         
         if is_suspicious:
-            logger.warning(f"Suspicious request detected: {log_data}")
+            logger.warning(f"🚨 Suspicious request detected: {log_data}")
+        elif path in ["/api/health", "/health"]:
+            # Reduce health check logging to debug level to avoid log spam
+            logger.debug(f"💚 Health check: {log_data}")
         else:
-            logger.info(f"Request processed: {log_data}")
+            logger.info(f"📝 Request processed: {log_data}")
 
 
 class SecurityMiddleware:
