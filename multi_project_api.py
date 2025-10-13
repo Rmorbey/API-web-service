@@ -12,8 +12,12 @@ from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import os
 import re
+import logging
 from datetime import datetime
 from dotenv import load_dotenv
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 # Import security middleware
 from projects.fundraising_tracking_app.strava_integration.security import SecurityMiddleware
@@ -28,6 +32,7 @@ from fastapi.exceptions import RequestValidationError
 
 # Import HTTP client lifespan manager
 from projects.fundraising_tracking_app.strava_integration.http_clients import lifespan_http_clients
+from contextlib import asynccontextmanager
 
 # Import cache middleware
 from projects.fundraising_tracking_app.strava_integration.cache_middleware import CacheMiddleware
@@ -35,6 +40,39 @@ from projects.fundraising_tracking_app.strava_integration.compression_middleware
 
 # Load environment variables
 load_dotenv()
+
+# Create startup initialization function
+@asynccontextmanager
+async def lifespan_with_cache_init(app: FastAPI):
+    """Application lifespan with cache system initialization"""
+    # Startup
+    logger.info("🚀 Starting Multi-Project API with cache initialization...")
+    
+    # Initialize cache systems to start automated refresh threads
+    try:
+        # Initialize Strava cache system
+        from projects.fundraising_tracking_app.strava_integration.strava_integration_api import get_cache as get_strava_cache
+        strava_cache = get_strava_cache()
+        logger.info("✅ Strava cache system initialized with automated refresh")
+        
+        # Initialize Fundraising cache system  
+        from projects.fundraising_tracking_app.fundraising_scraper.fundraising_api import get_cache as get_fundraising_cache
+        fundraising_cache = get_fundraising_cache()
+        logger.info("✅ Fundraising cache system initialized with automated refresh")
+        
+        logger.info("🔄 All automated refresh systems started successfully!")
+        
+    except Exception as e:
+        logger.error(f"❌ Failed to initialize cache systems: {e}")
+    
+    # Initialize HTTP clients
+    await lifespan_http_clients(app)
+    
+    yield
+    
+    # Shutdown
+    logger.info("🛑 Shutting down Multi-Project API...")
+    logger.info("✅ Multi-Project API shutdown complete!")
 
 # Create main FastAPI app with lifespan management
 app = FastAPI(
@@ -86,7 +124,7 @@ app = FastAPI(
         "name": "MIT License",
         "url": "https://opensource.org/licenses/MIT",
     },
-    lifespan=lifespan_http_clients,
+    lifespan=lifespan_with_cache_init,
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_url="/openapi.json"
