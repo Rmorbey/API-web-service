@@ -585,7 +585,7 @@
                 console.log('Loading all activities since May 22, 2025...');
                 
                 // Get all activities from the feed (no limit = all cached activities)
-                const feedResponse = await fetch('http://localhost:8000/api/strava-integration/demo/feed?limit=200');
+                const feedResponse = await fetch('http://localhost:8000/api/strava-integration/demo/feed?limit=500');
                 
                 if (!feedResponse.ok) {
                     throw new Error('Failed to fetch activities feed');

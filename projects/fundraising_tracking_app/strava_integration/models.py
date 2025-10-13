@@ -122,7 +122,7 @@ class FeedRequest(BaseModel):
     limit: int = Field(
         default=20, 
         ge=1, 
-        le=200, 
+        le=500, 
         description="Number of activities to return",
     )
     activity_type: Optional[Literal["Run", "Ride"]] = Field(
