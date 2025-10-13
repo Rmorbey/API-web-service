@@ -281,12 +281,30 @@ class SecureSupabaseCacheManager:
                     upsert_headers = self.headers.copy()
                     upsert_headers['Prefer'] = 'resolution=merge-duplicates'
                     
-                    response = client.post(
-                        f"{self.base_url}cache_storage",
-                        headers=upsert_headers,
-                        json=upsert_data
-                    )
-                    response.raise_for_status()
+                    # Try POST first (for new records)
+                    try:
+                        response = client.post(
+                            f"{self.base_url}cache_storage",
+                            headers=upsert_headers,
+                            json=upsert_data
+                        )
+                        response.raise_for_status()
+                    except httpx.HTTPStatusError as e:
+                        if e.response.status_code == 409:
+                            # Conflict - record exists, try PATCH for update
+                            logger.info(f"Record exists for {cache_type}, updating with PATCH")
+                            patch_headers = self.headers.copy()
+                            patch_headers['Prefer'] = 'resolution=merge-duplicates'
+                            
+                            # Use PATCH with the same data for upsert behavior
+                            response = client.patch(
+                                f"{self.base_url}cache_storage?cache_type=eq.{cache_type}&project_id=eq.{self._get_project_id(project_id)}",
+                                headers=patch_headers,
+                                json=upsert_data
+                            )
+                            response.raise_for_status()
+                        else:
+                            raise
                 
                 self._log_operation(cache_type, 'WRITE', True, client_ip, user_agent, data_size)
                 logger.info(f"✅ Saved {cache_type} cache to Supabase")
