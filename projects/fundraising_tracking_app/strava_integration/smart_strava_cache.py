@@ -406,15 +406,27 @@ class SmartStravaCache:
                 if response.status_code == 200:
                     return response
                 elif response.status_code == 401:
-                    logger.warning("🔄 Access token expired, refreshing...")
-                    # Token might be expired, try to refresh
-                    new_token = self.token_manager.get_valid_access_token()
-                    # Update headers with new token for retry
-                    headers = headers.copy()
-                    headers["Authorization"] = f"Bearer {new_token}"
-                    if attempt < max_retries - 1:
-                        continue
-                    raise Exception("Authentication failed after token refresh")
+                    # Check if token is actually expired before refreshing
+                    current_tokens = self.token_manager._load_tokens_from_env()
+                    expires_at = current_tokens.get("expires_at")
+                    
+                    if expires_at and not self.token_manager._is_token_expired(expires_at):
+                        # Token is not expired, this might be a temporary API issue
+                        logger.warning(f"🔄 401 response but token not expired (expires at: {datetime.fromtimestamp(int(expires_at))}), retrying...")
+                        if attempt < max_retries - 1:
+                            time.sleep(2 ** attempt)  # Exponential backoff
+                            continue
+                        raise Exception("Authentication failed - token not expired but API returned 401")
+                    else:
+                        # Token is actually expired, refresh it
+                        logger.warning("🔄 Access token expired, refreshing...")
+                        new_token = self.token_manager.get_valid_access_token()
+                        # Update headers with new token for retry
+                        headers = headers.copy()
+                        headers["Authorization"] = f"Bearer {new_token}"
+                        if attempt < max_retries - 1:
+                            continue
+                        raise Exception("Authentication failed after token refresh")
                 elif response.status_code == 429:
                     # Rate limited by Strava
                     retry_after = int(response.headers.get('Retry-After', 60))

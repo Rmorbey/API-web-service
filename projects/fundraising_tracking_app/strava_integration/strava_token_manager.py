@@ -170,8 +170,8 @@ class StravaTokenManager:
         try:
             # expires_at is a Unix timestamp
             expiry_time = datetime.fromtimestamp(int(expires_at))
-            # Add a 5-minute buffer to avoid edge cases
-            buffer_time = expiry_time - timedelta(minutes=5)
+            # Add a 1-minute buffer to avoid edge cases (reduced from 5 minutes)
+            buffer_time = expiry_time - timedelta(minutes=1)
             
             is_expired = datetime.now() >= buffer_time
             
