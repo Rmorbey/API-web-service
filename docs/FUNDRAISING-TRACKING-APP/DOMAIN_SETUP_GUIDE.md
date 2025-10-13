@@ -15,7 +15,7 @@ www.russellmorbey.co.uk/
 
 #### **Step 1: Deploy API to DigitalOcean**
 1. Deploy your API to DigitalOcean App Platform
-2. Get default URL: `https://russellmorbey-api.ondigitalocean.app`
+2. Get default URL: `https://your-app-name.ondigitalocean.app`
 
 #### **Step 2: Configure Custom Domain**
 1. In DigitalOcean App Platform:
@@ -29,7 +29,7 @@ Add these DNS records to your domain provider:
 ```
 Type: CNAME
 Name: api
-Value: russellmorbey-api.ondigitalocean.app
+Value: your-app-name.ondigitalocean.app
 TTL: 3600
 ```
 

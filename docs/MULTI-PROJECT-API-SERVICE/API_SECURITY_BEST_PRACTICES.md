@@ -184,16 +184,12 @@ Frontend App → Trusted Host Check → Referer Validation → API Key Auth → 
 ```bash
 STRAVA_API_KEY=your_actual_strava_key_here
 FUNDRAISING_API_KEY=your_actual_fundraising_key_here
-FRONTEND_ACCESS_TOKEN=your_frontend_token_here
-ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173,http://localhost:8000,https://www.russellmorbey.co.uk,https://russellmorbey.co.uk
 ```
 
 ### **Production (DigitalOcean Secrets):**
 ```bash
 STRAVA_API_KEY=production_strava_key
 FUNDRAISING_API_KEY=production_fundraising_key
-FRONTEND_ACCESS_TOKEN=production_frontend_token
-ALLOWED_ORIGINS=https://www.russellmorbey.co.uk,https://russellmorbey.co.uk
 ```
 
 ## 🚀 **Deployment Security**

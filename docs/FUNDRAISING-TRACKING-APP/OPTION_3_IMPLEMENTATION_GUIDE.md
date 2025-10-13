@@ -48,7 +48,7 @@ PORT = 8080
 #### **1.3: Deploy and Test**
 1. Click **"Create Resources"**
 2. Wait for deployment (5-10 minutes)
-3. Test: `https://russellmorbey-api.ondigitalocean.app/api/strava-integration/health`
+3. Test: `https://your-app-name.ondigitalocean.app/api/strava-integration/health`
 
 ### **Step 2: Set Up Cloudflare (20 minutes)**
 
@@ -77,7 +77,7 @@ async function handleRequest(request) {
   
   // Route API requests to your API app
   if (url.pathname.startsWith('/api/')) {
-    const apiUrl = `https://russellmorbey-api.ondigitalocean.app${url.pathname}${url.search}`
+    const apiUrl = `https://your-app-name.ondigitalocean.app${url.pathname}${url.search}`
     return fetch(apiUrl, {
       method: request.method,
       headers: request.headers,
@@ -86,7 +86,7 @@ async function handleRequest(request) {
   }
   
   // Route everything else to your portfolio app
-  const portfolioUrl = `https://russellmorbey-portfolio.ondigitalocean.app${url.pathname}${url.search}`
+  const portfolioUrl = `https://your-portfolio-app.ondigitalocean.app${url.pathname}${url.search}`
   return fetch(portfolioUrl, {
     method: request.method,
     headers: request.headers,

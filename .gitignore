@@ -204,7 +204,7 @@ Dockerfile.local
 *.old
 
 # Internal documentation (not for public sharing)
-docs/internal/# Supabase security setup (contains credentials)
+docs/internal/
 supabase_security_setup.sql
 # Cache backup files
 **/backups/*.json

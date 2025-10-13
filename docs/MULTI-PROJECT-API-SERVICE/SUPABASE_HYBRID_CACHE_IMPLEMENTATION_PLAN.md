@@ -139,7 +139,7 @@ Server Start → Load from Supabase → Populate JSON Files → Check Timestamps
 
 ### **1.1 Create Supabase Project** ✅
 - [x] Sign up for Supabase account
-- [x] Create new project: `qhulgjusxrupuheimvey`
+- [x] Create new project: `your-project-id`
 - [x] Note down project URL and API key
 - [x] Configure project settings
 
