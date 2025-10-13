@@ -4,13 +4,15 @@ A production-ready FastAPI service that provides multiple integrated services in
 
 ## 📚 Documentation
 
-All comprehensive documentation is available in the [`docs/`](docs/) folder:
+### **Project-Specific Documentation**
+- **[🏃‍♂️ Fundraising Tracking App](docs/FUNDRAISING-TRACKING-APP/README.md)** - Complete project overview, timeline, and implementation guide
+- **[🏗️ Multi-Project API Service](docs/MULTI-PROJECT-API-SERVICE/)** - Reusable infrastructure components and architecture
 
-- **[Implementation Guide](docs/OPTION_3_IMPLEMENTATION_GUIDE.md)** - Complete step-by-step implementation guide
-- **[DigitalOcean Setup](docs/DIGITALOCEAN_SECRETS_SETUP.md)** - Environment variables and secrets configuration
-- **[Domain Configuration](docs/DOMAIN_SETUP_GUIDE.md)** - Domain routing and reverse proxy setup
-- **[Security Guide](docs/API_SECURITY_BEST_PRACTICES.md)** - Security implementation and best practices
-- **[Repository Analysis](docs/REPOSITORY_FILE_ANALYSIS.md)** - File structure and optimization analysis
+### **Quick Navigation**
+- **[📊 Documentation Index](docs/README.md)** - Complete documentation navigation
+- **[🚀 Implementation Guide](docs/FUNDRAISING-TRACKING-APP/OPTION_3_IMPLEMENTATION_GUIDE.md)** - Step-by-step deployment guide
+- **[🔐 DigitalOcean Setup](docs/FUNDRAISING-TRACKING-APP/DIGITALOCEAN_SECRETS_SETUP.md)** - Environment variables and secrets configuration
+- **[📚 API Documentation](docs/FUNDRAISING-TRACKING-APP/API_DOCUMENTATION.md)** - Complete endpoint reference
 
 ## Features
 
