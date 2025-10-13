@@ -76,7 +76,7 @@ Base URL: `/api/strava-integration`
 Get Strava activity feed with photos, comments, music detection, and map data.
 
 **Query Parameters:**
-- `limit` (int, optional): Number of activities to return (default: 10, max: 50)
+- `limit` (int, optional): Number of activities to return (default: 20, max: 500)
 - `activity_type` (str, optional): Filter by activity type (Run, Ride, etc.)
 - `date_from` (str, optional): Start date filter (YYYY-MM-DD)
 - `date_to` (str, optional): End date filter (YYYY-MM-DD)
@@ -219,14 +219,13 @@ Get map tiles for route visualization.
 **Response:** Binary image data (PNG/JPEG)
 
 ### **POST /refresh-cache** - Refresh Cache
-Manually trigger cache refresh for Strava data.
+Manually trigger cache refresh for Strava data with batch processing.
 
 **Response:**
 ```json
 {
   "success": true,
-  "message": "Cache refresh initiated",
-  "activities_updated": 25,
+  "message": "Cache refresh started! Processing activities in 20-activity batches every 15 minutes.",
   "timestamp": "2025-09-29T15:03:23.187903"
 }
 ```
@@ -353,11 +352,27 @@ The API integrates with Jawg map service for high-quality map tiles:
 }
 ```
 
+## 🎮 **Demo Endpoints (Development Only)**
+
+These endpoints are available only in development mode and don't require API keys:
+
+### **GET /demo** - Strava Demo Page
+Interactive Strava activities viewer with maps, photos, and music integration.
+
+### **GET /fundraising-demo** - Fundraising Demo Page
+Live fundraising progress tracker with donation history.
+
+### **GET /api/strava-integration/demo/feed** - Demo Activity Feed
+Get activity feed without API key authentication (development only).
+
+### **GET /api/fundraising/demo/data** - Demo Fundraising Data
+Get fundraising data without API key authentication (development only).
+
 ## 📈 **Performance & Caching**
 
 ### **Cache Strategy:**
-- **Strava Data**: 6-hour cache with automatic refresh
-- **Fundraising Data**: 15-minute cache with smart refresh
+- **Strava Data**: 6-hour cache with Supabase persistence
+- **Fundraising Data**: 15-minute cache with hybrid storage
 - **HTTP Responses**: 5-minute cache with ETag support
 - **Hit Rate**: 95% average cache hit rate
 

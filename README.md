@@ -9,8 +9,7 @@ All comprehensive documentation is available in the [`docs/`](docs/) folder:
 - **[Implementation Guide](docs/OPTION_3_IMPLEMENTATION_GUIDE.md)** - Complete step-by-step implementation guide
 - **[DigitalOcean Setup](docs/DIGITALOCEAN_SECRETS_SETUP.md)** - Environment variables and secrets configuration
 - **[Domain Configuration](docs/DOMAIN_SETUP_GUIDE.md)** - Domain routing and reverse proxy setup
-- **[Production Deployment](docs/PRODUCTION_DEPLOYMENT.md)** - Production optimization and deployment
-- **[Security Guide](docs/API_SECURITY.md)** - Security implementation and best practices
+- **[Security Guide](docs/API_SECURITY_BEST_PRACTICES.md)** - Security implementation and best practices
 - **[Repository Analysis](docs/REPOSITORY_FILE_ANALYSIS.md)** - File structure and optimization analysis
 
 ## Features
@@ -23,8 +22,8 @@ All comprehensive documentation is available in the [`docs/`](docs/) folder:
 
 ### Fundraising Tracking
 - **Web Scraping**: Automated JustGiving page scraping every 15 minutes
+- **Hybrid Caching**: Supabase persistence with local JSON fallback
 - **Smart Data Merging**: Preserves individual donations while updating totals
-- **Backup System**: Automatic backup creation and restoration
 - **Real-time Updates**: Live fundraising progress tracking
 
 ### Security & Monitoring
@@ -75,8 +74,8 @@ docker run -p 8000:8000 --env-file .env strava-api
 - `GET /api/strava-integration/` - Project information
 - `GET /api/strava-integration/health` - Health check
 - `GET /api/strava-integration/metrics` - System metrics
-- `GET /api/strava-integration/feed` - Activity feed
-- `GET /api/strava-integration/test-feed` - Test data feed
+- `GET /api/strava-integration/feed` - Activity feed (up to 500 activities)
+- `POST /api/strava-integration/refresh-cache` - Manual cache refresh
 
 ### Activity Endpoints
 - `GET /api/strava-integration/activities/{id}/map` - GPS data for maps
@@ -87,6 +86,15 @@ docker run -p 8000:8000 --env-file .env strava-api
 ### Map Endpoints
 - `GET /api/strava-integration/map-tiles/{z}/{x}/{y}` - Map tiles proxy
 - `GET /api/strava-integration/jawg-token` - Jawg token status
+
+### Fundraising Endpoints
+- `GET /api/fundraising/data` - Fundraising data and progress
+- `GET /api/fundraising/donations` - Individual donations list
+- `GET /api/fundraising/health` - Fundraising service health
+
+### Demo Endpoints (Development Only)
+- `GET /demo` - Strava activities demo page
+- `GET /fundraising-demo` - Fundraising progress demo page
 
 ## Configuration
 
@@ -100,11 +108,17 @@ docker run -p 8000:8000 --env-file .env strava-api
 | `STRAVA_CLIENT_SECRET` | Strava API client secret | Required |
 | `JAWG_ACCESS_TOKEN` | Jawg Maps API token | Optional |
 | `STRAVA_CACHE_HOURS` | Cache duration in hours | 6 |
+| `SUPABASE_URL` | Supabase project URL | Required |
+| `SUPABASE_ANON_KEY` | Supabase anonymous key | Required |
+| `SUPABASE_SERVICE_KEY` | Supabase service role key | Required |
+| `FUNDRAISING_API_KEY` | Fundraising API authentication key | Required |
+| `TZ` | Server timezone | Europe/London |
 
 ### Cache Configuration
 
-The service uses a multi-layer caching strategy:
-- **File Cache**: Persistent JSON cache with configurable TTL
+The service uses a hybrid caching strategy:
+- **Supabase Cache**: Persistent database storage for production
+- **Local JSON Cache**: Fallback for development and resilience
 - **In-Memory Cache**: 5-minute TTL for fast access
 - **API Rate Limiting**: 200 calls/15min, 2000/day
 
@@ -139,10 +153,10 @@ curl http://localhost:8000/api/strava-integration/test-feed?limit=5
 ```
 
 ### Frontend Integration
-The service is designed to work with the included demo frontend:
-- Access at `http://localhost:8000/demo`
-- No direct Strava API calls from frontend
-- All data served through backend cache
+The service includes demo pages for testing:
+- **Strava Demo**: `http://localhost:8000/demo` - Interactive activity viewer
+- **Fundraising Demo**: `http://localhost:8000/fundraising-demo` - Progress tracker
+- No direct API calls from frontend - all data served through backend cache
 
 ## Production Deployment
 

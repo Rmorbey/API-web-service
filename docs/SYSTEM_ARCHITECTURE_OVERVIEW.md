@@ -4,13 +4,15 @@
 
 ### **1. Data Collection Layer**
 - **Strava Integration** (`smart_strava_cache.py`)
-- **Fundraising Scraper** (`smart_fundraising_cache.py`)
+- **Fundraising Scraper** (`fundraising_scraper.py`)
 - **HTTP Clients** (`http_clients.py`)
+- **Supabase Cache Manager** (`supabase_cache_manager.py`)
 
 ### **2. Data Processing Layer**
 - **Async Processor** (`async_processor.py`)
-- **Smart Cache Management** (both caches)
+- **Smart Cache Management** (Strava & Fundraising)
 - **Data Validation & Formatting**
+- **Hybrid Caching Strategy** (Supabase + Local JSON)
 
 ### **3. API Layer**
 - **FastAPI Application** (`multi_project_api.py`)
@@ -70,22 +72,22 @@ Request → Trusted Host Check → Referer Validation → API Key Auth → Rate 
    ↓
 5. Rich Data Collection (polyline, bounds, photos, comments)
    ↓
-6. Cache Storage (JSON file + in-memory)
+6. Hybrid Cache Storage (Supabase + JSON file + in-memory)
 ```
 
 #### **Fundraising Data Collection:**
 ```
-1. SmartFundraisingCache.force_refresh_now()
+1. FundraisingScraper.force_refresh_now()
    ↓
 2. HTTP Client → JustGiving Website
    ↓
-3. HTML Scraping (BeautifulSoup)
+3. HTML Scraping (BeautifulSoup with CSS selectors)
    ↓
 4. Data Extraction (amount, donations, messages)
    ↓
 5. Smart Merge with Existing Cache
    ↓
-6. Cache Storage (JSON file + in-memory)
+6. Hybrid Cache Storage (Supabase + JSON file + in-memory)
 ```
 
 ### **Phase 2: Data Processing & Enhancement**

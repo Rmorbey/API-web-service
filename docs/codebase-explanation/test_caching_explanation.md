@@ -9,7 +9,7 @@ This file contains **comprehensive tests** for the caching functionality, includ
 ```
 test_caching.py  ← YOU ARE HERE (Caching Tests)
 ├── smart_strava_cache.py          (Strava cache)
-├── smart_fundraising_cache.py     (Fundraising cache)
+├── fundraising_scraper.py     (Fundraising cache)
 ├── main.py                        (Main API)
 ├── multi_project_api.py           (Multi-project API)
 ├── strava_integration_api.py      (Strava API)

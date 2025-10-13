@@ -9,7 +9,7 @@ This file contains **comprehensive tests** for the fundraising scraper functiona
 ```
 test_fundraising_scraper.py  ← YOU ARE HERE (Fundraising Scraper Tests)
 ├── fundraising_api.py             (Fundraising API)
-├── smart_fundraising_cache.py     (Fundraising cache)
+├── fundraising_scraper.py     (Fundraising cache)
 ├── security.py                    (Security middleware)
 ├── compression_middleware.py      (Compression middleware)
 └── simple_error_handlers.py       (Error handling middleware)
@@ -227,7 +227,7 @@ class TestFundraisingCache:
     def test_fundraising_cache_initialization(self):
         """Test fundraising cache initialization"""
         # Test that fundraising cache can be initialized
-        from smart_fundraising_cache import SmartFundraisingCache
+        from fundraising_scraper import SmartFundraisingCache
         
         cache = SmartFundraisingCache("https://test.justgiving.com/test")
         assert cache is not None
@@ -238,7 +238,7 @@ class TestFundraisingCache:
     def test_fundraising_cache_get_data(self):
         """Test fundraising cache get data"""
         # Test that fundraising cache can get data
-        from smart_fundraising_cache import SmartFundraisingCache
+        from fundraising_scraper import SmartFundraisingCache
         
         cache = SmartFundraisingCache("https://test.justgiving.com/test")
         data = cache.get_fundraising_data()
@@ -250,7 +250,7 @@ class TestFundraisingCache:
     def test_fundraising_cache_force_refresh(self):
         """Test fundraising cache force refresh"""
         # Test that fundraising cache can force refresh
-        from smart_fundraising_cache import SmartFundraisingCache
+        from fundraising_scraper import SmartFundraisingCache
         
         cache = SmartFundraisingCache("https://test.justgiving.com/test")
         success = cache.force_refresh_now(force_refresh=False)
@@ -262,7 +262,7 @@ class TestFundraisingCache:
     def test_fundraising_cache_cleanup_backups(self):
         """Test fundraising cache cleanup backups"""
         # Test that fundraising cache can cleanup backups
-        from smart_fundraising_cache import SmartFundraisingCache
+        from fundraising_scraper import SmartFundraisingCache
         
         cache = SmartFundraisingCache("https://test.justgiving.com/test")
         success = cache.cleanup_backups(keep_last_n=5)
@@ -274,7 +274,7 @@ class TestFundraisingCache:
     def test_fundraising_cache_get_donations(self):
         """Test fundraising cache get donations"""
         # Test that fundraising cache can get donations
-        from smart_fundraising_cache import SmartFundraisingCache
+        from fundraising_scraper import SmartFundraisingCache
         
         cache = SmartFundraisingCache("https://test.justgiving.com/test")
         donations = cache.get_donations(limit=10)

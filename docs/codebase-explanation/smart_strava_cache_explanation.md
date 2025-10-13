@@ -90,7 +90,8 @@ class SmartStravaCache:
 **What this does:**
 - **Token manager**: Handles Strava authentication
 - **Base URL**: Strava API endpoint
-- **Cache file**: Where to store cached data
+- **Cache file**: Local JSON fallback storage
+- **Supabase integration**: Primary persistent cache storage
 - **Cache duration**: How long to keep data (6 hours default)
 - **Activity filtering**: Only fetch runs and bike rides
 - **Rate limiting**: Track API calls to avoid hitting limits
@@ -120,6 +121,16 @@ class SmartStravaCache:
 - **Start date**: Only fetch activities from May 22, 2025 onwards
 - **Automated refresh**: Background system that updates data automatically
 - **Threading**: Uses threads for background processing
+
+### **2.1. Hybrid Caching Strategy**
+
+The system uses a **three-tier caching approach**:
+
+1. **Supabase Database** (Primary): Persistent storage for production deployment
+2. **Local JSON File** (Fallback): Development and resilience backup
+3. **In-Memory Cache** (Performance): Fast access for active requests
+
+This ensures data persistence across server restarts while maintaining high performance.
 
 ### **3. Cache Loading and Validation (Lines 71-131)**
 

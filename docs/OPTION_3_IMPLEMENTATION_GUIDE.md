@@ -37,6 +37,10 @@ STRAVA_ACCESS_TOKEN = [your actual access token]
 STRAVA_REFRESH_TOKEN = [your actual refresh token]
 STRAVA_EXPIRES_AT = [your actual expires at]
 STRAVA_EXPIRES_IN = [your actual expires in]
+SUPABASE_URL = [your Supabase project URL]
+SUPABASE_ANON_KEY = [your Supabase anonymous key]
+SUPABASE_SERVICE_KEY = [your Supabase service role key]
+TZ = Europe/London
 ENVIRONMENT = production
 PORT = 8080
 ```
