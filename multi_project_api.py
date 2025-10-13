@@ -48,6 +48,9 @@ async def lifespan_with_cache_init(app: FastAPI):
     # Startup
     logger.info("🚀 Starting Multi-Project API with cache initialization...")
     
+    # Initialize HTTP clients first
+    await lifespan_http_clients(app)
+    
     # Initialize cache systems to start automated refresh threads
     try:
         # Initialize Strava cache system
@@ -64,9 +67,6 @@ async def lifespan_with_cache_init(app: FastAPI):
         
     except Exception as e:
         logger.error(f"❌ Failed to initialize cache systems: {e}")
-    
-    # Initialize HTTP clients
-    await lifespan_http_clients(app)
     
     yield
     
