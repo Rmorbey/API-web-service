@@ -49,30 +49,29 @@ async def lifespan_with_cache_init(app: FastAPI):
     logger.info("🚀 Starting Multi-Project API with cache initialization...")
     
     # Initialize HTTP clients first
-    await lifespan_http_clients(app)
-    
-    # Initialize cache systems to start automated refresh threads
-    try:
-        # Initialize Strava cache system
-        from projects.fundraising_tracking_app.strava_integration.strava_integration_api import get_cache as get_strava_cache
-        strava_cache = get_strava_cache()
-        logger.info("✅ Strava cache system initialized with automated refresh")
+    async with lifespan_http_clients(app):
+        # Initialize cache systems to start automated refresh threads
+        try:
+            # Initialize Strava cache system
+            from projects.fundraising_tracking_app.strava_integration.strava_integration_api import get_cache as get_strava_cache
+            strava_cache = get_strava_cache()
+            logger.info("✅ Strava cache system initialized with automated refresh")
+            
+            # Initialize Fundraising cache system  
+            from projects.fundraising_tracking_app.fundraising_scraper.fundraising_api import get_cache as get_fundraising_cache
+            fundraising_cache = get_fundraising_cache()
+            logger.info("✅ Fundraising cache system initialized with automated refresh")
+            
+            logger.info("🔄 All automated refresh systems started successfully!")
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to initialize cache systems: {e}")
         
-        # Initialize Fundraising cache system  
-        from projects.fundraising_tracking_app.fundraising_scraper.fundraising_api import get_cache as get_fundraising_cache
-        fundraising_cache = get_fundraising_cache()
-        logger.info("✅ Fundraising cache system initialized with automated refresh")
+        yield
         
-        logger.info("🔄 All automated refresh systems started successfully!")
-        
-    except Exception as e:
-        logger.error(f"❌ Failed to initialize cache systems: {e}")
-    
-    yield
-    
-    # Shutdown
-    logger.info("🛑 Shutting down Multi-Project API...")
-    logger.info("✅ Multi-Project API shutdown complete!")
+        # Shutdown
+        logger.info("🛑 Shutting down Multi-Project API...")
+        logger.info("✅ Multi-Project API shutdown complete!")
 
 # Create main FastAPI app with lifespan management
 app = FastAPI(
