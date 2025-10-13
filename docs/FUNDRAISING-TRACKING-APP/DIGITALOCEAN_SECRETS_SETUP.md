@@ -1,8 +1,8 @@
-# 🔐 DigitalOcean App Platform Secrets Setup Guide
+# 🔐 DigitalOcean Secrets Setup Guide
 
-## 📋 **Your Environment Variables**
+## 📋 **Required Environment Variables**
 
-Based on your `.env` file, here are all the secrets you need to set in DigitalOcean:
+Set these as **SECRET** type in DigitalOcean App Platform:
 
 ### **API Security Keys:**
 - `STRAVA_API_KEY` = `your_strava_api_key_here`
@@ -31,16 +31,21 @@ Based on your `.env` file, here are all the secrets you need to set in DigitalOc
 ### **Environment Configuration:**
 - `ENVIRONMENT` = `production`
 - `PORT` = `8080`
+- `TZ` = `Europe/London`
+
+### **Supabase Configuration:**
+- `SUPABASE_URL` = `your_supabase_project_url`
+- `SUPABASE_ANON_KEY` = `your_supabase_anonymous_key`
+- `SUPABASE_SERVICE_KEY` = `your_supabase_service_role_key`
 
 ### **Automated Token Refresh (Optional):**
 - `DIGITALOCEAN_API_TOKEN` = `your_digitalocean_api_token_here`
 - `DIGITALOCEAN_APP_ID` = `your_digitalocean_app_id_here`
 
-## 🚀 **Step-by-Step Setup in DigitalOcean**
+## 🚀 **Setup Steps**
 
 ### **1. Deploy Your App:**
 ```bash
-# Push your code to GitHub
 git add .
 git commit -m "Add production deployment configuration"
 git push origin main
@@ -52,164 +57,32 @@ git push origin main
 3. Connect your GitHub repository: `russellmorbey/API-web-service`
 4. DigitalOcean will detect `.do/app.yaml` automatically
 
-### **3. Set Environment Variables as Secrets:**
-
-#### **Go to App Settings:**
-1. Click on your app in DigitalOcean
-2. Go to **Settings** → **App-Level Environment Variables**
-3. Click **"Edit"**
-
-#### **Add Each Secret:**
-
-**Add STRAVA_API_KEY:**
-- **Name**: `STRAVA_API_KEY`
-- **Value**: `your_strava_api_key_here`
-- **Type**: `SECRET` (not plain text)
-- **Scope**: `RUN_TIME`
-
-**Add FUNDRAISING_API_KEY:**
-- **Name**: `FUNDRAISING_API_KEY`
-- **Value**: `your_fundraising_api_key_here`
-- **Type**: `SECRET`
-- **Scope**: `RUN_TIME`
-
-**Add FRONTEND_ACCESS_TOKEN:**
-- **Name**: `FRONTEND_ACCESS_TOKEN`
-- **Value**: `your_frontend_access_token_here`
-- **Type**: `SECRET`
-- **Scope**: `RUN_TIME`
-
-**Add ALLOWED_ORIGINS:**
-- **Name**: `ALLOWED_ORIGINS`
-- **Value**: `http://localhost:3000,http://localhost:5173,http://localhost:8000,https://www.russellmorbey.co.uk,https://russellmorbey.co.uk`
-- **Type**: `SECRET`
-- **Scope**: `RUN_TIME`
-
-**Add JUSTGIVING_URL:**
-- **Name**: `JUSTGIVING_URL`
-- **Value**: `https://www.justgiving.com/fundraising/RussellMorbey-HackneyHalf?utm_medium=FR&utm_source=CL&utm_campaign=015`
-- **Type**: `SECRET`
-- **Scope**: `RUN_TIME`
-
-**Add JAWG_ACCESS_TOKEN:**
-- **Name**: `JAWG_ACCESS_TOKEN`
-- **Value**: `your_jawg_access_token_here`
-- **Type**: `SECRET`
-- **Scope**: `RUN_TIME`
-
-**Add STRAVA_CLIENT_ID:**
-- **Name**: `STRAVA_CLIENT_ID`
-- **Value**: `your_strava_client_id_here`
-- **Type**: `SECRET`
-- **Scope**: `RUN_TIME`
-
-**Add STRAVA_CLIENT_SECRET:**
-- **Name**: `STRAVA_CLIENT_SECRET`
-- **Value**: `your_strava_client_secret_here`
-- **Type**: `SECRET`
-- **Scope**: `RUN_TIME`
-
-**Add STRAVA_ACCESS_TOKEN:**
-- **Name**: `STRAVA_ACCESS_TOKEN`
-- **Value**: `your_strava_access_token_here`
-- **Type**: `SECRET`
-- **Scope**: `RUN_TIME`
-
-**Add STRAVA_REFRESH_TOKEN:**
-- **Name**: `STRAVA_REFRESH_TOKEN`
-- **Value**: `your_strava_refresh_token_here`
-- **Type**: `SECRET`
-- **Scope**: `RUN_TIME`
-
-**Add STRAVA_EXPIRES_AT:**
-- **Name**: `STRAVA_EXPIRES_AT`
-- **Value**: `your_strava_expires_at_here`
-- **Type**: `SECRET`
-- **Scope**: `RUN_TIME`
-
-**Add STRAVA_EXPIRES_IN:**
-- **Name**: `STRAVA_EXPIRES_IN`
-- **Value**: `your_strava_expires_in_here`
-- **Type**: `SECRET`
-- **Scope**: `RUN_TIME`
-
-**Add ENVIRONMENT:**
-- **Name**: `ENVIRONMENT`
-- **Value**: `production`
-- **Type**: `PLAIN_TEXT`
-- **Scope**: `RUN_TIME`
-
-**Add PORT:**
-- **Name**: `PORT`
-- **Value**: `8080`
-- **Type**: `PLAIN_TEXT`
-- **Scope**: `RUN_TIME`
+### **3. Set Environment Variables:**
+1. Go to **Settings** → **App-Level Environment Variables**
+2. Click **"Edit"**
+3. Add each variable:
+   - **Name**: Variable name (e.g., `STRAVA_API_KEY`)
+   - **Value**: Your actual value
+   - **Type**: `SECRET` (for sensitive data) or `PLAIN_TEXT` (for non-sensitive)
+   - **Scope**: `RUN_TIME`
 
 ### **4. Optional: Automated Token Refresh Setup**
 
-If you want automated Strava token refresh, add these additional secrets:
+If you want automated Strava token refresh:
 
-**Add DIGITALOCEAN_API_TOKEN:**
-- **Name**: `DIGITALOCEAN_API_TOKEN`
-- **Value**: `your_digitalocean_api_token_here`
-- **Type**: `SECRET`
-- **Scope**: `RUN_TIME`
+**Get DigitalOcean API Token:**
+1. Go to [API Tokens](https://cloud.digitalocean.com/account/api/tokens)
+2. Generate New Token → Select "Write" scope
 
-**Add DIGITALOCEAN_APP_ID:**
-- **Name**: `DIGITALOCEAN_APP_ID`
-- **Value**: `your_digitalocean_app_id_here`
-- **Type**: `SECRET`
-- **Scope**: `RUN_TIME`
-
-**To get these values:**
-1. **DigitalOcean API Token**: Go to [API Tokens](https://cloud.digitalocean.com/account/api/tokens) → Generate New Token → Select "Write" scope
-2. **App ID**: Found in your app's URL: `https://cloud.digitalocean.com/apps/[APP_ID]`
-
-## 🔧 **Complete Environment Variables List**
-
-Here's the complete list of all environment variables you need:
-
-```bash
-# API Security
-STRAVA_API_KEY=your_strava_api_key_here
-FUNDRAISING_API_KEY=your_fundraising_api_key_here
-
-# Frontend Access Control
-FRONTEND_ACCESS_TOKEN=your_frontend_access_token_here
-ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173,http://localhost:8000,https://www.russellmorbey.co.uk,https://russellmorbey.co.uk
-
-# JustGiving
-JUSTGIVING_URL=https://www.justgiving.com/fundraising/RussellMorbey-HackneyHalf?utm_medium=FR&utm_source=CL&utm_campaign=015
-
-# Jawg Maps
-JAWG_ACCESS_TOKEN=your_jawg_access_token_here
-
-# Strava API
-STRAVA_CLIENT_ID=your_strava_client_id_here
-STRAVA_CLIENT_SECRET=your_strava_client_secret_here
-
-# Strava Tokens
-STRAVA_ACCESS_TOKEN=your_strava_access_token_here
-STRAVA_REFRESH_TOKEN=your_strava_refresh_token_here
-STRAVA_EXPIRES_AT=your_strava_expires_at_here
-STRAVA_EXPIRES_IN=your_strava_expires_in_here
-
-# Environment
-ENVIRONMENT=production
-PORT=8080
-
-# Automated Token Refresh (Optional)
-DIGITALOCEAN_API_TOKEN=your_digitalocean_api_token_here
-DIGITALOCEAN_APP_ID=your_digitalocean_app_id_here
-```
+**Get App ID:**
+1. Found in your app's URL: `https://cloud.digitalocean.com/apps/[APP_ID]`
 
 ## ✅ **Verification Steps**
 
 ### **1. Check All Secrets Are Set:**
-1. Go to your app in DigitalOcean
-2. Go to **Settings** → **App-Level Environment Variables**
-3. Verify all 16+ environment variables are listed
-4. Ensure all sensitive values are marked as `SECRET`
+1. Go to **Settings** → **App-Level Environment Variables**
+2. Verify all 16+ environment variables are listed
+3. Ensure all sensitive values are marked as `SECRET`
 
 ### **2. Test Your Deployment:**
 ```bash

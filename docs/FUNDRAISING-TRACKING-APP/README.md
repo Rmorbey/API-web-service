@@ -1,70 +1,174 @@
-# 🏃‍♂️ Fundraising Tracking App
+# 🏃‍♂️ Ready & Raising - Fundraising Tracking App
 
-This folder contains documentation for the **Ready & Raising - Fundraising Tracking App** and all the API endpoints that power it. This includes both the fundraising scraper functionality and the Strava integration that provides training data for the fundraising dashboard.
+## 🎯 **Project Overview**
 
-## 🎯 **App Overview**
+**Ready & Raising** is a comprehensive fundraising tracking application that combines training data from Strava with real-time fundraising progress from JustGiving. The app provides a unified dashboard showing both preparation activities and donation progress for charity events.
 
-**Ready & Raising** is a comprehensive fundraising tracking application that displays:
-- **Training Activities**: Strava data showing preparation leading up to charity events
-- **Fundraising Progress**: Real-time donation tracking and goal progress
-- **Unified Dashboard**: All data in one convenient location
+### **What It Does**
+- **Training Activities**: Displays Strava data showing preparation leading up to charity events
+- **Fundraising Progress**: Real-time donation tracking and goal progress from JustGiving
+- **Unified Dashboard**: All data in one convenient location for supporters to see progress
 
-## 📚 **Implementation & Setup**
+### **Technical Architecture**
+- **Backend**: FastAPI with hybrid caching (Supabase + local JSON)
+- **Data Sources**: Strava API + JustGiving web scraping
+- **Deployment**: DigitalOcean App Platform with Cloudflare routing
+- **Security**: API key authentication, rate limiting, and multi-layer security
 
-### **Deployment Guides**
-- **[Option 3 Implementation Guide](OPTION_3_IMPLEMENTATION_GUIDE.md)** - Complete step-by-step implementation guide
-- **[DigitalOcean Secrets Setup](DIGITALOCEAN_SECRETS_SETUP.md)** - Environment variables and secrets configuration
-- **[Domain Setup Guide](DOMAIN_SETUP_GUIDE.md)** - Domain routing and reverse proxy setup
-- **[Automated Token Refresh Setup](AUTOMATED_TOKEN_REFRESH_SETUP.md)** - Token management automation
+---
 
-### **Project Analysis**
-- **[Repository File Analysis](REPOSITORY_FILE_ANALYSIS.md)** - File structure and optimization analysis
+## 📅 **Project Timeline & Development Journey**
 
-## 🔧 **API Endpoints Documentation**
+### **Phase 1: Initial Setup & Architecture (Early Development)**
+- **Multi-project API structure** established
+- **FastAPI application** with project-based routing
+- **Basic Strava integration** with token management
+- **Initial fundraising scraper** for JustGiving data
 
-### **Fundraising API**
-- **[Fundraising API](codebase-explanation/fundraising_api_explanation.md)** - Fundraising data endpoints and functionality
-- **[Fundraising Scraper](codebase-explanation/fundraising_scraper_explanation.md)** - JustGiving web scraping implementation
-- **[Test Fundraising Scraper](codebase-explanation/test_fundraising_scraper_explanation.md)** - Fundraising scraper testing
+### **Phase 2: Advanced Caching & Data Management**
+- **Smart caching system** implemented for Strava data
+- **Hybrid caching strategy** (in-memory + file + Supabase)
+- **Rate limiting** and API call optimization
+- **Background processing** for data enrichment
 
-### **Strava Integration API**
-- **[Strava Integration API](codebase-explanation/strava_integration_api_explanation.md)** - Strava data endpoints and functionality
-- **[Smart Strava Cache](codebase-explanation/smart_strava_cache_explanation.md)** - Strava data caching and management
-- **[Strava Token Manager](codebase-explanation/strava_token_manager_explanation.md)** - Strava authentication and token management
-- **[Test Strava Integration](codebase-explanation/test_strava_integration_explanation.md)** - Strava integration testing
+### **Phase 3: Production Deployment & Optimization**
+- **DigitalOcean App Platform** deployment configuration
+- **Environment variable management** and secrets setup
+- **Health checks** and monitoring implementation
+- **Performance optimization** and error handling
 
-## 🏗️ **Architecture**
+### **Phase 4: Advanced Features & Reliability**
+- **Automated token refresh** for Strava API
+- **Smart data merging** to preserve existing data
+- **Emergency refresh logic** for data integrity
+- **Comprehensive error handling** and fallback systems
 
-The Ready & Raising app is powered by two main API systems:
+### **Phase 5: Production Issues & Resolutions**
+- **Token refresh loop** issues resolved
+- **Timezone configuration** (UTC → Europe/London)
+- **Supabase integration** for data persistence
+- **Cache validation** and integrity checks
 
-### **1. Fundraising Scraper**
-- Scrapes JustGiving pages for donation data
-- Tracks fundraising progress and goals
-- Provides real-time donation updates
-- Manages individual donor information
+### **Phase 6: Final Optimization & Documentation**
+- **Log optimization** with emoji indicators
+- **Demo endpoints** for development testing
+- **Comprehensive documentation** and code explanations
+- **Security review** and sanitization
 
-### **2. Strava Integration**
-- Fetches training activities and performance data
-- Provides GPS routes and activity details
-- Tracks preparation progress for charity events
-- Enriches data with photos, comments, and music
+---
 
-## 🔗 **Data Flow**
+## 🏗️ **System Architecture**
 
-```
-JustGiving Page → Fundraising Scraper → API Endpoints → Frontend Dashboard
-Strava API → Strava Integration → API Endpoints → Frontend Dashboard
-```
-
-## 🎯 **Key Features**
-
+### **Data Collection Layer**
+- **Strava Integration**: Fetches training activities, GPS routes, photos, comments
+- **Fundraising Scraper**: Scrapes JustGiving pages for donation data
 - **Hybrid Caching**: Supabase persistence with local JSON fallback
-- **Real-time Updates**: 15-minute fundraising refresh, 6-hour Strava refresh
-- **Smart Data Merging**: Preserves individual donations while updating totals
-- **Security**: API key authentication and rate limiting
+
+### **Data Processing Layer**
+- **Async Processing**: Background data enrichment and formatting
+- **Smart Merging**: Preserves existing data while updating new information
+- **Rate Limiting**: Respects API limits and implements backoff strategies
+
+### **API Layer**
+- **FastAPI Application**: RESTful API with comprehensive endpoints
+- **Security Middleware**: API key authentication and request validation
+- **Error Handling**: Graceful degradation and comprehensive logging
+
+### **Frontend Integration**
+- **Demo Pages**: Development testing interfaces
+- **API Endpoints**: Production-ready data access
+- **Real-time Updates**: 15-minute fundraising, 6-hour Strava refresh
+
+---
+
+## 📚 **Documentation Structure**
+
+### **Implementation Guides**
+- **[Option 3 Implementation Guide](OPTION_3_IMPLEMENTATION_GUIDE.md)** - Complete deployment guide
+- **[DigitalOcean Secrets Setup](DIGITALOCEAN_SECRETS_SETUP.md)** - Environment configuration
+- **[Startup Scripts Guide](../MULTI-PROJECT-API-SERVICE/STARTUP_SCRIPTS_GUIDE.md)** - Development workflow
+
+### **API Documentation**
+- **[API Documentation](API_DOCUMENTATION.md)** - Complete endpoint reference
+- **[System Architecture](../MULTI-PROJECT-API-SERVICE/SYSTEM_ARCHITECTURE_OVERVIEW.md)** - Technical overview
+
+### **Code Explanations**
+- **[Smart Strava Cache](codebase-explanation/smart_strava_cache_explanation.md)** - Caching strategy
+- **[Fundraising Scraper](codebase-explanation/fundraising_scraper_explanation.md)** - Web scraping implementation
+- **[Strava Integration](codebase-explanation/strava_integration_api_explanation.md)** - API integration
+- **[Token Manager](codebase-explanation/strava_token_manager_explanation.md)** - Authentication
+
+---
+
+## 💻 **Code Organization**
+
+The fundraising tracking app code is located in `projects/fundraising_tracking_app/`:
+
+```
+projects/fundraising_tracking_app/
+├── examples/                           # Demo pages and usage examples
+├── env.example                         # Environment variable template
+├── env.production                      # Production environment template  
+├── supabase_security_setup_template.sql # Database schema template
+├── fundraising_scraper/                # Fundraising API and scraper
+│   ├── fundraising_api.py             # API endpoints
+│   ├── fundraising_scraper.py         # Web scraping logic
+│   └── models.py                      # Data models
+└── strava_integration/                 # Strava API integration
+    ├── smart_strava_cache.py          # Caching system
+    ├── strava_integration_api.py      # API endpoints
+    ├── strava_token_manager.py        # Authentication
+    └── supabase_cache_manager.py      # Database integration
+```
+
+---
+
+## 🎯 **Key Features & Capabilities**
+
+### **Data Management**
+- **Hybrid Caching**: Supabase persistence with local JSON fallback
+- **Smart Merging**: Preserves existing data while updating new information
+- **Data Validation**: Integrity checks and corruption recovery
+- **Backup System**: Automatic backups and restoration
+
+### **API Integration**
+- **Strava API**: Training activities, GPS routes, photos, comments
+- **JustGiving Scraping**: Donation data, donor information, progress tracking
+- **Rate Limiting**: Respects API limits with exponential backoff
+- **Error Handling**: Comprehensive error management and recovery
+
+### **Security & Performance**
+- **API Key Authentication**: Secure endpoint access
+- **Rate Limiting**: 1000 requests per hour protection
+- **Security Headers**: XSS, clickjacking protection
+- **Health Monitoring**: Continuous health checks and logging
+
+### **Development & Testing**
+- **Demo Endpoints**: Development testing interfaces
+- **Environment Management**: Development vs production configurations
+- **Comprehensive Logging**: Debug and production logging levels
+- **Automated Testing**: Unit and integration test coverage
+
+---
+
+## 🚀 **Deployment & Production**
+
+### **Current Status**
+- **Production Deployed**: DigitalOcean App Platform
+- **Domain**: `https://api.russellmorbey.co.uk/`
+- **Environment**: Production with automated token refresh
 - **Monitoring**: Health checks and performance metrics
+
+### **Key Achievements**
+- **Zero-downtime deployment** with automated token refresh
+- **Hybrid caching** ensuring data persistence across restarts
+- **Comprehensive error handling** with graceful degradation
+- **Production-ready security** with multi-layer authentication
+
+---
 
 ## 🔗 **Related Documentation**
 
 - **[Multi-Project API Service](../MULTI-PROJECT-API-SERVICE/)** - Reusable infrastructure components
 - **[Internal Documentation](../internal/)** - Security and internal notes
+- **[Main Documentation Index](../README.md)** - Complete documentation navigation

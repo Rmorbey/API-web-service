@@ -2,7 +2,7 @@
 
 ## 📋 **Overview**
 
-We now have separate startup scripts for development and production environments to ensure proper environment-based access control for demo endpoints.
+Separate startup scripts for development and production environments with proper environment-based access control for demo endpoints.
 
 ## 🎯 **Available Scripts**
 
