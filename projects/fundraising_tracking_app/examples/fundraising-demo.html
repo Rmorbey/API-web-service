@@ -261,8 +261,40 @@
     </div>
 
     <script>
+        // Environment-aware API configuration
+        function getApiConfig() {
+            const hostname = window.location.hostname;
+            
+            // Production environment (DigitalOcean)
+            if (hostname === 'api-web-service-7x8k8.ondigitalocean.app' || 
+                hostname.includes('ondigitalocean.app')) {
+                return {
+                    baseUrl: 'https://api-web-service-7x8k8.ondigitalocean.app',
+                    environment: 'production'
+                };
+            }
+            
+            // Development environment (localhost)
+            if (hostname === 'localhost' || hostname === '127.0.0.1') {
+                return {
+                    baseUrl: 'http://localhost:8000',
+                    environment: 'development'
+                };
+            }
+            
+            // Default to production for security
+            return {
+                baseUrl: 'https://api-web-service-7x8k8.ondigitalocean.app',
+                environment: 'production'
+            };
+        }
+        
+        // Set global API configuration
+        window.API_CONFIG = getApiConfig();
+        console.log('API Configuration:', window.API_CONFIG);
+        
         // API base URL
-        const API_BASE = 'http://localhost:8000/api/fundraising';
+        const API_BASE = `${window.API_CONFIG.baseUrl}/api/fundraising`;
         
         // Load fundraising data
         async function loadFundraisingData() {
