@@ -8,6 +8,8 @@ import os
 import json
 import asyncio
 import httpx
+import threading
+import time
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional
 from .http_clients import get_http_client
@@ -23,6 +25,12 @@ class StravaTokenManager:
         # Load tokens from environment variables
         self.tokens = self._load_tokens_from_env()
         
+        # Add thread-safe token caching and refresh locking
+        self._token_lock = threading.Lock()
+        self._cached_token = None
+        self._cached_token_expires_at = None
+        self._last_refresh_time = None
+        
     def _load_tokens_from_env(self) -> Dict[str, Any]:
         """Load tokens from environment variables"""
         return {
@@ -36,6 +44,11 @@ class StravaTokenManager:
         """Save tokens in memory and trigger automated update (production-safe)"""
         # Update in-memory tokens
         self.tokens = tokens
+        
+        # Clear cached token to force reload from environment
+        with self._token_lock:
+            self._cached_token = None
+            self._cached_token_expires_at = None
         
         # Log the new tokens
         print("🔄 NEW STRAVA TOKENS - TRIGGERING AUTOMATED UPDATE:")
@@ -170,8 +183,8 @@ class StravaTokenManager:
         try:
             # expires_at is a Unix timestamp
             expiry_time = datetime.fromtimestamp(int(expires_at))
-            # Add a 1-minute buffer to avoid edge cases (reduced from 5 minutes)
-            buffer_time = expiry_time - timedelta(minutes=1)
+            # Reduce buffer to 30 seconds to prevent premature refreshes
+            buffer_time = expiry_time - timedelta(seconds=30)
             
             is_expired = datetime.now() >= buffer_time
             
@@ -184,22 +197,45 @@ class StravaTokenManager:
             return True
     
     def get_valid_access_token(self) -> str:
-        """Get a valid access token, refreshing if necessary"""
-        current_tokens = self._load_tokens_from_env()
-        
-        if not current_tokens.get("access_token"):
-            raise ValueError("No access token available. Please run the setup script.")
-        
-        # Check if token needs refreshing
-        if self._is_token_expired(current_tokens.get("expires_at")):
-            if not current_tokens.get("refresh_token"):
-                raise ValueError("No refresh token available. Please re-authenticate.")
+        """Get a valid access token, refreshing if necessary - THREAD-SAFE"""
+        with self._token_lock:
+            # Check if we have a cached token that's still valid
+            if (self._cached_token and 
+                self._cached_token_expires_at and 
+                not self._is_token_expired(self._cached_token_expires_at)):
+                return self._cached_token
             
-            # Refresh the token
-            new_access_token = self._refresh_access_token(current_tokens["refresh_token"])
-            return new_access_token
-        
-        return current_tokens["access_token"]
+            # Load current tokens from environment
+            current_tokens = self._load_tokens_from_env()
+            
+            if not current_tokens.get("access_token"):
+                raise ValueError("No access token available. Please run the setup script.")
+            
+            # Check if token needs refreshing
+            if self._is_token_expired(current_tokens.get("expires_at")):
+                if not current_tokens.get("refresh_token"):
+                    raise ValueError("No refresh token available. Please re-authenticate.")
+                
+                # Check if we recently refreshed (within last 5 minutes) to prevent rapid refreshes
+                if (self._last_refresh_time and 
+                    time.time() - self._last_refresh_time < 300):  # 5 minutes
+                    print("🔄 Token refresh recently completed, using cached token")
+                    return self._cached_token or current_tokens["access_token"]
+                
+                # Refresh the token
+                new_access_token = self._refresh_access_token(current_tokens["refresh_token"])
+                
+                # Cache the new token
+                self._cached_token = new_access_token
+                self._cached_token_expires_at = current_tokens.get("expires_at")
+                self._last_refresh_time = time.time()
+                
+                return new_access_token
+            
+            # Token is still valid, cache it and return
+            self._cached_token = current_tokens["access_token"]
+            self._cached_token_expires_at = current_tokens.get("expires_at")
+            return current_tokens["access_token"]
     
     def _refresh_access_token(self, refresh_token: str) -> str:
         """Refresh the access token using the refresh token - FIXED to be synchronous"""
@@ -246,3 +282,17 @@ class StravaTokenManager:
             
         except Exception as e:
             raise Exception(f"Failed to refresh access token: {str(e)}")
+    
+    def get_token_status(self) -> Dict[str, Any]:
+        """Get current token status for debugging"""
+        with self._token_lock:
+            current_tokens = self._load_tokens_from_env()
+            return {
+                "has_access_token": bool(current_tokens.get("access_token")),
+                "has_refresh_token": bool(current_tokens.get("refresh_token")),
+                "expires_at": current_tokens.get("expires_at"),
+                "is_expired": self._is_token_expired(current_tokens.get("expires_at")),
+                "cached_token": bool(self._cached_token),
+                "last_refresh_time": self._last_refresh_time,
+                "time_since_last_refresh": time.time() - self._last_refresh_time if self._last_refresh_time else None
+            }
