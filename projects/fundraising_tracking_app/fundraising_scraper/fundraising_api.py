@@ -167,6 +167,23 @@ async def get_fundraising_data(api_key: str = Depends(verify_api_key)) -> Fundra
         
         # Process donations in parallel for better performance
         raw_donations = data.get("donations", [])
+        
+        # Sort donations by date (oldest first - first donor should be first)
+        def parse_donation_date(donation):
+            date_str = donation.get("date", "")
+            if "months ago" in date_str:
+                months = int(date_str.split()[0])
+                return -months  # Negative so older donations come first
+            elif "weeks ago" in date_str:
+                weeks = int(date_str.split()[0])
+                return -weeks * 4
+            elif "days ago" in date_str:
+                days = int(date_str.split()[0])
+                return -days / 30
+            else:
+                return 0
+        
+        raw_donations.sort(key=parse_donation_date)
         processed_donations = await async_processor.process_donations_parallel(raw_donations)
         
         # Format the data for frontend consumption
@@ -265,6 +282,26 @@ async def get_donations(request: DonationsFilterRequest = Depends(), api_key: st
         # Filter anonymous donations
         if not request.include_anonymous:
             filtered_donations = [d for d in filtered_donations if d.get("donor_name", "").lower() not in ["anonymous", "anon", ""]]
+        
+        # Sort donations by date (oldest first - first donor should be first)
+        # Parse dates and sort chronologically
+        def parse_donation_date(donation):
+            date_str = donation.get("date", "")
+            if "months ago" in date_str:
+                # Extract number of months
+                months = int(date_str.split()[0])
+                # Convert to approximate timestamp (older = smaller timestamp)
+                return -months  # Negative so older donations come first
+            elif "weeks ago" in date_str:
+                weeks = int(date_str.split()[0])
+                return -weeks * 4  # Convert weeks to approximate months
+            elif "days ago" in date_str:
+                days = int(date_str.split()[0])
+                return -days / 30  # Convert days to approximate months
+            else:
+                return 0  # Default for unknown formats
+        
+        filtered_donations.sort(key=parse_donation_date)
         
         # Apply limit
         if request.limit is not None:
