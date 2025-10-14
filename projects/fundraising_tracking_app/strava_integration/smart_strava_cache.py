@@ -102,7 +102,10 @@ class SmartStravaCache:
                         should_refresh, reason = self._should_refresh_cache(cache_data)
                         if should_refresh:
                             logger.info(f"🔄 Cache needs refresh: {reason}")
-                            self._trigger_emergency_refresh()
+                            # Use normal refresh system instead of emergency refresh
+                            # Emergency refresh is only for completely broken/empty cache
+                            logger.info("🔄 Starting normal refresh process...")
+                            self._start_scheduled_refresh()
                         else:
                             logger.debug("✅ Cache is fresh and valid")  # Reduce log spam for valid cache
                     else:
@@ -1429,6 +1432,18 @@ class SmartStravaCache:
             except Exception as e:
                 logger.error(f"❌ Error in automated refresh loop: {e}")
                 time.sleep(300)  # Wait 5 minutes before retrying
+    
+    def _start_scheduled_refresh(self):
+        """Start a normal scheduled refresh (not emergency)"""
+        try:
+            logger.info("🔄 Starting normal scheduled refresh...")
+            # Run scheduled refresh in background thread to avoid blocking startup
+            import threading
+            refresh_thread = threading.Thread(target=self._perform_scheduled_refresh, daemon=True)
+            refresh_thread.start()
+            logger.info("🔄 Normal refresh started in background thread")
+        except Exception as e:
+            logger.error(f"❌ Failed to start scheduled refresh: {e}")
     
     def _perform_scheduled_refresh(self):
         """Perform a scheduled refresh with backup and batch processing"""
