@@ -552,7 +552,9 @@ class SmartStravaCache:
         try:
             logger.info(f"🔄 Starting Strava API fetch for {limit} activities...")
             access_token = self.token_manager.get_valid_access_token()
+            logger.info(f"🔄 Access token received: {access_token[:20] if access_token else 'None'}...")
             headers = {'Authorization': f'Bearer {access_token}'}
+            logger.info(f"🔄 Headers created successfully")
             
             url = f"{self.base_url}/athlete/activities?per_page={min(limit, 200)}&page=1"
             logger.info(f"🔄 Fetching from URL: {url}")

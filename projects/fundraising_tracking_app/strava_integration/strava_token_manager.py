@@ -79,7 +79,9 @@ class StravaTokenManager:
                            time.time() - self._last_digitalocean_update < 1800)  # 30 minutes
             
             if tokens_changed and not recent_update:
+                print("🔄 Triggering DigitalOcean automated update...")
                 self._trigger_automated_update(tokens)
+                print("🔄 DigitalOcean automated update completed")
                 self._last_digitalocean_update = time.time()
             elif tokens_changed and recent_update:
                 print("🔄 Tokens changed but DigitalOcean update too recent, skipping to prevent restart loop")
@@ -107,7 +109,9 @@ class StravaTokenManager:
                 }
                 
                 # Get current app spec
+                print(f"🔄 Making DigitalOcean API call to: {url}")
                 response = requests.get(url, headers=headers, timeout=30)
+                print(f"🔄 DigitalOcean API response: {response.status_code}")
                 if response.status_code == 200:
                     app_spec = response.json()["app"]["spec"]
                     
