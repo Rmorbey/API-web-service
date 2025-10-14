@@ -107,7 +107,7 @@ class StravaTokenManager:
                 }
                 
                 # Get current app spec
-                response = requests.get(url, headers=headers)
+                response = requests.get(url, headers=headers, timeout=30)
                 if response.status_code == 200:
                     app_spec = response.json()["app"]["spec"]
                     
@@ -145,7 +145,7 @@ class StravaTokenManager:
                             break
                     
                     # Update the app
-                    update_response = requests.put(url, headers=headers, json={"spec": app_spec})
+                    update_response = requests.put(url, headers=headers, json={"spec": app_spec}, timeout=30)
                     if update_response.status_code == 200:
                         print("✅ DigitalOcean secrets updated successfully")
                         print("🔄 App will restart automatically with new tokens")
@@ -257,22 +257,25 @@ class StravaTokenManager:
         """Refresh the access token using the refresh token - FIXED to be synchronous"""
         
         try:
-            # Use shared HTTP client with connection pooling
-            http_client = get_http_client()
-            response = http_client.post(
+            # Use synchronous requests for token refresh to avoid async/sync issues
+            import requests
+            response = requests.post(
                 "https://www.strava.com/oauth/token",
                 data={
                     "client_id": self.client_id,
                     "client_secret": self.client_secret,
                     "refresh_token": refresh_token,
                     "grant_type": "refresh_token"
-                }
+                },
+                timeout=30  # Add timeout to prevent hanging
             )
             
             if response.status_code != 200:
+                print(f"❌ Token refresh failed: {response.status_code} - {response.text}")
                 raise Exception(f"Failed to refresh token: {response.status_code} - {response.text}")
             
             token_data = response.json()
+            print(f"🔄 Token refresh response received: {response.status_code}")
             
             # Calculate expires_at timestamp
             expires_at = int(datetime.now().timestamp()) + token_data["expires_in"]
@@ -285,6 +288,7 @@ class StravaTokenManager:
                 "expires_in": str(token_data["expires_in"])
             }
             
+            print(f"🔄 Saving new tokens to environment...")
             # Save to .env file
             self._save_tokens_to_env(new_tokens)
             
