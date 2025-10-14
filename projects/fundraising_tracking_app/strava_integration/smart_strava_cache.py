@@ -167,26 +167,16 @@ class SmartStravaCache:
         # 4. Emergency refresh (all sources failed)
         logger.warning("🚨 All cache sources failed, triggering emergency refresh...")
         
-        # CRITICAL: For startup, run emergency refresh synchronously to ensure data is populated
-        # This prevents returning empty cache while emergency refresh hangs in background
-        try:
-            logger.info("🔄 Running emergency refresh synchronously during startup...")
-            self._perform_emergency_refresh()
-            
-            # After emergency refresh completes, try to load the cache again
-            if self._cache_data and self._cache_data.get("activities"):
-                logger.info(f"✅ Emergency refresh completed, loaded {len(self._cache_data['activities'])} activities")
-                return self._cache_data
-            else:
-                logger.warning("⚠️ Emergency refresh completed but no activities found")
-                self._cache_data = {"timestamp": None, "activities": []}
-                return self._cache_data
-                
-        except Exception as e:
-            logger.error(f"❌ Emergency refresh failed during startup: {e}")
-            # Fallback to empty cache if emergency refresh fails
-            self._cache_data = {"timestamp": None, "activities": []}
-            return self._cache_data
+        # CRITICAL: Start emergency refresh in background to avoid blocking startup
+        # This allows health checks to respond while emergency refresh runs
+        logger.info("🔄 Starting emergency refresh in background during startup...")
+        self._trigger_emergency_refresh()
+        
+        # Return empty cache immediately to allow app to start
+        # Emergency refresh will populate cache in background
+        self._cache_data = {"timestamp": None, "activities": []}
+        logger.info("🔄 App starting with empty cache, emergency refresh running in background")
+        return self._cache_data
     
     def _save_cache_to_file(self, data: Dict[str, Any]):
         """Helper method to save cache to JSON file"""
@@ -1945,7 +1935,7 @@ class SmartStravaCache:
             
             # Start emergency refresh in a separate thread to avoid blocking
             import threading
-            emergency_thread = threading.Thread(target=self._perform_emergency_refresh, daemon=True)
+            emergency_thread = threading.Thread(target=self._emergency_refresh_worker, daemon=True)
             emergency_thread.start()
             
             logger.info("🚨 Emergency refresh started in background thread")
@@ -1954,89 +1944,55 @@ class SmartStravaCache:
             logger.error(f"Failed to trigger emergency refresh: {e}")
             self._record_emergency_refresh_failure()
     
-    def _perform_emergency_refresh(self):
-        """Emergency refresh - rebuild from APIs when all sources fail"""
+    def _emergency_refresh_worker(self):
+        """Emergency refresh worker - runs in background thread"""
         try:
-            logger.info("🔄 Performing emergency refresh...")
+            logger.info("🔄 Emergency refresh worker: Starting Strava API fetch...")
+            # Set emergency refresh mode to skip DigitalOcean updates
+            self.token_manager.set_emergency_refresh_mode(True)
             
-            # CRITICAL: Use threading-based timeout instead of signal (works in background threads)
-            import threading
-            import time
+            # Fetch fresh data from Strava
+            fresh_activities = self._fetch_from_strava(200)
+            logger.info("🔄 Emergency refresh worker: Strava API fetch completed, filtering activities...")
+            filtered_activities = self._filter_activities(fresh_activities)
+            logger.info("🔄 Emergency refresh worker: Activity filtering completed")
             
-            result = {"success": False, "error": None, "activities": []}
+            logger.info(f"✅ Emergency refresh: Fetched {len(fresh_activities)} activities, {len(filtered_activities)} after filtering")
             
-            def emergency_refresh_worker():
-                try:
-                    logger.info("🔄 Emergency refresh worker: Starting Strava API fetch...")
-                    # Set emergency refresh mode to skip DigitalOcean updates
-                    self.token_manager.set_emergency_refresh_mode(True)
-                    # Fetch fresh data from Strava
-                    fresh_activities = self._fetch_from_strava(200)
-                    logger.info("🔄 Emergency refresh worker: Strava API fetch completed, filtering activities...")
-                    filtered_activities = self._filter_activities(fresh_activities)
-                    logger.info("🔄 Emergency refresh worker: Activity filtering completed")
-                    
-                    logger.info(f"✅ Emergency refresh: Fetched {len(fresh_activities)} activities, {len(filtered_activities)} after filtering")
-                    
-                    # Create new cache with fresh data
-                    emergency_cache = {
-                        "timestamp": datetime.now().isoformat(),
-                        "activities": filtered_activities,
-                        "total_fetched": len(fresh_activities),
-                        "total_filtered": len(filtered_activities),
-                        "emergency_refresh": False,  # Clear the flag after successful refresh
-                        "batching_in_progress": True,  # Mark batching as in progress
-                        "last_rich_fetch": datetime.now().isoformat()  # Mark as needing rich data
-                    }
-                    
-                    # Save the emergency cache (this will save to both file and Supabase)
-                    self._save_cache(emergency_cache)
-                    
-                    # Update in-memory cache
-                    self._cache_data = emergency_cache
-                    self._cache_loaded_at = datetime.now()
-                    
-                    logger.info(f"✅ Emergency refresh complete: {len(filtered_activities)} activities restored")
-                    
-                    # Clear emergency refresh mode
-                    self.token_manager.set_emergency_refresh_mode(False)
-                    
-                    result["success"] = True
-                    result["activities"] = filtered_activities
-                    
-                    # CRITICAL: Start batch processing immediately to get complete data
-                    # This will fetch polyline, bounds, descriptions, photos, comments for all activities
-                    logger.info("🔄 Starting immediate batch processing to fetch complete data...")
-                    self._start_batch_processing()
-                    
-                except Exception as e:
-                    result["error"] = str(e)
-                    logger.error(f"Emergency refresh worker failed: {e}")
-                    # Clear emergency refresh mode on failure
-                    self.token_manager.set_emergency_refresh_mode(False)
+            # Create new cache with fresh data
+            emergency_cache = {
+                "timestamp": datetime.now().isoformat(),
+                "activities": filtered_activities,
+                "total_fetched": len(fresh_activities),
+                "total_filtered": len(filtered_activities),
+                "emergency_refresh": False,  # Clear the flag after successful refresh
+                "batching_in_progress": True,  # Mark batching as in progress
+                "last_rich_fetch": datetime.now().isoformat()  # Mark as needing rich data
+            }
             
-            # Start emergency refresh in a separate thread with timeout
-            worker_thread = threading.Thread(target=emergency_refresh_worker, daemon=True)
-            worker_thread.start()
+            # Save the emergency cache (this will save to both file and Supabase)
+            self._save_cache(emergency_cache)
             
-            # Wait for completion with timeout (120 seconds for token refresh + API calls)
-            worker_thread.join(timeout=120)
+            # Update in-memory cache
+            self._cache_data = emergency_cache
+            self._cache_loaded_at = datetime.now()
             
-            if worker_thread.is_alive():
-                logger.error("Emergency refresh timed out after 120 seconds")
-                result["error"] = "Emergency refresh timed out after 120 seconds"
+            logger.info(f"✅ Emergency refresh complete: {len(filtered_activities)} activities restored")
             
-            if not result["success"]:
-                raise Exception(result["error"] or "Emergency refresh failed")
+            # Clear emergency refresh mode
+            self.token_manager.set_emergency_refresh_mode(False)
             
-        except TimeoutError as e:
-            logger.error(f"Emergency refresh timed out: {e}")
-            logger.warning("Emergency refresh aborted due to timeout - system will continue with empty cache")
+            # CRITICAL: Start batch processing immediately to get complete data
+            # This will fetch polyline, bounds, descriptions, photos, comments for all activities
+            logger.info("🔄 Starting immediate batch processing to fetch complete data...")
+            self._start_batch_processing()
+            
         except Exception as e:
-            logger.error(f"Emergency refresh failed: {e}")
+            logger.error(f"Emergency refresh worker failed: {e}")
+            # Clear emergency refresh mode on failure
+            self.token_manager.set_emergency_refresh_mode(False)
+            # Record failure for circuit breaker
             self._record_emergency_refresh_failure()
-            # If emergency refresh fails, at least we have an empty cache
-            logger.warning("System will continue with empty cache until next scheduled refresh")
     
     def _is_emergency_refresh_circuit_breaker_open(self) -> bool:
         """Check if emergency refresh circuit breaker is open"""
