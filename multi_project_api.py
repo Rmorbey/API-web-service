@@ -129,38 +129,7 @@ app = FastAPI(
     openapi_url="/openapi.json"
 )
 
-# Compression middleware (add first for optimal performance)
-app.add_middleware(SmartCompressionMiddleware)
-
-# Cache middleware (add second)
-app.add_middleware(CacheMiddleware)
-
-
-# Security middleware
-app.add_middleware(
-    TrustedHostMiddleware, 
-    allowed_hosts=[
-        "localhost",
-        "127.0.0.1",
-        "*.russellmorbey.co.uk",
-        "russellmorbey.co.uk",
-        "*.ondigitalocean.app"  # allow DO App Platform health probes and default domain
-    ]
-)
-
-# Public health check bypass (must be added AFTER TrustedHost so it runs first)
-@app.middleware("http")
-async def public_health_bypass(request: Request, call_next):
-    if request.method == "GET" and request.url.path in ("/api/health", "/health"):
-        return JSONResponse({
-            "status": "healthy",
-            "timestamp": datetime.utcnow().isoformat(),
-            "projects_loaded": len([p for p in PROJECTS.values() if p["enabled"]]),
-            "total_projects": len(PROJECTS)
-        })
-    return await call_next(request)
-
-# CORS middleware for React frontend and local HTML files
+# CORS middleware (add FIRST - runs last, handles preflight requests)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -175,12 +144,52 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Security middleware (add second)
+app.add_middleware(
+    TrustedHostMiddleware, 
+    allowed_hosts=[
+        "localhost",
+        "127.0.0.1",
+        "*.russellmorbey.co.uk",
+        "russellmorbey.co.uk",
+        "*.ondigitalocean.app"  # allow DO App Platform health probes and default domain
+    ]
+)
+
+# Cache middleware (add third)
+app.add_middleware(CacheMiddleware)
+
+# Compression middleware (add last for optimal performance)
+app.add_middleware(SmartCompressionMiddleware)
+
+# Public health check bypass (must be added AFTER TrustedHost so it runs first)
+@app.middleware("http")
+async def public_health_bypass(request: Request, call_next):
+    if request.method == "GET" and request.url.path in ("/api/health", "/health"):
+        return JSONResponse({
+            "status": "healthy",
+            "timestamp": datetime.utcnow().isoformat(),
+            "projects_loaded": len([p for p in PROJECTS.values() if p["enabled"]]),
+            "total_projects": len(PROJECTS)
+        })
+    return await call_next(request)
+
+# CORS middleware moved to top for proper middleware order
+
 # Input validation is handled by FastAPI's built-in validation
 
 # Security headers middleware
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
     response = await call_next(request)
+    
+    # Add CORS headers explicitly (backup to CORSMiddleware)
+    origin = request.headers.get("origin")
+    if origin and origin in ["http://localhost:3000", "http://localhost:5173", "http://localhost:8000", "https://www.russellmorbey.co.uk", "https://russellmorbey.co.uk"]:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "X-API-Key, Content-Type, Referer, Origin"
+        response.headers["Access-Control-Allow-Credentials"] = "true"
     
     # Add security headers
     response.headers["X-Content-Type-Options"] = "nosniff"

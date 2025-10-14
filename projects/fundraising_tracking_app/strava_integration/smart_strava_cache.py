@@ -253,6 +253,14 @@ class SmartStravaCache:
         if not cache_data.get("timestamp"):
             return False
         
+        # Check data integrity first - if data is complete, cache is valid regardless of age
+        if self._validate_cache_integrity(cache_data):
+            activities = cache_data.get("activities", [])
+            if len(activities) >= 10:  # Reasonable threshold
+                logger.info(f"Cache has complete data ({len(activities)} activities), considering valid despite age")
+                return True
+        
+        # If data is incomplete, check time-based validation
         cache_time = datetime.fromisoformat(cache_data["timestamp"])
         expiry_time = cache_time + timedelta(hours=self.cache_duration_hours)
         now = datetime.now()
