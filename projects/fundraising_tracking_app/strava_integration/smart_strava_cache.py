@@ -424,7 +424,10 @@ class SmartStravaCache:
                 # Make the API call using shared HTTP client with connection pooling
                 # CRITICAL: Add timeout to prevent hanging
                 http_client = get_http_client()
+                logger.info(f"🔄 Making API call to: {url}")
+                logger.info(f"🔄 Headers: Authorization: Bearer {headers.get('Authorization', 'MISSING')[:20]}...")
                 response = http_client.get(url, headers=headers, timeout=30.0)
+                logger.info(f"🔄 API call completed: {response.status_code}")
                 
                 # Record the API call
                 self._record_api_call()
@@ -547,16 +550,21 @@ class SmartStravaCache:
     def _fetch_from_strava(self, limit: int) -> List[Dict[str, Any]]:
         """Fetch activities from Strava API with enhanced error handling"""
         try:
+            logger.info(f"🔄 Starting Strava API fetch for {limit} activities...")
             access_token = self.token_manager.get_valid_access_token()
             headers = {'Authorization': f'Bearer {access_token}'}
             
-            # Use the new retry-enabled API call method
-            response = self._make_api_call_with_retry(
-                f"{self.base_url}/athlete/activities?per_page={min(limit, 200)}&page=1",
-                headers
-            )
+            url = f"{self.base_url}/athlete/activities?per_page={min(limit, 200)}&page=1"
+            logger.info(f"🔄 Fetching from URL: {url}")
             
-            return response.json()
+            # Use the new retry-enabled API call method
+            response = self._make_api_call_with_retry(url, headers)
+            
+            logger.info(f"🔄 API response received, parsing JSON...")
+            activities = response.json()
+            logger.info(f"🔄 Successfully fetched {len(activities)} activities from Strava")
+            
+            return activities
             
         except Exception as e:
             logger.error(f"Failed to fetch activities from Strava: {str(e)}")
@@ -1957,9 +1965,12 @@ class SmartStravaCache:
             
             def emergency_refresh_worker():
                 try:
+                    logger.info("🔄 Emergency refresh worker: Starting Strava API fetch...")
                     # Fetch fresh data from Strava
                     fresh_activities = self._fetch_from_strava(200)
+                    logger.info("🔄 Emergency refresh worker: Strava API fetch completed, filtering activities...")
                     filtered_activities = self._filter_activities(fresh_activities)
+                    logger.info("🔄 Emergency refresh worker: Activity filtering completed")
                     
                     logger.info(f"✅ Emergency refresh: Fetched {len(fresh_activities)} activities, {len(filtered_activities)} after filtering")
                     

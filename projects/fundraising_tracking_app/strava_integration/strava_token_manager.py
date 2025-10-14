@@ -214,11 +214,15 @@ class StravaTokenManager:
     
     def get_valid_access_token(self) -> str:
         """Get a valid access token, refreshing if necessary - THREAD-SAFE"""
+        print(f"🔄 get_valid_access_token called, acquiring lock...")
         with self._token_lock:
+            print(f"🔄 Lock acquired, checking cached token...")
             # Check if we have a cached token that's still valid
+            print(f"🔄 Checking cached token: {self._cached_token is not None}")
             if (self._cached_token and 
                 self._cached_token_expires_at and 
                 not self._is_token_expired(self._cached_token_expires_at)):
+                print(f"🔄 Using cached token")
                 return self._cached_token
             
             # Load current tokens from environment
