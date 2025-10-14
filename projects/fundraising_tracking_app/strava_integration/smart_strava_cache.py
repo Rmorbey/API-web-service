@@ -794,12 +794,67 @@ class SmartStravaCache:
 
 
     def _decode_polyline(self, polyline_str: str) -> List[List[float]]:
-        """Decode Google polyline string to lat/lng coordinates"""
+        """Decode Google polyline string to lat/lng coordinates - FIXED with corruption detection"""
         if not polyline_str:
             return []
         
         try:
-            # Simple polyline decoder
+            # Use a more robust polyline decoder
+            import polyline
+            coordinates = polyline.decode(polyline_str)
+            
+            # Validate coordinates for corruption
+            if self._validate_coordinates(coordinates):
+                return [[lat, lng] for lat, lng in coordinates]
+            else:
+                logger.warning(f"Polyline coordinates failed validation, returning empty list")
+                return []
+                
+        except ImportError:
+            # Fallback to manual decoder if polyline library not available
+            logger.warning("polyline library not available, using fallback decoder")
+            return self._decode_polyline_fallback(polyline_str)
+        except Exception as e:
+            logger.error(f"Error decoding polyline: {e}")
+            return []
+    
+    def _validate_coordinates(self, coordinates: List[tuple]) -> bool:
+        """Validate that coordinates are reasonable and not corrupted"""
+        if not coordinates:
+            return False
+        
+        try:
+            lats = [coord[0] for coord in coordinates]
+            lngs = [coord[1] for coord in coordinates]
+            
+            # Check for valid coordinate ranges
+            if (min(lats) < -90 or max(lats) > 90 or 
+                min(lngs) < -180 or max(lngs) > 180):
+                logger.warning(f"Invalid coordinate ranges detected")
+                return False
+            
+            # Check for extreme jumps between coordinates (likely corruption)
+            if len(coordinates) > 1:
+                max_lat_jump = max(abs(lats[i] - lats[i-1]) for i in range(1, len(lats)))
+                max_lng_jump = max(abs(lngs[i] - lngs[i-1]) for i in range(1, len(lngs)))
+                
+                # 1 degree ≈ 111km, so jumps > 0.1 degrees (11km) are suspicious
+                if max_lat_jump > 0.1 or max_lng_jump > 0.1:
+                    logger.warning(f"Large coordinate jumps detected: lat={max_lat_jump:.6f}, lng={max_lng_jump:.6f}")
+                    return False
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error validating coordinates: {e}")
+            return False
+    
+    def _decode_polyline_fallback(self, polyline_str: str) -> List[List[float]]:
+        """Fallback polyline decoder with better error handling"""
+        if not polyline_str:
+            return []
+        
+        try:
             index = 0
             lat = 0
             lng = 0
@@ -809,7 +864,7 @@ class SmartStravaCache:
                 # Decode latitude
                 shift = 0
                 result = 0
-                while True:
+                while index < len(polyline_str):
                     b = ord(polyline_str[index]) - 63
                     index += 1
                     result |= (b & 0x1f) << shift
@@ -821,7 +876,7 @@ class SmartStravaCache:
                 # Decode longitude
                 shift = 0
                 result = 0
-                while True:
+                while index < len(polyline_str):
                     b = ord(polyline_str[index]) - 63
                     index += 1
                     result |= (b & 0x1f) << shift
@@ -834,7 +889,7 @@ class SmartStravaCache:
             
             return coordinates
         except Exception as e:
-            logger.warning(f"Failed to decode polyline: {e}")
+            logger.error(f"Error in fallback polyline decoder: {e}")
             return []
 
     def _process_map_data(self, activity_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -1557,8 +1612,10 @@ class SmartStravaCache:
                 "activities_with_polyline": 0,
                 "activities_with_bounds": 0,
                 "activities_with_metadata": 0,
+                "activities_with_corrupted_polyline": 0,
                 "data_loss_analysis": [],
-                "timestamp_analysis": []
+                "timestamp_analysis": [],
+                "corrupted_activities": []
             }
             
             for activity in activities:
@@ -1569,6 +1626,20 @@ class SmartStravaCache:
                 has_polyline = bool(activity.get("map", {}).get("polyline"))
                 has_bounds = bool(activity.get("map", {}).get("bounds"))
                 has_metadata = bool(activity.get("_metadata"))
+                
+                # Check for polyline corruption
+                is_corrupted = False
+                if has_polyline:
+                    polyline_str = activity.get("map", {}).get("polyline", "")
+                    try:
+                        import polyline
+                        coordinates = polyline.decode(polyline_str)
+                        if not self._validate_coordinates(coordinates):
+                            is_corrupted = True
+                            analysis["activities_with_corrupted_polyline"] += 1
+                    except Exception:
+                        is_corrupted = True
+                        analysis["activities_with_corrupted_polyline"] += 1
                 
                 if has_polyline:
                     analysis["activities_with_polyline"] += 1
@@ -1587,7 +1658,8 @@ class SmartStravaCache:
                         "rich_data_added": metadata.get("rich_data_added"),
                         "last_updated": metadata.get("last_updated"),
                         "has_polyline": has_polyline,
-                        "has_bounds": has_bounds
+                        "has_bounds": has_bounds,
+                        "is_corrupted": is_corrupted
                     })
                 else:
                     analysis["data_loss_analysis"].append({
@@ -1595,7 +1667,16 @@ class SmartStravaCache:
                         "activity_name": activity_name,
                         "issue": "No metadata - cannot track when data was added",
                         "has_polyline": has_polyline,
-                        "has_bounds": has_bounds
+                        "has_bounds": has_bounds,
+                        "is_corrupted": is_corrupted
+                    })
+                
+                # Add to corrupted activities list if corrupted
+                if is_corrupted:
+                    analysis["corrupted_activities"].append({
+                        "activity_id": activity_id,
+                        "activity_name": activity_name,
+                        "issue": "Corrupted polyline data - causes weird route visualization"
                     })
             
             # Calculate percentages
@@ -1603,6 +1684,7 @@ class SmartStravaCache:
             analysis["polyline_percentage"] = (analysis["activities_with_polyline"] / total * 100) if total > 0 else 0
             analysis["bounds_percentage"] = (analysis["activities_with_bounds"] / total * 100) if total > 0 else 0
             analysis["metadata_percentage"] = (analysis["activities_with_metadata"] / total * 100) if total > 0 else 0
+            analysis["corruption_percentage"] = (analysis["activities_with_corrupted_polyline"] / total * 100) if total > 0 else 0
             
             return analysis
             
