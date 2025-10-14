@@ -69,6 +69,12 @@ class SmartStravaCache:
         self._last_refresh = None
         self._batch_queue = []
         
+        # Emergency refresh circuit breaker
+        self.emergency_refresh_failures = 0
+        self.max_emergency_refresh_failures = 3
+        self.emergency_refresh_circuit_breaker_reset_hours = 2
+        self.last_emergency_refresh_failure = None
+        
         # Start the automated refresh system
         self._start_automated_refresh()
         
@@ -103,7 +109,9 @@ class SmartStravaCache:
                         logger.warning("❌ Supabase data integrity check failed, triggering refresh...")
                         self._trigger_emergency_refresh()
                 else:
-                    logger.info("📭 No Supabase data found, will populate on first refresh")
+                    logger.info("📭 No Supabase data found, triggering emergency refresh to populate cache...")
+                    # CRITICAL: Trigger emergency refresh immediately when no data exists
+                    self._trigger_emergency_refresh()
             except Exception as e:
                 logger.error(f"❌ Cache system initialization failed: {e}")
         else:
@@ -158,9 +166,27 @@ class SmartStravaCache:
         
         # 4. Emergency refresh (all sources failed)
         logger.warning("🚨 All cache sources failed, triggering emergency refresh...")
-        self._cache_data = {"timestamp": None, "activities": []}
-        self._trigger_emergency_refresh()
-        return self._cache_data
+        
+        # CRITICAL: For startup, run emergency refresh synchronously to ensure data is populated
+        # This prevents returning empty cache while emergency refresh hangs in background
+        try:
+            logger.info("🔄 Running emergency refresh synchronously during startup...")
+            self._perform_emergency_refresh()
+            
+            # After emergency refresh completes, try to load the cache again
+            if self._cache_data and self._cache_data.get("activities"):
+                logger.info(f"✅ Emergency refresh completed, loaded {len(self._cache_data['activities'])} activities")
+                return self._cache_data
+            else:
+                logger.warning("⚠️ Emergency refresh completed but no activities found")
+                self._cache_data = {"timestamp": None, "activities": []}
+                return self._cache_data
+                
+        except Exception as e:
+            logger.error(f"❌ Emergency refresh failed during startup: {e}")
+            # Fallback to empty cache if emergency refresh fails
+            self._cache_data = {"timestamp": None, "activities": []}
+            return self._cache_data
     
     def _save_cache_to_file(self, data: Dict[str, Any]):
         """Helper method to save cache to JSON file"""
@@ -396,8 +422,9 @@ class SmartStravaCache:
                     raise Exception(f"Rate limit exceeded: {message}")
                 
                 # Make the API call using shared HTTP client with connection pooling
+                # CRITICAL: Add timeout to prevent hanging
                 http_client = get_http_client()
-                response = http_client.get(url, headers=headers)
+                response = http_client.get(url, headers=headers, timeout=30.0)
                 
                 # Record the API call
                 self._record_api_call()
@@ -1898,6 +1925,12 @@ class SmartStravaCache:
     def _trigger_emergency_refresh(self):
         """Emergency refresh - rebuild from APIs when all sources fail"""
         try:
+            # Check circuit breaker
+            if self._is_emergency_refresh_circuit_breaker_open():
+                logger.warning("🚨 Emergency refresh circuit breaker is OPEN - skipping emergency refresh")
+                logger.warning("System will continue with empty cache until circuit breaker resets")
+                return
+            
             logger.info("🚨 EMERGENCY REFRESH: Rebuilding cache from APIs...")
             
             # Start emergency refresh in a separate thread to avoid blocking
@@ -1909,44 +1942,90 @@ class SmartStravaCache:
             
         except Exception as e:
             logger.error(f"Failed to trigger emergency refresh: {e}")
+            self._record_emergency_refresh_failure()
     
     def _perform_emergency_refresh(self):
         """Emergency refresh - rebuild from APIs when all sources fail"""
         try:
             logger.info("🔄 Performing emergency refresh...")
             
-            # Fetch fresh data from Strava
-            fresh_activities = self._fetch_from_strava(200)
-            filtered_activities = self._filter_activities(fresh_activities)
+            # CRITICAL: Add timeout protection for the entire emergency refresh
+            import signal
             
-            logger.info(f"✅ Emergency refresh: Fetched {len(fresh_activities)} activities, {len(filtered_activities)} after filtering")
+            def timeout_handler(signum, frame):
+                raise TimeoutError("Emergency refresh timed out after 60 seconds")
             
-            # Create new cache with fresh data
-            emergency_cache = {
-                "timestamp": datetime.now().isoformat(),
-                "activities": filtered_activities,
-                "total_fetched": len(fresh_activities),
-                "total_filtered": len(filtered_activities),
-                "emergency_refresh": False,  # Clear the flag after successful refresh
-                "batching_in_progress": True,  # Mark batching as in progress
-                "last_rich_fetch": datetime.now().isoformat()  # Mark as needing rich data
-            }
+            # Set a 60-second timeout for the entire emergency refresh
+            signal.signal(signal.SIGALRM, timeout_handler)
+            signal.alarm(60)
             
-            # Save the emergency cache (this will save to both file and Supabase)
-            self._save_cache(emergency_cache)
+            try:
+                # Fetch fresh data from Strava with timeout protection
+                fresh_activities = self._fetch_from_strava(200)
+                filtered_activities = self._filter_activities(fresh_activities)
+                
+                logger.info(f"✅ Emergency refresh: Fetched {len(fresh_activities)} activities, {len(filtered_activities)} after filtering")
+                
+                # Create new cache with fresh data
+                emergency_cache = {
+                    "timestamp": datetime.now().isoformat(),
+                    "activities": filtered_activities,
+                    "total_fetched": len(fresh_activities),
+                    "total_filtered": len(filtered_activities),
+                    "emergency_refresh": False,  # Clear the flag after successful refresh
+                    "batching_in_progress": True,  # Mark batching as in progress
+                    "last_rich_fetch": datetime.now().isoformat()  # Mark as needing rich data
+                }
+                
+                # Save the emergency cache (this will save to both file and Supabase)
+                self._save_cache(emergency_cache)
+                
+                # Update in-memory cache
+                self._cache_data = emergency_cache
+                self._cache_loaded_at = datetime.now()
+                
+                logger.info(f"✅ Emergency refresh complete: {len(filtered_activities)} activities restored")
+                
+                # CRITICAL: Start batch processing immediately to get complete data
+                # This will fetch polyline, bounds, descriptions, photos, comments for all activities
+                logger.info("🔄 Starting immediate batch processing to fetch complete data...")
+                self._start_batch_processing()
+                
+            finally:
+                # Always cancel the alarm
+                signal.alarm(0)
             
-            # Update in-memory cache
-            self._cache_data = emergency_cache
-            self._cache_loaded_at = datetime.now()
-            
-            logger.info(f"✅ Emergency refresh complete: {len(filtered_activities)} activities restored")
-            
-            # CRITICAL: Start batch processing immediately to get complete data
-            # This will fetch polyline, bounds, descriptions, photos, comments for all activities
-            logger.info("🔄 Starting immediate batch processing to fetch complete data...")
-            self._start_batch_processing()
-            
+        except TimeoutError as e:
+            logger.error(f"Emergency refresh timed out: {e}")
+            logger.warning("Emergency refresh aborted due to timeout - system will continue with empty cache")
         except Exception as e:
             logger.error(f"Emergency refresh failed: {e}")
+            self._record_emergency_refresh_failure()
             # If emergency refresh fails, at least we have an empty cache
             logger.warning("System will continue with empty cache until next scheduled refresh")
+    
+    def _is_emergency_refresh_circuit_breaker_open(self) -> bool:
+        """Check if emergency refresh circuit breaker is open"""
+        if self.emergency_refresh_failures < self.max_emergency_refresh_failures:
+            return False
+        
+        # Check if enough time has passed to reset the circuit breaker
+        if self.last_emergency_refresh_failure:
+            time_since_failure = datetime.now() - self.last_emergency_refresh_failure
+            if time_since_failure.total_seconds() > (self.emergency_refresh_circuit_breaker_reset_hours * 3600):
+                logger.info("🔄 Emergency refresh circuit breaker reset - failures cleared")
+                self.emergency_refresh_failures = 0
+                self.last_emergency_refresh_failure = None
+                return False
+        
+        return True
+    
+    def _record_emergency_refresh_failure(self):
+        """Record an emergency refresh failure for circuit breaker"""
+        self.emergency_refresh_failures += 1
+        self.last_emergency_refresh_failure = datetime.now()
+        logger.warning(f"🚨 Emergency refresh failure #{self.emergency_refresh_failures}/{self.max_emergency_refresh_failures}")
+        
+        if self.emergency_refresh_failures >= self.max_emergency_refresh_failures:
+            logger.error("🚨 Emergency refresh circuit breaker OPEN - too many failures")
+            logger.error(f"Circuit breaker will reset in {self.emergency_refresh_circuit_breaker_reset_hours} hours")
