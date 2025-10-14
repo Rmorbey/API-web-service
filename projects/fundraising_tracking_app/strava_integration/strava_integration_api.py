@@ -81,23 +81,38 @@ def verify_frontend_access(request: Request):
     
     # Get referer header
     referer = request.headers.get("referer", "")
+    origin = request.headers.get("origin", "")
     
     # Allowed domains (your frontend domains)
     allowed_domains = [
         "http://localhost:3000",
         "http://localhost:5173", 
         "http://localhost:8000",
+        "http://localhost:3001",  # Additional React dev port
+        "http://localhost:8080",  # Additional dev port
         "https://www.russellmorbey.co.uk",
-        "https://russellmorbey.co.uk"
+        "https://russellmorbey.co.uk",
+        "https://api.russellmorbey.co.uk"  # Allow requests from the API domain itself
     ]
     
-    # Check if referer is from allowed domain
-    if not any(domain in referer for domain in allowed_domains):
+    # Check if referer or origin is from allowed domain
+    referer_allowed = any(domain in referer for domain in allowed_domains)
+    origin_allowed = any(domain in origin for domain in allowed_domains)
+    
+    # Allow if either referer or origin is from allowed domain
+    if not (referer_allowed or origin_allowed):
         # Allow localhost for development
         if not (client_ip.startswith("127.0.0.1") or client_ip.startswith("::1")):
+            # Check if this is a development environment (no referer/origin)
+            if not referer and not origin:
+                # Allow requests without referer/origin in development
+                print(f"🔓 Allowing request without referer/origin for development. Client IP: {client_ip}")
+                return True
+            
+            # Enhanced error message for debugging
             raise HTTPException(
                 status_code=403,
-                detail="Access denied - Request must come from authorized frontend"
+                detail=f"Access denied - Request must come from authorized frontend. Referer: '{referer}', Origin: '{origin}', Client IP: '{client_ip}'"
             )
     
     return True
