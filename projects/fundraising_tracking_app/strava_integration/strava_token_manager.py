@@ -30,7 +30,12 @@ class StravaTokenManager:
         self._cached_token = None
         self._cached_token_expires_at = None
         self._last_refresh_time = None
+        self._in_emergency_refresh = False  # Flag to track emergency refresh mode
         self._last_digitalocean_update = None
+    
+    def set_emergency_refresh_mode(self, enabled: bool):
+        """Set emergency refresh mode to skip DigitalOcean updates"""
+        self._in_emergency_refresh = enabled
         
     def _load_tokens_from_env(self) -> Dict[str, Any]:
         """Load tokens from environment variables"""
@@ -78,7 +83,10 @@ class StravaTokenManager:
             recent_update = (self._last_digitalocean_update and 
                            time.time() - self._last_digitalocean_update < 1800)  # 30 minutes
             
-            if tokens_changed and not recent_update:
+            # CRITICAL: Skip DigitalOcean update during emergency refresh to prevent hanging
+            if self._in_emergency_refresh:
+                print("🔄 Emergency refresh mode - skipping DigitalOcean update to prevent hanging")
+            elif tokens_changed and not recent_update:
                 print("🔄 Triggering DigitalOcean automated update...")
                 self._trigger_automated_update(tokens)
                 print("🔄 DigitalOcean automated update completed")

@@ -1968,6 +1968,8 @@ class SmartStravaCache:
             def emergency_refresh_worker():
                 try:
                     logger.info("🔄 Emergency refresh worker: Starting Strava API fetch...")
+                    # Set emergency refresh mode to skip DigitalOcean updates
+                    self.token_manager.set_emergency_refresh_mode(True)
                     # Fetch fresh data from Strava
                     fresh_activities = self._fetch_from_strava(200)
                     logger.info("🔄 Emergency refresh worker: Strava API fetch completed, filtering activities...")
@@ -1996,6 +1998,9 @@ class SmartStravaCache:
                     
                     logger.info(f"✅ Emergency refresh complete: {len(filtered_activities)} activities restored")
                     
+                    # Clear emergency refresh mode
+                    self.token_manager.set_emergency_refresh_mode(False)
+                    
                     result["success"] = True
                     result["activities"] = filtered_activities
                     
@@ -2007,6 +2012,8 @@ class SmartStravaCache:
                 except Exception as e:
                     result["error"] = str(e)
                     logger.error(f"Emergency refresh worker failed: {e}")
+                    # Clear emergency refresh mode on failure
+                    self.token_manager.set_emergency_refresh_mode(False)
             
             # Start emergency refresh in a separate thread with timeout
             worker_thread = threading.Thread(target=emergency_refresh_worker, daemon=True)
