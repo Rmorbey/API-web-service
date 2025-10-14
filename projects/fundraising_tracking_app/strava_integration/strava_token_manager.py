@@ -224,11 +224,17 @@ class StravaTokenManager:
             # Load current tokens from environment
             current_tokens = self._load_tokens_from_env()
             
+            print(f"🔄 Loaded tokens from environment:")
+            print(f"🔄 Access token: {'Present' if current_tokens.get('access_token') else 'Missing'}")
+            print(f"🔄 Refresh token: {'Present' if current_tokens.get('refresh_token') else 'Missing'}")
+            print(f"🔄 Expires at: {current_tokens.get('expires_at', 'Missing')}")
+            
             if not current_tokens.get("access_token"):
                 raise ValueError("No access token available. Please run the setup script.")
             
             # Check if token needs refreshing
             if self._is_token_expired(current_tokens.get("expires_at")):
+                print(f"🔄 Token is expired, checking refresh token...")
                 if not current_tokens.get("refresh_token"):
                     raise ValueError("No refresh token available. Please re-authenticate.")
                 
@@ -238,6 +244,7 @@ class StravaTokenManager:
                     print("🔄 Token refresh recently completed, using cached token")
                     return self._cached_token or current_tokens["access_token"]
                 
+                print(f"🔄 Token expired, starting refresh process...")
                 # Refresh the token
                 new_access_token = self._refresh_access_token(current_tokens["refresh_token"])
                 
@@ -257,8 +264,14 @@ class StravaTokenManager:
         """Refresh the access token using the refresh token - FIXED to be synchronous"""
         
         try:
+            print(f"🔄 Starting token refresh...")
+            print(f"🔄 Client ID: {self.client_id[:8]}..." if self.client_id else "❌ No client ID")
+            print(f"🔄 Refresh token: {refresh_token[:8]}..." if refresh_token else "❌ No refresh token")
+            
             # Use synchronous requests for token refresh to avoid async/sync issues
             import requests
+            print(f"🔄 Making request to Strava OAuth endpoint...")
+            
             response = requests.post(
                 "https://www.strava.com/oauth/token",
                 data={
@@ -267,8 +280,10 @@ class StravaTokenManager:
                     "refresh_token": refresh_token,
                     "grant_type": "refresh_token"
                 },
-                timeout=30  # Add timeout to prevent hanging
+                timeout=60  # Increased timeout for token refresh
             )
+            
+            print(f"🔄 Token refresh response received: {response.status_code}")
             
             if response.status_code != 200:
                 print(f"❌ Token refresh failed: {response.status_code} - {response.text}")

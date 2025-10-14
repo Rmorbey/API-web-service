@@ -1949,51 +1949,65 @@ class SmartStravaCache:
         try:
             logger.info("🔄 Performing emergency refresh...")
             
-            # CRITICAL: Add timeout protection for the entire emergency refresh
-            import signal
+            # CRITICAL: Use threading-based timeout instead of signal (works in background threads)
+            import threading
+            import time
             
-            def timeout_handler(signum, frame):
-                raise TimeoutError("Emergency refresh timed out after 60 seconds")
+            result = {"success": False, "error": None, "activities": []}
             
-            # Set a 60-second timeout for the entire emergency refresh
-            signal.signal(signal.SIGALRM, timeout_handler)
-            signal.alarm(60)
+            def emergency_refresh_worker():
+                try:
+                    # Fetch fresh data from Strava
+                    fresh_activities = self._fetch_from_strava(200)
+                    filtered_activities = self._filter_activities(fresh_activities)
+                    
+                    logger.info(f"✅ Emergency refresh: Fetched {len(fresh_activities)} activities, {len(filtered_activities)} after filtering")
+                    
+                    # Create new cache with fresh data
+                    emergency_cache = {
+                        "timestamp": datetime.now().isoformat(),
+                        "activities": filtered_activities,
+                        "total_fetched": len(fresh_activities),
+                        "total_filtered": len(filtered_activities),
+                        "emergency_refresh": False,  # Clear the flag after successful refresh
+                        "batching_in_progress": True,  # Mark batching as in progress
+                        "last_rich_fetch": datetime.now().isoformat()  # Mark as needing rich data
+                    }
+                    
+                    # Save the emergency cache (this will save to both file and Supabase)
+                    self._save_cache(emergency_cache)
+                    
+                    # Update in-memory cache
+                    self._cache_data = emergency_cache
+                    self._cache_loaded_at = datetime.now()
+                    
+                    logger.info(f"✅ Emergency refresh complete: {len(filtered_activities)} activities restored")
+                    
+                    result["success"] = True
+                    result["activities"] = filtered_activities
+                    
+                    # CRITICAL: Start batch processing immediately to get complete data
+                    # This will fetch polyline, bounds, descriptions, photos, comments for all activities
+                    logger.info("🔄 Starting immediate batch processing to fetch complete data...")
+                    self._start_batch_processing()
+                    
+                except Exception as e:
+                    result["error"] = str(e)
+                    logger.error(f"Emergency refresh worker failed: {e}")
             
-            try:
-                # Fetch fresh data from Strava with timeout protection
-                fresh_activities = self._fetch_from_strava(200)
-                filtered_activities = self._filter_activities(fresh_activities)
-                
-                logger.info(f"✅ Emergency refresh: Fetched {len(fresh_activities)} activities, {len(filtered_activities)} after filtering")
-                
-                # Create new cache with fresh data
-                emergency_cache = {
-                    "timestamp": datetime.now().isoformat(),
-                    "activities": filtered_activities,
-                    "total_fetched": len(fresh_activities),
-                    "total_filtered": len(filtered_activities),
-                    "emergency_refresh": False,  # Clear the flag after successful refresh
-                    "batching_in_progress": True,  # Mark batching as in progress
-                    "last_rich_fetch": datetime.now().isoformat()  # Mark as needing rich data
-                }
-                
-                # Save the emergency cache (this will save to both file and Supabase)
-                self._save_cache(emergency_cache)
-                
-                # Update in-memory cache
-                self._cache_data = emergency_cache
-                self._cache_loaded_at = datetime.now()
-                
-                logger.info(f"✅ Emergency refresh complete: {len(filtered_activities)} activities restored")
-                
-                # CRITICAL: Start batch processing immediately to get complete data
-                # This will fetch polyline, bounds, descriptions, photos, comments for all activities
-                logger.info("🔄 Starting immediate batch processing to fetch complete data...")
-                self._start_batch_processing()
-                
-            finally:
-                # Always cancel the alarm
-                signal.alarm(0)
+            # Start emergency refresh in a separate thread with timeout
+            worker_thread = threading.Thread(target=emergency_refresh_worker, daemon=True)
+            worker_thread.start()
+            
+            # Wait for completion with timeout (120 seconds for token refresh + API calls)
+            worker_thread.join(timeout=120)
+            
+            if worker_thread.is_alive():
+                logger.error("Emergency refresh timed out after 120 seconds")
+                result["error"] = "Emergency refresh timed out after 120 seconds"
+            
+            if not result["success"]:
+                raise Exception(result["error"] or "Emergency refresh failed")
             
         except TimeoutError as e:
             logger.error(f"Emergency refresh timed out: {e}")
