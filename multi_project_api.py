@@ -171,7 +171,7 @@ app.add_middleware(
         "https://russellmorbey.co.uk"  # Alternative domain
     ],
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 

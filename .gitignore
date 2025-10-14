@@ -208,3 +208,7 @@ docs/internal/
 supabase_security_setup.sql
 # Cache backup files
 **/backups/*.json
+
+# Demo pages (development only - contain configuration details)
+projects/fundraising_tracking_app/examples/strava-react-demo-clean.html
+projects/fundraising_tracking_app/examples/fundraising-demo.html
