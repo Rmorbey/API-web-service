@@ -10,7 +10,6 @@ This file contains **comprehensive tests** for the example files and demo functi
 test_examples.py  ← YOU ARE HERE (Example Tests)
 ├── examples/                      (Example files)
 │   ├── strava-react-demo-clean.html
-│   ├── strava-react-demo.html
 │   └── fundraising-demo.html
 ├── main.py                        (Main API)
 ├── multi_project_api.py           (Multi-project API)
@@ -94,9 +93,8 @@ client = TestClient(app)
 ```python
 # Example test data
 EXAMPLE_TEST_FILES = [
-    "examples/strava-react-demo-clean.html",
-    "examples/strava-react-demo.html",
-    "examples/fundraising-demo.html"
+    "projects/fundraising_tracking_app/examples/strava-react-demo-clean.html",
+    "projects/fundraising_tracking_app/examples/fundraising-demo.html"
 ]
 
 EXAMPLE_TEST_ENDPOINTS = [
@@ -116,12 +114,12 @@ EXAMPLE_TEST_HEADERS = {
 EXAMPLE_TEST_SCENARIOS = [
     {
         "name": "Strava Demo Flow",
-        "file": "examples/strava-react-demo-clean.html",
+        "file": "projects/fundraising_tracking_app/examples/strava-react-demo-clean.html",
         "endpoints": ["/api/strava-integration/health", "/api/strava-integration/feed"]
     },
     {
         "name": "Fundraising Demo Flow",
-        "file": "examples/fundraising-demo.html",
+        "file": "projects/fundraising_tracking_app/examples/fundraising-demo.html",
         "endpoints": ["/api/fundraising-scraper/health", "/api/fundraising-scraper/data"]
     }
 ]

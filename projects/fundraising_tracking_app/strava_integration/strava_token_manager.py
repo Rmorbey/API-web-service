@@ -30,6 +30,7 @@ class StravaTokenManager:
         self._cached_token = None
         self._cached_token_expires_at = None
         self._last_refresh_time = None
+        self._last_digitalocean_update = None
         
     def _load_tokens_from_env(self) -> Dict[str, Any]:
         """Load tokens from environment variables"""
@@ -66,9 +67,24 @@ class StravaTokenManager:
             f.write(f"STRAVA_EXPIRES_IN={tokens['expires_in']}\n")
             f.write("==========================================\n")
         
-        # In production, trigger automated update
+        # In production, only trigger automated update if tokens have actually changed
         if os.getenv("ENVIRONMENT") == "production":
-            self._trigger_automated_update(tokens)
+            # Check if tokens have actually changed to avoid unnecessary restarts
+            current_tokens = self._load_tokens_from_env()
+            tokens_changed = (current_tokens.get("access_token") != tokens["access_token"] or 
+                            current_tokens.get("refresh_token") != tokens["refresh_token"])
+            
+            # Also check if we've updated DigitalOcean recently (within last 30 minutes)
+            recent_update = (self._last_digitalocean_update and 
+                           time.time() - self._last_digitalocean_update < 1800)  # 30 minutes
+            
+            if tokens_changed and not recent_update:
+                self._trigger_automated_update(tokens)
+                self._last_digitalocean_update = time.time()
+            elif tokens_changed and recent_update:
+                print("🔄 Tokens changed but DigitalOcean update too recent, skipping to prevent restart loop")
+            else:
+                print("🔄 Tokens unchanged, skipping DigitalOcean update to prevent restart")
         else:
             # In development, still update .env file
             self._update_env_file(tokens)
@@ -183,8 +199,8 @@ class StravaTokenManager:
         try:
             # expires_at is a Unix timestamp
             expiry_time = datetime.fromtimestamp(int(expires_at))
-            # Reduce buffer to 30 seconds to prevent premature refreshes
-            buffer_time = expiry_time - timedelta(seconds=30)
+            # Use 2-minute buffer to prevent premature refreshes but avoid race conditions
+            buffer_time = expiry_time - timedelta(minutes=2)
             
             is_expired = datetime.now() >= buffer_time
             
@@ -216,9 +232,9 @@ class StravaTokenManager:
                 if not current_tokens.get("refresh_token"):
                     raise ValueError("No refresh token available. Please re-authenticate.")
                 
-                # Check if we recently refreshed (within last 5 minutes) to prevent rapid refreshes
+                # Check if we recently refreshed (within last 10 minutes) to prevent rapid refreshes
                 if (self._last_refresh_time and 
-                    time.time() - self._last_refresh_time < 300):  # 5 minutes
+                    time.time() - self._last_refresh_time < 600):  # 10 minutes
                     print("🔄 Token refresh recently completed, using cached token")
                     return self._cached_token or current_tokens["access_token"]
                 

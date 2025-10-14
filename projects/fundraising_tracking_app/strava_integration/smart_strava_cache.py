@@ -920,8 +920,14 @@ class SmartStravaCache:
                 logger.info(f"Preserved existing data for activity {activity_id}: {fresh_activity.get('name', 'Unknown')}")
                 
             else:
-                # NEW ACTIVITY: Use fresh data
+                # NEW ACTIVITY: Use fresh data and add timestamp tracking
                 merged_activity = fresh_activity
+                current_time = datetime.now().isoformat()
+                merged_activity["_metadata"] = {
+                    "basic_data_added": current_time,
+                    "rich_data_added": None,
+                    "last_updated": current_time
+                }
                 logger.info(f"New activity {activity_id}: {fresh_activity.get('name', 'Unknown')}")
             
             # Check if ANY activity (new or existing) needs rich data collection
@@ -1026,12 +1032,39 @@ class SmartStravaCache:
         return updated_activities
 
     def _update_activity_in_cache(self, activity_id: int, complete_data: Dict[str, Any]):
-        """Update activity in cache with complete data"""
+        """Update activity in cache with complete data and timestamp tracking"""
         cache_data = self._load_cache()
+        current_time = datetime.now().isoformat()
         
         # Find and update the activity
         for i, activity in enumerate(cache_data.get("activities", [])):
             if activity.get("id") == activity_id:
+                # Preserve existing timestamps if they exist
+                existing_activity = cache_data["activities"][i]
+                
+                # Add timestamp tracking for data updates
+                complete_data["_metadata"] = {
+                    "basic_data_added": existing_activity.get("_metadata", {}).get("basic_data_added", current_time),
+                    "rich_data_added": current_time,
+                    "last_updated": current_time
+                }
+                
+                # Log what data is being updated
+                existing_polyline = existing_activity.get("map", {}).get("polyline")
+                new_polyline = complete_data.get("map", {}).get("polyline")
+                existing_bounds = existing_activity.get("map", {}).get("bounds")
+                new_bounds = complete_data.get("map", {}).get("bounds")
+                
+                if existing_polyline and not new_polyline:
+                    logger.warning(f"⚠️ Activity {activity_id}: LOST polyline data during update!")
+                elif not existing_polyline and new_polyline:
+                    logger.info(f"✅ Activity {activity_id}: GAINED polyline data")
+                
+                if existing_bounds and not new_bounds:
+                    logger.warning(f"⚠️ Activity {activity_id}: LOST bounds data during update!")
+                elif not existing_bounds and new_bounds:
+                    logger.info(f"✅ Activity {activity_id}: GAINED bounds data")
+                
                 cache_data["activities"][i] = complete_data
                 break
         
@@ -1513,6 +1546,70 @@ class SmartStravaCache:
         except Exception as e:
             logger.error(f"❌ Error processing activity batch: {e}")
     
+    def analyze_cache_data_loss(self) -> Dict[str, Any]:
+        """Analyze cache to identify data loss and timestamp information"""
+        try:
+            cache_data = self._load_cache()
+            activities = cache_data.get("activities", [])
+            
+            analysis = {
+                "total_activities": len(activities),
+                "activities_with_polyline": 0,
+                "activities_with_bounds": 0,
+                "activities_with_metadata": 0,
+                "data_loss_analysis": [],
+                "timestamp_analysis": []
+            }
+            
+            for activity in activities:
+                activity_id = activity.get("id")
+                activity_name = activity.get("name", "Unknown")
+                
+                # Check polyline data
+                has_polyline = bool(activity.get("map", {}).get("polyline"))
+                has_bounds = bool(activity.get("map", {}).get("bounds"))
+                has_metadata = bool(activity.get("_metadata"))
+                
+                if has_polyline:
+                    analysis["activities_with_polyline"] += 1
+                if has_bounds:
+                    analysis["activities_with_bounds"] += 1
+                if has_metadata:
+                    analysis["activities_with_metadata"] += 1
+                
+                # Analyze metadata if available
+                metadata = activity.get("_metadata", {})
+                if metadata:
+                    analysis["timestamp_analysis"].append({
+                        "activity_id": activity_id,
+                        "activity_name": activity_name,
+                        "basic_data_added": metadata.get("basic_data_added"),
+                        "rich_data_added": metadata.get("rich_data_added"),
+                        "last_updated": metadata.get("last_updated"),
+                        "has_polyline": has_polyline,
+                        "has_bounds": has_bounds
+                    })
+                else:
+                    analysis["data_loss_analysis"].append({
+                        "activity_id": activity_id,
+                        "activity_name": activity_name,
+                        "issue": "No metadata - cannot track when data was added",
+                        "has_polyline": has_polyline,
+                        "has_bounds": has_bounds
+                    })
+            
+            # Calculate percentages
+            total = analysis["total_activities"]
+            analysis["polyline_percentage"] = (analysis["activities_with_polyline"] / total * 100) if total > 0 else 0
+            analysis["bounds_percentage"] = (analysis["activities_with_bounds"] / total * 100) if total > 0 else 0
+            analysis["metadata_percentage"] = (analysis["activities_with_metadata"] / total * 100) if total > 0 else 0
+            
+            return analysis
+            
+        except Exception as e:
+            logger.error(f"Error analyzing cache data loss: {e}")
+            return {"error": str(e)}
+    
     def force_refresh_now(self):
         """Force an immediate refresh (for manual trigger) - FIXED to actually fetch fresh data"""
         try:
@@ -1644,8 +1741,9 @@ class SmartStravaCache:
                 return True
             
             # After batching should be complete, enforce the 30% polyline threshold
-            if polyline_count < total_activities * 0.3:
-                logger.warning(f"Cache integrity check failed: Only {polyline_count}/{total_activities} activities have polyline data (Run/Ride activities should have GPS)")
+            polyline_percentage = polyline_count / total_activities if total_activities > 0 else 0
+            if polyline_percentage < 0.3:
+                logger.warning(f"Cache integrity check failed: Only {polyline_count}/{total_activities} activities have polyline data ({polyline_percentage:.1%} - below 30% threshold)")
                 logger.warning("This indicates batching may not have completed successfully or needs to be re-run")
                 return False
             

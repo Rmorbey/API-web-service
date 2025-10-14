@@ -170,8 +170,8 @@ Frontend App → Trusted Host Check → Referer Validation → API Key Auth → 
 ## 📁 **File Structure**
 
 ### **Demo Files (No API Keys):**
-- `examples/fundraising-demo.html` - Uses `/demo/data` and `/demo/donations`
-- `examples/strava-react-demo-clean.html` - Uses `/demo/feed` and `/demo/map-tiles`
+- `projects/fundraising_tracking_app/examples/fundraising-demo.html` - Uses `/demo/data` and `/demo/donations`
+- `projects/fundraising_tracking_app/examples/strava-react-demo-clean.html` - Uses `/demo/feed` and `/demo/map-tiles`
 
 ### **Production Files (API Keys in .env):**
 - `.env` - Contains actual API keys (not committed)

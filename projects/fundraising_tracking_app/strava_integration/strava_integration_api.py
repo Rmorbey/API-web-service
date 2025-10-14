@@ -152,6 +152,22 @@ def get_cache_status():
         logger.error(f"Failed to get cache status: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get cache status: {str(e)}")
 
+@router.get("/data-loss-analysis")
+def get_data_loss_analysis(api_key: str = Depends(verify_api_key)):
+    """Analyze cache to identify data loss and timestamp information"""
+    try:
+        cache = get_cache()
+        analysis = cache.analyze_cache_data_loss()
+        
+        return {
+            "project": "strava-integration",
+            "timestamp": datetime.utcnow().isoformat(),
+            "data_loss_analysis": analysis
+        }
+    except Exception as e:
+        logger.error(f"Failed to analyze data loss: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to analyze data loss: {str(e)}")
+
 @router.get("/cache-stats")
 def get_cache_stats(api_key: str = Depends(verify_api_key)) -> dict:
     """Get HTTP cache statistics"""

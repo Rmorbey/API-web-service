@@ -8,10 +8,6 @@ Set these as **SECRET** type in DigitalOcean App Platform:
 - `STRAVA_API_KEY` = `your_strava_api_key_here`
 - `FUNDRAISING_API_KEY` = `your_fundraising_api_key_here`
 
-### **Frontend Access Control:**
-- `FRONTEND_ACCESS_TOKEN` = `your_frontend_access_token_here`
-- `ALLOWED_ORIGINS` = `http://localhost:3000,http://localhost:5173,http://localhost:8000,https://www.russellmorbey.co.uk,https://russellmorbey.co.uk`
-
 ### **JustGiving Configuration:**
 - `JUSTGIVING_URL` = `https://www.justgiving.com/fundraising/RussellMorbey-HackneyHalf?utm_medium=FR&utm_source=CL&utm_campaign=015`
 

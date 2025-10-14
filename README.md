@@ -14,6 +14,12 @@ A production-ready FastAPI service that provides multiple integrated services in
 - **[🔐 DigitalOcean Setup](docs/FUNDRAISING-TRACKING-APP/DIGITALOCEAN_SECRETS_SETUP.md)** - Environment variables and secrets configuration
 - **[📚 API Documentation](docs/FUNDRAISING-TRACKING-APP/API_DOCUMENTATION.md)** - Complete endpoint reference
 
+### **Project-Specific READMEs**
+- **[🏃‍♂️ Fundraising Tracking App README](docs/FUNDRAISING-TRACKING-APP/README.md)** - Main project documentation
+- **[🏗️ Multi-Project API Service README](docs/MULTI-PROJECT-API-SERVICE/)** - Infrastructure documentation
+- **[📁 Codebase Explanations](docs/FUNDRAISING-TRACKING-APP/codebase-explanation/)** - Detailed code walkthroughs
+- **[🏗️ System Architecture](docs/MULTI-PROJECT-API-SERVICE/codebase-explanation/)** - Technical architecture details
+
 ## Features
 
 ### Strava Integration

@@ -317,7 +317,7 @@ def serve_demo() -> FileResponse:
     # Verify we're in development environment
     from projects.fundraising_tracking_app.strava_integration.environment_utils import verify_development_access
     verify_development_access()
-    return FileResponse("examples/strava-react-demo-clean.html")
+    return FileResponse("projects/fundraising_tracking_app/examples/strava-react-demo-clean.html")
 
 @app.get("/fundraising-demo")
 def serve_fundraising_demo() -> FileResponse:
@@ -325,7 +325,7 @@ def serve_fundraising_demo() -> FileResponse:
     # Verify we're in development environment
     from projects.fundraising_tracking_app.strava_integration.environment_utils import verify_development_access
     verify_development_access()
-    return FileResponse("examples/fundraising-demo.html")
+    return FileResponse("projects/fundraising_tracking_app/examples/fundraising-demo.html")
 
 # Include project routers if they exist
 if strava_router:
