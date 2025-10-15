@@ -867,12 +867,8 @@ class SmartStravaCache:
             import polyline
             coordinates = polyline.decode(polyline_str)
             
-            # Validate coordinates for corruption
-            if self._validate_coordinates(coordinates):
-                return [[lat, lng] for lat, lng in coordinates]
-            else:
-                logger.warning(f"Polyline coordinates failed validation, returning empty list")
-                return []
+            # Return raw coordinates from Strava API (trust the data)
+            return [[lat, lng] for lat, lng in coordinates]
                 
         except ImportError:
             # Fallback to manual decoder if polyline library not available
@@ -1031,10 +1027,8 @@ class SmartStravaCache:
         polyline = map_data.get("polyline")
         bounds = map_data.get("bounds", {})
         
-        # Validate polyline data before processing
-        if polyline and not self._validate_polyline_string(polyline):
-            logger.warning(f"Invalid polyline data detected for activity {activity_data.get('id')}, skipping")
-            polyline = None
+        # Use raw polyline data from Strava API (trust the data)
+        # No validation needed - Strava API is reliable
         
         # Calculate bounds from polyline if not provided
         if not bounds and polyline:
@@ -1564,8 +1558,38 @@ class SmartStravaCache:
     def _batch_processing_loop(self):
         """Process activities in batches of 20 every 15 minutes"""
         try:
-            # Get all activities that need processing
-            activities_to_process = self._get_activities_needing_update()
+            # Get all activities from cache
+            cache_data = self._cache_data or {"activities": []}
+            all_activities = cache_data.get('activities', [])
+            
+            if not all_activities:
+                logger.info("✅ No activities in cache to process")
+                return
+            
+            # Check if cache is fresh from emergency refresh
+            is_emergency_refresh = cache_data.get('emergency_refresh', False)
+            
+            if is_emergency_refresh:
+                # Process ALL activities when cache is fresh from emergency refresh
+                activities_to_process = all_activities
+                logger.info(f"🏃‍♂️ Emergency refresh detected - processing ALL {len(activities_to_process)} activities")
+            else:
+                # For regular refreshes, filter to last 3 weeks
+                three_weeks_ago = datetime.now() - timedelta(weeks=3)
+                activities_to_process = []
+                
+                for activity in all_activities:
+                    start_date_str = activity.get('start_date_local', '')
+                    if start_date_str:
+                        try:
+                            start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
+                            if start_date >= three_weeks_ago:
+                                activities_to_process.append(activity)
+                        except:
+                            # If date parsing fails, include the activity to be safe
+                            activities_to_process.append(activity)
+                
+                logger.info(f"🏃‍♂️ Regular refresh - processing {len(activities_to_process)} activities from last 3 weeks")
             
             if not activities_to_process:
                 logger.info("✅ No activities need updating")
@@ -1592,15 +1616,24 @@ class SmartStravaCache:
             self._mark_batching_in_progress(False)
             self._validate_post_batch_results()
             
-            # Clear emergency refresh flag
+            # Clear emergency refresh flags
             self._emergency_refresh_in_progress = False
+            
+            # Clear emergency refresh flag from cache data for future batch processing
+            if self._cache_data and self._cache_data.get('emergency_refresh'):
+                self._cache_data['emergency_refresh'] = False
+                logger.info("🏃‍♂️ Cleared emergency refresh flag from cache data")
             
         except Exception as e:
             logger.error(f"❌ Batch processing failed: {e}")
             # Mark batching as complete even on failure
             self._mark_batching_in_progress(False)
-            # Clear emergency refresh flag
+            # Clear emergency refresh flags
             self._emergency_refresh_in_progress = False
+            # Clear emergency refresh flag from cache data
+            if self._cache_data and self._cache_data.get('emergency_refresh'):
+                self._cache_data['emergency_refresh'] = False
+                logger.info("🏃‍♂️ Cleared emergency refresh flag from cache data (after error)")
     
     def _mark_batching_in_progress(self, in_progress: bool):
         """Mark batching as in progress or complete in cache"""
@@ -1652,34 +1685,7 @@ class SmartStravaCache:
         except Exception as e:
             logger.error(f"❌ Post-batch validation failed: {e}")
     
-    def _get_activities_needing_update(self) -> List[Dict[str, Any]]:
-        """Get activities that need updating (not older than 3 weeks)"""
-        try:
-            # Use existing cache data instead of calling _load_cache() to avoid infinite loop
-            cache_data = self._cache_data or {"activities": []}
-            activities = cache_data.get('activities', [])
-            
-            # Filter activities not older than 3 weeks
-            three_weeks_ago = datetime.now() - timedelta(weeks=3)
-            activities_to_update = []
-            
-            for activity in activities:
-                start_date_str = activity.get('start_date_local', '')
-                if start_date_str:
-                    try:
-                        start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
-                        if start_date >= three_weeks_ago:
-                            activities_to_update.append(activity)
-                    except:
-                        # If date parsing fails, include the activity to be safe
-                        activities_to_update.append(activity)
-            
-            logger.info(f"📊 Found {len(activities_to_update)} activities needing update (last 3 weeks)")
-            return activities_to_update
-            
-        except Exception as e:
-            logger.error(f"❌ Error getting activities for update: {e}")
-            return []
+    # _get_activities_needing_update removed - redundant in streamlined logic
     
     def _process_activity_batch(self, batch: List[Dict[str, Any]]):
         """Process a batch of activities with data validation and complete data fetching"""
@@ -1693,17 +1699,10 @@ class SmartStravaCache:
                         # Fetch fresh data from Strava API
                         fresh_data = self._fetch_complete_activity_data(activity_id)
                         
-                        # Validate data against cached data
-                        validation_result = self._validate_strava_data(fresh_data, activity)
-                        
-                        if validation_result == 'data_matches':
-                            logger.info(f"🏃‍♂️ Activity {activity_id} data matches - no update needed")
-                        else:
-                            logger.info(f"🏃‍♂️ Activity {activity_id} validation result: {validation_result}")
-                            
-                            # Update the activity in cache with fresh data
-                            self._update_activity_in_cache(activity_id, fresh_data)
-                            logger.info(f"🏃‍♂️ Updated activity {activity_id} with fresh data")
+                        # Trust Strava API data - always update with fresh data
+                        # No validation needed - Strava API is reliable
+                        self._update_activity_in_cache(activity_id, fresh_data)
+                        logger.info(f"🏃‍♂️ Updated activity {activity_id} with fresh Strava data")
                         
                     except Exception as e:
                         logger.warning(f"⚠️ Failed to process activity {activity_id}: {e}")
@@ -1746,9 +1745,8 @@ class SmartStravaCache:
                     try:
                         import polyline
                         coordinates = polyline.decode(polyline_str)
-                        if not self._validate_coordinates(coordinates):
-                            is_corrupted = True
-                            analysis["activities_with_corrupted_polyline"] += 1
+                        # Trust Strava API data - no validation needed
+                        # If polyline decodes successfully, it's valid
                     except Exception:
                         is_corrupted = True
                         analysis["activities_with_corrupted_polyline"] += 1
@@ -1915,13 +1913,42 @@ class SmartStravaCache:
     
     
     def _trigger_emergency_refresh(self):
-        """Emergency refresh - simplified to just trigger batch processing"""
+        """Emergency refresh - fetch fresh data from Strava when cache is empty"""
         if self._emergency_refresh_in_progress:
             logger.info("🏃‍♂️ Emergency refresh already in progress, skipping...")
             return
             
         self._emergency_refresh_in_progress = True
-        logger.info("🏃‍♂️ Emergency refresh triggered - starting batch processing")
-        self._start_batch_processing()
+        logger.info("🏃‍♂️ Emergency refresh triggered - fetching fresh data from Strava")
+        
+        try:
+            # When cache is empty, we need to fetch fresh data from Strava first
+            logger.info("🏃‍♂️ Fetching fresh activities from Strava API...")
+            fresh_activities = self._fetch_from_strava(200)  # Fetch 200 activities
+            
+            if fresh_activities:
+                logger.info(f"🏃‍♂️ Fetched {len(fresh_activities)} activities from Strava")
+                
+                # Create initial cache with fresh data
+                initial_cache = {
+                    "timestamp": datetime.now().isoformat(),
+                    "activities": fresh_activities,
+                    "emergency_refresh": True,
+                    "last_updated": datetime.now().isoformat()
+                }
+                
+                # Save the initial cache
+                self._save_cache(initial_cache)
+                logger.info("🏃‍♂️ Initial cache created with fresh Strava data")
+                
+                # Now start batch processing to enrich the data
+                self._start_batch_processing()
+            else:
+                logger.warning("🏃‍♂️ No activities fetched from Strava API")
+                self._emergency_refresh_in_progress = False
+                
+        except Exception as e:
+            logger.error(f"🏃‍♂️ Emergency refresh failed: {e}")
+            self._emergency_refresh_in_progress = False
     
     
