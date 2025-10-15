@@ -38,7 +38,7 @@ class SmartStravaCache:
     def __init__(self, cache_duration_hours: int = None):
         self.token_manager = StravaTokenManager()
         self.base_url = "https://www.strava.com/api/v3"
-        self.cache_file = "projects/fundraising_tracking_app/strava_integration/strava_cache.json"
+        # JSON cache file removed - using Supabase-only storage
         
         # Initialize Supabase cache manager for persistence
         self.supabase_cache = SecureSupabaseCacheManager()
@@ -54,6 +54,9 @@ class SmartStravaCache:
         self.api_calls_reset_time = datetime.now()
         self.max_calls_per_15min = 200
         self.max_calls_per_day = 1000
+        
+        # Emergency refresh tracking
+        self._emergency_refresh_in_progress = False
         
         # Performance optimizations
         self._cache_data = None  # In-memory cache
@@ -89,8 +92,7 @@ class SmartStravaCache:
                     
                     # Validate data integrity
                     if self._validate_cache_integrity(cache_data):
-                        # Populate JSON file
-                        self._save_cache_to_file(cache_data)
+                        # JSON file operations removed
                         logger.info("✅ Cache system initialized from Supabase")
                         
                         # Use simplified check and refresh logic
@@ -107,7 +109,7 @@ class SmartStravaCache:
             logger.info("📝 Supabase disabled, using file-based cache only")
         
     def _load_cache(self) -> Dict[str, Any]:
-        """Load cache: In-Memory → JSON File → Supabase → Emergency Refresh"""
+        """Load cache: In-Memory → Supabase → Emergency Refresh"""
         now = datetime.now()
         
         # 1. Check in-memory cache first (fastest)
@@ -117,20 +119,7 @@ class SmartStravaCache:
             logger.debug("✅ Using in-memory cache")
             return self._cache_data
         
-        # 2. Try JSON file (populated from Supabase at startup)
-        try:
-            with open(self.cache_file, 'r') as f:
-                self._cache_data = json.load(f)
-                self._cache_loaded_at = now
-                
-                # Validate cache integrity
-                if self._validate_cache_integrity(self._cache_data):
-                    logger.info("✅ Loaded cache from JSON file")
-                    return self._cache_data
-                else:
-                    logger.warning("❌ JSON cache integrity check failed")
-        except (FileNotFoundError, json.JSONDecodeError) as e:
-            logger.warning(f"❌ JSON cache file error: {e}")
+        # 2. JSON file operations removed - using Supabase-only storage
         
         # 3. Fallback to Supabase (source of truth)
         if self.supabase_cache.enabled:
@@ -143,8 +132,7 @@ class SmartStravaCache:
                     # Validate Supabase data integrity
                     if self._validate_cache_integrity(self._cache_data):
                         logger.info("✅ Loaded cache from Supabase database")
-                        # Populate JSON file for faster future access
-                        self._save_cache_to_file(self._cache_data)
+                        # JSON file operations removed
                         return self._cache_data
                     else:
                         logger.warning("❌ Supabase cache integrity check failed")
@@ -154,12 +142,15 @@ class SmartStravaCache:
                 logger.error(f"❌ Supabase read failed: {e}")
         
         # 4. Emergency refresh (all sources failed)
-        logger.warning("🚨 All cache sources failed, triggering emergency refresh...")
-        
-        # CRITICAL: Start emergency refresh in background to avoid blocking startup
-        # This allows health checks to respond while emergency refresh runs
-        logger.info("🔄 Starting emergency refresh in background during startup...")
-        self._trigger_emergency_refresh()
+        if not self._emergency_refresh_in_progress:
+            logger.warning("🚨 All cache sources failed, triggering emergency refresh...")
+            
+            # CRITICAL: Start emergency refresh in background to avoid blocking startup
+            # This allows health checks to respond while emergency refresh runs
+            logger.info("🔄 Starting emergency refresh in background during startup...")
+            self._trigger_emergency_refresh()
+        else:
+            logger.info("🔄 Emergency refresh already in progress, skipping...")
         
         # Return empty cache immediately to allow app to start
         # Emergency refresh will populate cache in background
@@ -167,17 +158,10 @@ class SmartStravaCache:
         logger.info("🔄 App starting with empty cache, emergency refresh running in background")
         return self._cache_data
     
-    def _save_cache_to_file(self, data: Dict[str, Any]):
-        """Helper method to save cache to JSON file"""
-        try:
-            with open(self.cache_file, 'w') as f:
-                json.dump(data, f, indent=2)
-            logger.debug("✅ Saved cache to JSON file")
-        except Exception as e:
-            logger.error(f"❌ Failed to save cache to file: {e}")
+    # JSON file operations removed - using Supabase-only storage
     
     def _save_cache(self, data: Dict[str, Any]):
-        """Save cache: Validate → File → Memory → Supabase (with retry)"""
+        """Save cache: Validate → Memory → Supabase (with retry)"""
         # 1. Validate data first
         if not self._validate_cache_integrity(data):
             logger.error("❌ Cache data validation failed, not saving")
@@ -187,8 +171,7 @@ class SmartStravaCache:
         data_with_timestamps = data.copy()
         data_with_timestamps['last_saved'] = datetime.now().isoformat()
         
-        # 3. Save to JSON file (fast, reliable)
-        self._save_cache_to_file(data_with_timestamps)
+        # 3. JSON file operations removed - using Supabase-only storage
         
         # 4. Update in-memory cache
         self._cache_data = data_with_timestamps
@@ -1556,8 +1539,7 @@ class SmartStravaCache:
     def _perform_scheduled_refresh(self):
         """Perform a scheduled refresh with backup and batch processing"""
         try:
-            # Create backup before refresh
-            self._create_backup()
+            # Backup operations removed - using Supabase-only storage
             
             # Start batch processing
             self._start_batch_processing()
@@ -1565,48 +1547,7 @@ class SmartStravaCache:
         except Exception as e:
             logger.error(f"❌ Scheduled refresh failed: {e}")
     
-    def _create_backup(self):
-        """Create a backup of the current cache before refresh - keeps only 1 backup"""
-        try:
-            # Clean up old backups first
-            self._cleanup_old_backups()
-            
-            # Create new backup in backups folder
-            backup_dir = os.path.join(os.path.dirname(self.cache_file), "backups")
-            os.makedirs(backup_dir, exist_ok=True)
-            backup_filename = f"strava_cache_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-            backup_file = os.path.join(backup_dir, backup_filename)
-            shutil.copy2(self.cache_file, backup_file)
-            logger.info(f"✅ Cache backup created: {backup_file}")
-        except Exception as e:
-            logger.error(f"❌ Failed to create backup: {e}")
-    
-    def _cleanup_old_backups(self):
-        """Remove old backup files, keeping only the most recent one"""
-        try:
-            import glob
-            
-            # Find all backup files in backups folder
-            backup_dir = os.path.join(os.path.dirname(self.cache_file), "backups")
-            backup_pattern = os.path.join(backup_dir, "strava_cache_backup_*.json")
-            backup_files = glob.glob(backup_pattern)
-            
-            if len(backup_files) > 1:
-                # Sort by modification time (newest first)
-                backup_files.sort(key=lambda x: os.path.getmtime(x), reverse=True)
-                
-                # Keep the newest, delete the rest
-                for old_backup in backup_files[1:]:
-                    try:
-                        os.remove(old_backup)
-                        logger.info(f"🗑️ Removed old backup: {os.path.basename(old_backup)}")
-                    except Exception as e:
-                        logger.warning(f"⚠️ Could not remove old backup {old_backup}: {e}")
-                
-                logger.info(f"🧹 Cleaned up {len(backup_files) - 1} old backup files")
-            
-        except Exception as e:
-            logger.warning(f"⚠️ Error cleaning up old backups: {e}")
+    # Backup operations removed - using Supabase-only storage
     
     def _start_batch_processing(self):
         """Start batch processing of activities (20 every 15 minutes)"""
@@ -1651,10 +1592,15 @@ class SmartStravaCache:
             self._mark_batching_in_progress(False)
             self._validate_post_batch_results()
             
+            # Clear emergency refresh flag
+            self._emergency_refresh_in_progress = False
+            
         except Exception as e:
             logger.error(f"❌ Batch processing failed: {e}")
             # Mark batching as complete even on failure
             self._mark_batching_in_progress(False)
+            # Clear emergency refresh flag
+            self._emergency_refresh_in_progress = False
     
     def _mark_batching_in_progress(self, in_progress: bool):
         """Mark batching as in progress or complete in cache"""
@@ -1709,7 +1655,8 @@ class SmartStravaCache:
     def _get_activities_needing_update(self) -> List[Dict[str, Any]]:
         """Get activities that need updating (not older than 3 weeks)"""
         try:
-            cache_data = self._load_cache()
+            # Use existing cache data instead of calling _load_cache() to avoid infinite loop
+            cache_data = self._cache_data or {"activities": []}
             activities = cache_data.get('activities', [])
             
             # Filter activities not older than 3 weeks
@@ -1969,6 +1916,11 @@ class SmartStravaCache:
     
     def _trigger_emergency_refresh(self):
         """Emergency refresh - simplified to just trigger batch processing"""
+        if self._emergency_refresh_in_progress:
+            logger.info("🏃‍♂️ Emergency refresh already in progress, skipping...")
+            return
+            
+        self._emergency_refresh_in_progress = True
         logger.info("🏃‍♂️ Emergency refresh triggered - starting batch processing")
         self._start_batch_processing()
     
