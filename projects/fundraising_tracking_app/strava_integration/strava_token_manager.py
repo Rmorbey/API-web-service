@@ -227,7 +227,13 @@ class StravaTokenManager:
     def get_valid_access_token(self) -> str:
         """Get a valid access token, refreshing if necessary - THREAD-SAFE"""
         print(f"🔄 get_valid_access_token called, acquiring lock...")
-        with self._token_lock:
+        
+        # Add timeout to prevent deadlock
+        if not self._token_lock.acquire(timeout=30):
+            print(f"❌ Failed to acquire token lock within 30 seconds - possible deadlock")
+            raise Exception("Token lock timeout - possible deadlock detected")
+        
+        try:
             print(f"🔄 Lock acquired, checking cached token...")
             # Check if we have a cached token that's still valid
             print(f"🔄 Checking cached token: {self._cached_token is not None}")
@@ -275,6 +281,10 @@ class StravaTokenManager:
             self._cached_token = current_tokens["access_token"]
             self._cached_token_expires_at = current_tokens.get("expires_at")
             return current_tokens["access_token"]
+        
+        finally:
+            self._token_lock.release()
+            print(f"🔄 Token lock released")
     
     def _refresh_access_token(self, refresh_token: str) -> str:
         """Refresh the access token using the refresh token - FIXED to be synchronous"""

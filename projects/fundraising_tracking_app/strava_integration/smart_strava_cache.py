@@ -2077,8 +2077,17 @@ class SmartStravaCache:
             # TEST: Try a simple API call first to isolate the issue
             logger.info("🔄 TEST: Attempting simple API call to isolate hanging issue...")
             try:
-                access_token = self.token_manager.get_valid_access_token()
-                logger.info(f"🔄 TEST: Token obtained: {access_token[:20] if access_token else 'None'}...")
+                # FALLBACK: Try direct environment variable access first to bypass token manager issues
+                logger.info("🔄 TEST: Attempting direct token access from environment...")
+                import os
+                direct_token = os.getenv("STRAVA_ACCESS_TOKEN")
+                if direct_token:
+                    logger.info(f"🔄 TEST: Direct token obtained: {direct_token[:20]}...")
+                    access_token = direct_token
+                else:
+                    logger.info("🔄 TEST: No direct token, using token manager...")
+                    access_token = self.token_manager.get_valid_access_token()
+                    logger.info(f"🔄 TEST: Token manager token obtained: {access_token[:20] if access_token else 'None'}...")
                 
                 # Test HTTP client creation
                 logger.info("🔄 TEST: Testing HTTP client creation...")
