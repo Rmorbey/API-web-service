@@ -270,6 +270,7 @@ async def get_map_tiles(z: int, x: int, y: int, style: str = Query("dark"), api_
     """
     
     jawg_token = os.getenv("JAWG_ACCESS_TOKEN", "demo")
+    logger.info(f"🔑 Jawg token check: length={len(jawg_token) if jawg_token else 0}, is_demo={jawg_token == 'demo'}")
     
     if jawg_token == "demo":
         # Fallback to OpenStreetMap if no Jawg token
