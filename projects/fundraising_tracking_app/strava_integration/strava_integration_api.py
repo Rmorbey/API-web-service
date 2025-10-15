@@ -603,7 +603,7 @@ async def get_activity_feed(request: FeedRequest = Depends(), api_key: str = Dep
     - **Photo Presence**: Only activities with photos
     - **Description**: Only activities with descriptions
     - **Distance Range**: Filter by distance (min/max)
-    - **Limit**: Control number of results (default: 10, max: 50)
+    - **Limit**: Control number of results (default: 50, max: 2000)
     
     ### 🎵 **Music Detection**
     Automatically detects music from activity descriptions:

@@ -120,9 +120,9 @@ class ProjectInfoResponse(BaseModel):
 class FeedRequest(BaseModel):
     """Request model for activity feed endpoint with filtering options"""
     limit: int = Field(
-        default=20, 
+        default=50, 
         ge=1, 
-        le=500, 
+        le=2000, 
         description="Number of activities to return",
     )
     activity_type: Optional[Literal["Run", "Ride"]] = Field(

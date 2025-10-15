@@ -486,7 +486,7 @@ class SmartStravaCache:
         
         raise Exception("API call failed after all retries")
     
-    def get_activities_smart(self, limit: int = 200, force_refresh: bool = False) -> List[Dict[str, Any]]:
+    def get_activities_smart(self, limit: int = 1000, force_refresh: bool = False) -> List[Dict[str, Any]]:
         """
         Get activities with smart caching strategy
         Uses cache if valid, otherwise fetches from Strava API
@@ -549,7 +549,7 @@ class SmartStravaCache:
                 return []
     
     def _fetch_from_strava(self, limit: int) -> List[Dict[str, Any]]:
-        """Fetch activities from Strava API with enhanced error handling"""
+        """Fetch activities from Strava API with pagination to get ALL activities"""
         try:
             logger.info(f"🔄 Starting Strava API fetch for {limit} activities...")
             access_token = self.token_manager.get_valid_access_token()
@@ -557,17 +557,41 @@ class SmartStravaCache:
             headers = {'Authorization': f'Bearer {access_token}'}
             logger.info(f"🔄 Headers created successfully")
             
-            url = f"{self.base_url}/athlete/activities?per_page={min(limit, 200)}&page=1"
-            logger.info(f"🔄 Fetching from URL: {url}")
+            all_activities = []
+            page = 1
+            per_page = 200  # Strava's maximum per page
+            max_pages = 50  # Safety limit to prevent infinite loops
             
-            # Use the new retry-enabled API call method
-            response = self._make_api_call_with_retry(url, headers)
+            while len(all_activities) < limit and page <= max_pages:
+                url = f"{self.base_url}/athlete/activities?per_page={per_page}&page={page}"
+                logger.info(f"🔄 Fetching page {page} from URL: {url}")
+                
+                # Use the new retry-enabled API call method
+                response = self._make_api_call_with_retry(url, headers)
+                
+                logger.info(f"🔄 API response received for page {page}, parsing JSON...")
+                page_activities = response.json()
+                
+                if not page_activities:
+                    logger.info(f"🔄 No more activities on page {page}, stopping pagination")
+                    break
+                
+                all_activities.extend(page_activities)
+                logger.info(f"🔄 Page {page}: fetched {len(page_activities)} activities, total: {len(all_activities)}")
+                
+                # If we got fewer activities than requested, we've reached the end
+                if len(page_activities) < per_page:
+                    logger.info(f"🔄 Reached end of activities (got {len(page_activities)} < {per_page})")
+                    break
+                
+                page += 1
+                
+                # Small delay to be respectful to Strava API
+                import time
+                time.sleep(0.1)
             
-            logger.info(f"🔄 API response received, parsing JSON...")
-            activities = response.json()
-            logger.info(f"🔄 Successfully fetched {len(activities)} activities from Strava")
-            
-            return activities
+            logger.info(f"🔄 Successfully fetched {len(all_activities)} total activities from Strava across {page-1} pages")
+            return all_activities[:limit]  # Return only the requested limit
             
         except Exception as e:
             logger.error(f"Failed to fetch activities from Strava: {str(e)}")
