@@ -288,7 +288,11 @@ async def get_map_tiles(z: int, x: int, y: int, style: str = Query("dark"), api_
         }
         # Default to dark mode if no style specified
         jawg_style = style_map.get(style, "jawg-dark")
-        tile_url = f"https://tile.jawg.io/{jawg_style}/{z}/{x}/{y}.png?access-token={jawg_token}"
+        
+        # URL encode the token to handle any special characters
+        import urllib.parse
+        encoded_token = urllib.parse.quote(jawg_token, safe='')
+        tile_url = f"https://tile.jawg.io/{jawg_style}/{z}/{x}/{y}.png?access-token={encoded_token}"
         logger.info(f"🗺️ Using Jawg tiles (style={style}, jawg_style={jawg_style}): {tile_url}")
     
     try:

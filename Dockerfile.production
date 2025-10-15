@@ -34,7 +34,7 @@ EXPOSE 8080
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8080/api/strava-integration/health || exit 1
+    CMD curl -f http://0.0.0.0:8080/api/health || exit 1
 
 # Production command (single worker, optimized for App Platform)
 CMD ["uvicorn", "multi_project_api:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "1", "--access-log", "--log-level", "info"]
