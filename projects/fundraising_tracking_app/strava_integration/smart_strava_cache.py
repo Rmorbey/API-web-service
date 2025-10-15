@@ -750,14 +750,7 @@ class SmartStravaCache:
             if not essential_map["bounds"] and essential_map["polyline"]:
                 coordinates = self._decode_polyline(essential_map["polyline"])
                 if coordinates:
-                    lats = [coord[0] for coord in coordinates]
-                    lngs = [coord[1] for coord in coordinates]
-                    essential_map["bounds"] = {
-                        "south": min(lats),
-                        "west": min(lngs),
-                        "north": max(lats),
-                        "east": max(lngs)
-                    }
+                    essential_map["bounds"] = self._calculate_polyline_bounds(coordinates)
             
             logger.info(f"✅ Successfully fetched essential map data for activity {activity_id}")
             return essential_map
@@ -880,29 +873,67 @@ class SmartStravaCache:
             logger.error(f"Error decoding polyline: {e}")
             return []
     
+    def _calculate_polyline_bounds(self, coordinates: List[List[float]]) -> Dict[str, float]:
+        """Calculate proper bounds for polyline coordinates (based on Towards Data Science article)"""
+        if not coordinates:
+            return {}
+        
+        try:
+            lats = [coord[0] for coord in coordinates]  # latitude
+            lngs = [coord[1] for coord in coordinates]  # longitude
+            
+            return {
+                "south": min(lats),
+                "west": min(lngs), 
+                "north": max(lats),
+                "east": max(lngs)
+            }
+        except Exception as e:
+            logger.error(f"Error calculating polyline bounds: {e}")
+            return {}
+    
+    def _calculate_polyline_centroid(self, coordinates: List[List[float]]) -> List[float]:
+        """Calculate centroid for polyline coordinates (based on Towards Data Science article)"""
+        if not coordinates:
+            return []
+        
+        try:
+            lats = [coord[0] for coord in coordinates]  # latitude
+            lngs = [coord[1] for coord in coordinates]  # longitude
+            
+            # Calculate centroid as mean of min/max (as shown in the article)
+            centroid_lat = (min(lats) + max(lats)) / 2
+            centroid_lng = (min(lngs) + max(lngs)) / 2
+            
+            return [centroid_lat, centroid_lng]
+        except Exception as e:
+            logger.error(f"Error calculating polyline centroid: {e}")
+            return []
+    
     def _validate_coordinates(self, coordinates: List[tuple]) -> bool:
         """Validate that coordinates are reasonable and not corrupted"""
         if not coordinates:
             return False
         
         try:
-            lats = [coord[0] for coord in coordinates]
-            lngs = [coord[1] for coord in coordinates]
+            lats = [coord[0] for coord in coordinates]  # latitude
+            lngs = [coord[1] for coord in coordinates]  # longitude
             
             # Check for valid coordinate ranges
             if (min(lats) < -90 or max(lats) > 90 or 
                 min(lngs) < -180 or max(lngs) > 180):
-                logger.warning(f"Invalid coordinate ranges detected")
+                logger.warning(f"Invalid coordinate ranges detected: lat=[{min(lats):.6f}, {max(lats):.6f}], lng=[{min(lngs):.6f}, {max(lngs):.6f}]")
                 return False
             
             # Check for extreme jumps between coordinates (likely corruption)
+            # But be more lenient - allow up to 1 degree (111km) jumps for legitimate GPS issues
             if len(coordinates) > 1:
                 max_lat_jump = max(abs(lats[i] - lats[i-1]) for i in range(1, len(lats)))
                 max_lng_jump = max(abs(lngs[i] - lngs[i-1]) for i in range(1, len(lngs)))
                 
-                # 1 degree ≈ 111km, so jumps > 0.1 degrees (11km) are suspicious
-                if max_lat_jump > 0.1 or max_lng_jump > 0.1:
-                    logger.warning(f"Large coordinate jumps detected: lat={max_lat_jump:.6f}, lng={max_lng_jump:.6f}")
+                # 1 degree ≈ 111km, so jumps > 1 degree (111km) are suspicious
+                if max_lat_jump > 1.0 or max_lng_jump > 1.0:
+                    logger.warning(f"Extreme coordinate jumps detected: lat={max_lat_jump:.6f}, lng={max_lng_jump:.6f}")
                     return False
             
             return True
@@ -966,14 +997,7 @@ class SmartStravaCache:
         if not bounds and polyline:
             coordinates = self._decode_polyline(polyline)
             if coordinates:
-                lats = [coord[0] for coord in coordinates]
-                lngs = [coord[1] for coord in coordinates]
-            bounds = {
-                    "south": min(lats),
-                    "west": min(lngs),
-                "north": max(lats),
-                    "east": max(lngs)
-            }
+                bounds = self._calculate_polyline_bounds(coordinates)
         
         # OPTIMIZED: Only return essential fields (frontend only needs polyline + bounds)
         return {
