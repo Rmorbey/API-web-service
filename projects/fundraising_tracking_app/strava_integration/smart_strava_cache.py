@@ -2074,6 +2074,34 @@ class SmartStravaCache:
             # Set emergency refresh mode to skip DigitalOcean updates
             self.token_manager.set_emergency_refresh_mode(True)
             
+            # TEST: Try a simple API call first to isolate the issue
+            logger.info("🔄 TEST: Attempting simple API call to isolate hanging issue...")
+            try:
+                access_token = self.token_manager.get_valid_access_token()
+                logger.info(f"🔄 TEST: Token obtained: {access_token[:20] if access_token else 'None'}...")
+                
+                # Test HTTP client creation
+                logger.info("🔄 TEST: Testing HTTP client creation...")
+                http_client = get_http_client()
+                logger.info("🔄 TEST: HTTP client created successfully")
+                
+                # Test simple API call
+                logger.info("🔄 TEST: Testing simple Strava API call...")
+                test_url = f"{self.base_url}/athlete/activities?per_page=1&page=1"
+                test_headers = {'Authorization': f'Bearer {access_token}'}
+                test_response = http_client.get(test_url, headers=test_headers, timeout=10.0)
+                logger.info(f"🔄 TEST: Simple API call completed: {test_response.status_code}")
+                
+                if test_response.status_code == 200:
+                    logger.info("🔄 TEST: Simple API call successful, proceeding with full fetch...")
+                else:
+                    logger.error(f"🔄 TEST: Simple API call failed with status {test_response.status_code}")
+                    raise Exception(f"Test API call failed: {test_response.status_code}")
+                    
+            except Exception as test_error:
+                logger.error(f"🔄 TEST: Simple API test failed: {test_error}")
+                raise Exception(f"Emergency refresh test failed: {test_error}")
+            
             # Fetch fresh data from Strava
             fresh_activities = self._fetch_from_strava(200)
             logger.info("🔄 Emergency refresh worker: Strava API fetch completed, filtering activities...")
