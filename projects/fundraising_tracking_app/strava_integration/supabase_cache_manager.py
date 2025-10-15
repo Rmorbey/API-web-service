@@ -84,21 +84,64 @@ class SecureSupabaseCacheManager:
         return True, "Valid"
     
     def _sanitize_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Sanitize data to prevent injection attacks - PROTECT POLYLINE DATA"""
+        """Sanitize ONLY user input data to prevent injection attacks - PROTECT API DATA"""
         def sanitize_value(value, key_path=""):
             if isinstance(value, str):
-                # CRITICAL: Don't sanitize polyline data - it's encoded and removing chars corrupts it
-                if "polyline" in key_path.lower():
-                    # Only limit length for polyline data
-                    if len(value) > 10000:
-                        value = value[:10000]
+                # PROTECT API DATA: Don't sanitize encoded/calculated data
+                protected_patterns = [
+                    "polyline",      # Encoded route data
+                    "bounds",        # Calculated map bounds  
+                    "description",   # Strava activity descriptions (API data)
+                    "name",          # Activity names (API data)
+                    "type",          # Activity types (API data)
+                    "start_date",    # Timestamps (API data)
+                    "photos",        # Photo data (API data)
+                    "music",         # Music detection data (calculated)
+                    "urls",          # Photo URLs (API data)
+                    "athlete",       # Athlete data (API data)
+                    "distance",      # Numeric data
+                    "moving_time",   # Numeric data
+                    "elevation",     # Numeric data
+                    "pace",          # Calculated data
+                    "speed",         # Calculated data
+                    "coordinates",   # GPS coordinates
+                    "lat",           # Latitude
+                    "lng",           # Longitude
+                    "north",         # Bounds coordinates
+                    "south",         # Bounds coordinates
+                    "east",          # Bounds coordinates
+                    "west"           # Bounds coordinates
+                ]
+                
+                # Check if this is protected API data
+                is_protected = any(pattern in key_path.lower() for pattern in protected_patterns)
+                
+                if is_protected:
+                    # Only limit length for protected data
+                    if len(value) > 50000:  # Larger limit for API data
+                        value = value[:50000]
                     return value
                 
-                # For other strings, remove potential SQL injection patterns
-                value = re.sub(r'[;\'"\\]', '', value)
-                # Limit string length
-                if len(value) > 10000:
-                    value = value[:10000]
+                # SANITIZE USER INPUT: Only sanitize actual user input
+                user_input_patterns = [
+                    "comments",      # User comments on activities
+                    "message",       # Donation messages
+                    "donor_name"     # Donor names (user input)
+                ]
+                
+                is_user_input = any(pattern in key_path.lower() for pattern in user_input_patterns)
+                
+                if is_user_input:
+                    # Remove potential SQL injection patterns from user input
+                    value = re.sub(r'[;\'"\\]', '', value)
+                    # Limit string length for user input
+                    if len(value) > 1000:  # Smaller limit for user input
+                        value = value[:1000]
+                else:
+                    # For other data, just limit length
+                    if len(value) > 10000:
+                        value = value[:10000]
+                        
             elif isinstance(value, dict):
                 return {k: sanitize_value(v, f"{key_path}.{k}" if key_path else k) for k, v in value.items()}
             elif isinstance(value, list):
