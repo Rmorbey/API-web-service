@@ -279,7 +279,9 @@ async def get_map_tiles(z: int, x: int, y: int, style: str = Query("dark"), toke
     
     if jawg_token == "demo":
         # Fallback to OpenStreetMap if no Jawg token
-        tile_url = f"https://{{s}}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        import random
+        subdomain = random.choice(['a', 'b', 'c'])
+        tile_url = f"https://{subdomain}.tile.openstreetmap.org/{z}/{x}/{y}.png"
     else:
         # Use Jawg tiles with server-side token and style
         style_map = {
@@ -305,8 +307,10 @@ async def get_map_tiles(z: int, x: int, y: int, style: str = Query("dark"), toke
             )
     except Exception as e:
         # Fallback to OpenStreetMap on error
+        import random
+        subdomain = random.choice(['a', 'b', 'c'])
         async with httpx.AsyncClient() as client:
-            response = await client.get(f"https://tile.openstreetmap.org/{z}/{x}/{y}.png")
+            response = await client.get(f"https://{subdomain}.tile.openstreetmap.org/{z}/{x}/{y}.png")
             return Response(
                 content=response.content,
                 media_type="image/png",
