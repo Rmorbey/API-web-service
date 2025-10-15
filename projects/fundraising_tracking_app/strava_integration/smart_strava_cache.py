@@ -942,6 +942,35 @@ class SmartStravaCache:
             logger.error(f"Error validating coordinates: {e}")
             return False
     
+    def _validate_polyline_string(self, polyline_str: str) -> bool:
+        """Validate polyline string to detect corruption"""
+        if not polyline_str or not isinstance(polyline_str, str):
+            return False
+        
+        # Check for invalid characters that indicate corruption
+        invalid_chars = ['^', '?', '[', '~', '}', '@', '`', '{', ']', '|']
+        for char in invalid_chars:
+            if char in polyline_str:
+                logger.warning(f"Invalid character '{char}' detected in polyline string")
+                return False
+        
+        # Check for reasonable length (polyline strings are typically 100-10000 chars)
+        if len(polyline_str) < 10 or len(polyline_str) > 50000:
+            logger.warning(f"Polyline string length {len(polyline_str)} is outside normal range")
+            return False
+        
+        # Try to decode a small portion to test validity
+        try:
+            test_coords = self._decode_polyline(polyline_str[:100])  # Test first 100 chars
+            if not test_coords or len(test_coords) == 0:
+                logger.warning("Polyline string failed decoding test")
+                return False
+        except Exception as e:
+            logger.warning(f"Polyline string validation failed: {e}")
+            return False
+        
+        return True
+
     def _decode_polyline_fallback(self, polyline_str: str) -> List[List[float]]:
         """Fallback polyline decoder with better error handling"""
         if not polyline_str:
@@ -992,6 +1021,11 @@ class SmartStravaCache:
         # Extract only essential map data
         polyline = map_data.get("polyline")
         bounds = map_data.get("bounds", {})
+        
+        # Validate polyline data before processing
+        if polyline and not self._validate_polyline_string(polyline):
+            logger.warning(f"Invalid polyline data detected for activity {activity_data.get('id')}, skipping")
+            polyline = None
         
         # Calculate bounds from polyline if not provided
         if not bounds and polyline:

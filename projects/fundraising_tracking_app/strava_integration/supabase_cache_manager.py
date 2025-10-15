@@ -84,18 +84,25 @@ class SecureSupabaseCacheManager:
         return True, "Valid"
     
     def _sanitize_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Sanitize data to prevent injection attacks"""
-        def sanitize_value(value):
+        """Sanitize data to prevent injection attacks - PROTECT POLYLINE DATA"""
+        def sanitize_value(value, key_path=""):
             if isinstance(value, str):
-                # Remove potential SQL injection patterns
+                # CRITICAL: Don't sanitize polyline data - it's encoded and removing chars corrupts it
+                if "polyline" in key_path.lower():
+                    # Only limit length for polyline data
+                    if len(value) > 10000:
+                        value = value[:10000]
+                    return value
+                
+                # For other strings, remove potential SQL injection patterns
                 value = re.sub(r'[;\'"\\]', '', value)
                 # Limit string length
                 if len(value) > 10000:
                     value = value[:10000]
             elif isinstance(value, dict):
-                return {k: sanitize_value(v) for k, v in value.items()}
+                return {k: sanitize_value(v, f"{key_path}.{k}" if key_path else k) for k, v in value.items()}
             elif isinstance(value, list):
-                return [sanitize_value(item) for item in value]
+                return [sanitize_value(item, f"{key_path}[{i}]" if key_path else f"[{i}]") for i, item in enumerate(value)]
             return value
         
         return sanitize_value(data)
