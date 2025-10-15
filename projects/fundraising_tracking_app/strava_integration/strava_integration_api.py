@@ -258,6 +258,26 @@ def get_jawg_token():
         "message": "Token available" if jawg_token != "demo" else "Using demo token"
     }
 
+@router.get("/token-status")
+def get_token_status(api_key: str = Depends(verify_api_key)):
+    """Get Strava token status for debugging"""
+    try:
+        cache = get_cache()
+        token_status = cache.token_manager.get_token_status()
+        
+        return {
+            "timestamp": datetime.utcnow().isoformat(),
+            "token_status": token_status,
+            "message": "Token status retrieved successfully"
+        }
+    except Exception as e:
+        logger.error(f"Failed to get token status: {e}")
+        return {
+            "timestamp": datetime.utcnow().isoformat(),
+            "error": str(e),
+            "message": "Failed to get token status"
+        }
+
 @router.get("/map-tiles/{z}/{x}/{y}")
 async def get_map_tiles(z: int, x: int, y: int, style: str = Query("dark"), api_key: str = Depends(verify_api_key)):
     """Secure proxy for Jawg map tiles - keeps token server-side
