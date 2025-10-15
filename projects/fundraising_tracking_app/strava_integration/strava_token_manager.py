@@ -30,12 +30,8 @@ class StravaTokenManager:
         self._cached_token = None
         self._cached_token_expires_at = None
         self._last_refresh_time = None
-        self._in_emergency_refresh = False  # Flag to track emergency refresh mode
         self._last_digitalocean_update = None
     
-    def set_emergency_refresh_mode(self, enabled: bool):
-        """Set emergency refresh mode to skip DigitalOcean updates"""
-        self._in_emergency_refresh = enabled
         
     def _load_tokens_from_env(self) -> Dict[str, Any]:
         """Load tokens from environment variables"""
@@ -56,18 +52,18 @@ class StravaTokenManager:
             self._cached_token = None
             self._cached_token_expires_at = None
         
-        # Log the new tokens
+        # Log token refresh (without exposing actual tokens)
         print("🔄 NEW STRAVA TOKENS - TRIGGERING AUTOMATED UPDATE:")
-        print(f"STRAVA_ACCESS_TOKEN={tokens['access_token']}")
-        print(f"STRAVA_REFRESH_TOKEN={tokens['refresh_token']}")
+        print(f"STRAVA_ACCESS_TOKEN={'*' * 20}...{tokens['access_token'][-4:]}")
+        print(f"STRAVA_REFRESH_TOKEN={'*' * 20}...{tokens['refresh_token'][-4:]}")
         print(f"STRAVA_EXPIRES_AT={tokens['expires_at']}")
         print(f"STRAVA_EXPIRES_IN={tokens['expires_in']}")
         
-        # Also log to file for easier access
+        # Log to file for debugging (without exposing actual tokens)
         with open("strava_token_refresh.log", "a") as f:
             f.write(f"\n=== TOKEN REFRESH - {datetime.now().isoformat()} ===\n")
-            f.write(f"STRAVA_ACCESS_TOKEN={tokens['access_token']}\n")
-            f.write(f"STRAVA_REFRESH_TOKEN={tokens['refresh_token']}\n")
+            f.write(f"STRAVA_ACCESS_TOKEN={'*' * 20}...{tokens['access_token'][-4:]}\n")
+            f.write(f"STRAVA_REFRESH_TOKEN={'*' * 20}...{tokens['refresh_token'][-4:]}\n")
             f.write(f"STRAVA_EXPIRES_AT={tokens['expires_at']}\n")
             f.write(f"STRAVA_EXPIRES_IN={tokens['expires_in']}\n")
             f.write("==========================================\n")
@@ -83,10 +79,7 @@ class StravaTokenManager:
             recent_update = (self._last_digitalocean_update and 
                            time.time() - self._last_digitalocean_update < 1800)  # 30 minutes
             
-            # CRITICAL: Skip DigitalOcean update during emergency refresh to prevent hanging
-            if self._in_emergency_refresh:
-                print("🔄 Emergency refresh mode - skipping DigitalOcean update to prevent hanging")
-            elif tokens_changed and not recent_update:
+            if tokens_changed and not recent_update:
                 print("🔄 Triggering DigitalOcean automated update...")
                 self._trigger_automated_update(tokens)
                 print("🔄 DigitalOcean automated update completed")

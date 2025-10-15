@@ -52,6 +52,8 @@ logs/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+strava_token_refresh.log
+strava_integration*.log
 
 # Runtime data
 pids

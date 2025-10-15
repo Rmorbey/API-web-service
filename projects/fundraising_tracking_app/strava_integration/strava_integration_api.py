@@ -347,66 +347,30 @@ async def get_map_tiles(z: int, x: int, y: int, style: str = Query("dark"), api_
 
 @router.post("/refresh-cache")
 async def refresh_cache(request: RefreshRequest, api_key: str = Depends(verify_api_key)):
-    """Manually trigger cache refresh with batch processing (requires API key)
+    """Manually trigger cache refresh using simplified core logic (requires API key)
     
-    Supports advanced refresh options:
-    - Force full refresh instead of smart merge
-    - Include activities older than 3 weeks
-    - Customize batch size for processing
+    Uses the same core logic as automatic refresh:
+    - Single condition check (empty data OR 6+ hours old)
+    - Batch processing (20 activities every 15 minutes)
+    - Data validation and override
     """
     try:
-        # Force an immediate refresh using the automated system
-        success = get_cache().force_refresh_now()
+        # Use simplified core logic
+        get_cache().check_and_refresh()
         
-        if success:
-            return {
-                "success": True,
-                "message": "Cache refresh started! Processing activities in 20-activity batches every 15 minutes.",
-                "timestamp": datetime.now().isoformat()
-            }
-        else:
-            return {
-                "success": False,
-                "error": "Failed to start cache refresh",
-                "timestamp": datetime.now().isoformat()
-            }
+        return {
+            "success": True,
+            "message": "🏃‍♂️ Manual refresh triggered! Using core batch processing logic.",
+            "timestamp": datetime.now().isoformat()
+        }
     except Exception as e:
-        logger.error(f"Cache refresh failed: {e}")
+        logger.error(f"🏃‍♂️ Manual refresh failed: {e}")
         return {
             "success": False,
             "error": str(e),
             "timestamp": datetime.now().isoformat()
         }
 
-@router.post("/cleanup-backups")
-async def cleanup_backups(request: CleanupRequest, api_key: str = Depends(verify_api_key)):
-    """Clean up old backup files with customizable options (requires API key)
-    
-    Supports advanced cleanup options:
-    - Specify number of recent backups to keep
-    - Force cleanup even if cache is recent
-    """
-    try:
-        success = get_cache().cleanup_backups()
-        
-        if success:
-            return {
-                "success": True,
-                "message": "Backup cleanup completed! Only the most recent backup is kept.",
-                "timestamp": datetime.now().isoformat()
-            }
-        else:
-            return {
-                "success": False,
-                "error": "Failed to cleanup backups",
-                "timestamp": datetime.now().isoformat()
-            }
-    except Exception as e:
-        return {
-            "success": False,
-            "error": str(e),
-            "timestamp": datetime.now().isoformat()
-        }
 
 # Demo endpoints (development only - no API key required for demo pages)
 @router.get("/demo/feed")

@@ -69,11 +69,6 @@ class SmartStravaCache:
         self._last_refresh = None
         self._batch_queue = []
         
-        # Emergency refresh circuit breaker
-        self.emergency_refresh_failures = 0
-        self.max_emergency_refresh_failures = 3
-        self.emergency_refresh_circuit_breaker_reset_hours = 2
-        self.last_emergency_refresh_failure = None
         
         # Start the automated refresh system
         self._start_automated_refresh()
@@ -98,23 +93,14 @@ class SmartStravaCache:
                         self._save_cache_to_file(cache_data)
                         logger.info("✅ Cache system initialized from Supabase")
                         
-                        # Check if immediate refresh is needed using smart logic
-                        should_refresh, reason = self._should_refresh_cache(cache_data)
-                        if should_refresh:
-                            logger.info(f"🔄 Cache needs refresh: {reason}")
-                            # Use normal refresh system instead of emergency refresh
-                            # Emergency refresh is only for completely broken/empty cache
-                            logger.info("🔄 Starting normal refresh process...")
-                            self._start_scheduled_refresh()
-                        else:
-                            logger.debug("✅ Cache is fresh and valid")  # Reduce log spam for valid cache
+                        # Use simplified check and refresh logic
+                        self.check_and_refresh()
                     else:
                         logger.warning("❌ Supabase data integrity check failed, triggering refresh...")
-                        self._trigger_emergency_refresh()
+                        self.check_and_refresh()
                 else:
-                    logger.info("📭 No Supabase data found, triggering emergency refresh to populate cache...")
-                    # CRITICAL: Trigger emergency refresh immediately when no data exists
-                    self._trigger_emergency_refresh()
+                    logger.info("📭 No Supabase data found, triggering refresh to populate cache...")
+                    self.check_and_refresh()
             except Exception as e:
                 logger.error(f"❌ Cache system initialization failed: {e}")
         else:
@@ -294,37 +280,32 @@ class SmartStravaCache:
         return True
     
     def _should_refresh_cache(self, cache_data: Dict[str, Any]) -> Tuple[bool, str]:
-        """Determine if cache should be refreshed and why"""
+        """Simplified 6-hour refresh logic"""
         if not cache_data.get("timestamp"):
             return True, "No timestamp in cache"
         
         cache_time = datetime.fromisoformat(cache_data["timestamp"])
-        expiry_time = cache_time + timedelta(hours=self.cache_duration_hours)
-        now = datetime.now()
+        expiry_time = cache_time + timedelta(hours=6)  # 6-hour refresh
         
-        # Check basic expiry
-        if now >= expiry_time:
-            return True, f"Cache expired {now - expiry_time} ago"
-        
-        # Check rich data expiry
-        last_rich_fetch = cache_data.get("last_rich_fetch")
-        if last_rich_fetch:
-            rich_fetch_time = datetime.fromisoformat(last_rich_fetch)
-            rich_expiry_time = rich_fetch_time + timedelta(hours=self.cache_duration_hours)
-            
-            if now >= rich_expiry_time:
-                return True, f"Rich data expired {now - rich_expiry_time} ago"
-        
-        # Check data quality
-        activities = cache_data.get("activities", [])
-        if len(activities) < 5:
-            return True, f"Too few activities ({len(activities)})"
-        
-        # Check for emergency refresh flag
-        if cache_data.get("emergency_refresh"):
-            return True, "Emergency refresh flag set"
+        if datetime.now() >= expiry_time:
+            return True, f"Cache expired {datetime.now() - expiry_time} ago"
         
         return False, "Cache is valid"
+    
+    def check_and_refresh(self):
+        """Main entry point - single condition check for all refresh scenarios"""
+        cache_data = self._load_cache()
+        
+        # SINGLE CONDITION: Empty database OR 6+ hours old
+        if (not cache_data or 
+            not cache_data.get("activities") or 
+            self._should_refresh_cache(cache_data)[0]):
+            
+            logger.info("🏃‍♂️ Triggering batch processing")
+            self._start_batch_processing()
+            return
+        
+        logger.info("🏃‍♂️ Cache is valid - no refresh needed")
     
     def get_cache_status(self) -> Dict[str, Any]:
         """Get comprehensive cache status for monitoring"""
@@ -388,6 +369,42 @@ class SmartStravaCache:
             filtered.append(activity)
         
         return filtered
+    
+    def _validate_user_input(self, data):
+        """Only sanitize user input fields - PROTECT API DATA"""
+        user_input_fields = ['comments', 'donation_messages', 'donor_names']
+        # Remove SQL injection patterns from user input only
+        # Keep all Strava API data raw
+        return data  # Simplified for now - full implementation in supabase_cache_manager.py
+    
+    def _validate_strava_data(self, fresh_data, cached_data):
+        """Compare fresh Strava data with cached data"""
+        
+        # BASIC DATA VALIDATION
+        if fresh_data.get('name') != cached_data.get('name'):
+            return 'name_mismatch'
+        
+        if fresh_data.get('distance') != cached_data.get('distance'):
+            return 'distance_mismatch'
+        
+        if fresh_data.get('duration') != cached_data.get('duration'):
+            return 'duration_mismatch'
+        
+        # RICH DATA VALIDATION  
+        if fresh_data.get('polyline') != cached_data.get('polyline'):
+            return 'polyline_mismatch'
+        
+        if fresh_data.get('bounds') != cached_data.get('bounds'):
+            return 'bounds_mismatch'
+        
+        # NEW DATA DETECTION
+        if fresh_data.get('photos') and not cached_data.get('photos'):
+            return 'new_photos'
+        
+        if fresh_data.get('comments') and len(fresh_data['comments']) > len(cached_data.get('comments', [])):
+            return 'new_comments'
+        
+        return 'data_matches'
     
     def _check_api_limits(self) -> Tuple[bool, str]:
         """Check if we can make API calls without hitting rate limits"""
@@ -1601,7 +1618,7 @@ class SmartStravaCache:
         
         self._batch_thread = threading.Thread(target=self._batch_processing_loop, daemon=True)
         self._batch_thread.start()
-        logger.info("🔄 Batch processing started (20 activities every 15 minutes)")
+        logger.info("🏃‍♂️ Batch processing started (20 activities every 15 minutes)")
     
     def _batch_processing_loop(self):
         """Process activities in batches of 20 every 15 minutes"""
@@ -1618,7 +1635,7 @@ class SmartStravaCache:
             for i in range(0, len(activities_to_process), batch_size):
                 batch = activities_to_process[i:i + batch_size]
                 
-                logger.info(f"🔄 Processing batch {i//batch_size + 1}: {len(batch)} activities")
+                logger.info(f"🏃‍♂️ Processing batch {i//batch_size + 1}: {len(batch)} activities")
                 
                 # Process the batch
                 self._process_activity_batch(batch)
@@ -1628,7 +1645,7 @@ class SmartStravaCache:
                     logger.info("⏳ Waiting 15 minutes before next batch...")
                     time.sleep(900)  # 15 minutes
             
-            logger.info("✅ Batch processing complete")
+            logger.info("🏃‍♂️ Batch processing complete")
             
             # Mark batching as complete and validate results
             self._mark_batching_in_progress(False)
@@ -1677,14 +1694,14 @@ class SmartStravaCache:
             
             # If polyline data is still below 30%, trigger another batch process
             if polyline_percentage < 30.0:
-                logger.warning(f"⚠️ Polyline data coverage is only {polyline_percentage:.1f}%, triggering second batch process")
-                logger.info("🔄 Starting second batch process to collect missing polyline/bounds data")
+                logger.warning(f"🏃‍♂️ Polyline data coverage is only {polyline_percentage:.1f}%, triggering retry")
+                logger.info("🏃‍♂️ Starting batch processing retry to collect missing data")
                 
                 # Reset batching status and start again
                 self._mark_batching_in_progress(True)
                 self._start_batch_processing()
             else:
-                logger.info(f"✅ Polyline data coverage is {polyline_percentage:.1f}%, batch processing successful")
+                logger.info(f"🏃‍♂️ Polyline data coverage is {polyline_percentage:.1f}%, batch processing successful")
                 
         except Exception as e:
             logger.error(f"❌ Post-batch validation failed: {e}")
@@ -1718,24 +1735,31 @@ class SmartStravaCache:
             return []
     
     def _process_activity_batch(self, batch: List[Dict[str, Any]]):
-        """Process a batch of activities to update their data - FIXED to fetch complete data"""
+        """Process a batch of activities with data validation and complete data fetching"""
         try:
             for activity in batch:
                 activity_id = activity.get('id')
                 if activity_id:
-                    # FIXED: Check if activity needs complete data, then fetch it
-                    if not self._has_complete_data(activity):
-                        logger.info(f"🔄 Fetching complete data for activity {activity_id}: {activity.get('name', 'Unknown')}")
-                        try:
-                            # Fetch complete data from Strava API
-                            complete_data = self._fetch_complete_activity_data(activity_id)
-                            # Update the activity in cache with complete data
-                            self._update_activity_in_cache(activity_id, complete_data)
-                            logger.info(f"✅ Updated activity {activity_id} with complete data")
-                        except Exception as e:
-                            logger.warning(f"⚠️ Failed to fetch complete data for activity {activity_id}: {e}")
-                    else:
-                        logger.info(f"✅ Activity {activity_id} already has complete data, skipping")
+                    logger.info(f"🏃‍♂️ Processing activity {activity_id}: {activity.get('name', 'Unknown')}")
+                    
+                    try:
+                        # Fetch fresh data from Strava API
+                        fresh_data = self._fetch_complete_activity_data(activity_id)
+                        
+                        # Validate data against cached data
+                        validation_result = self._validate_strava_data(fresh_data, activity)
+                        
+                        if validation_result == 'data_matches':
+                            logger.info(f"🏃‍♂️ Activity {activity_id} data matches - no update needed")
+                        else:
+                            logger.info(f"🏃‍♂️ Activity {activity_id} validation result: {validation_result}")
+                            
+                            # Update the activity in cache with fresh data
+                            self._update_activity_in_cache(activity_id, fresh_data)
+                            logger.info(f"🏃‍♂️ Updated activity {activity_id} with fresh data")
+                        
+                    except Exception as e:
+                        logger.warning(f"⚠️ Failed to process activity {activity_id}: {e}")
                     
                     time.sleep(1)  # Small delay to respect API limits
                     
@@ -1833,54 +1857,6 @@ class SmartStravaCache:
             logger.error(f"Error analyzing cache data loss: {e}")
             return {"error": str(e)}
     
-    def force_refresh_now(self):
-        """Force an immediate refresh (for manual trigger) - FIXED to actually fetch fresh data"""
-        try:
-            logger.info("🔄 Manual refresh triggered - fetching fresh data from Strava")
-            self._create_backup()
-            
-            # FIXED: Actually fetch fresh data from Strava API instead of just processing existing cache
-            logger.info("📡 Fetching fresh activities from Strava API...")
-            fresh_activities = self._fetch_from_strava(200)  # Fetch up to 200 activities
-            filtered_activities = self._filter_activities(fresh_activities)
-            
-            logger.info(f"✅ Fetched {len(fresh_activities)} activities, {len(filtered_activities)} after filtering")
-            
-            # Load existing cache for smart merge
-            cache_data = self._load_cache()
-            existing_activities = cache_data.get("activities", [])
-            
-            # Smart merge: preserve rich data, update basic fields
-            merged_activities = self._smart_merge_activities(existing_activities, filtered_activities)
-            
-            # Update cache with merged data
-            updated_cache = {
-                "timestamp": datetime.now().isoformat(),
-                "activities": merged_activities,
-                "total_fetched": len(fresh_activities),
-                "total_filtered": len(filtered_activities),
-                "manual_refresh": True
-            }
-            
-            self._save_cache(updated_cache)
-            logger.info(f"✅ Manual refresh complete: {len(merged_activities)} activities in cache")
-            
-            # Now start batch processing for activities that need complete data
-            self._start_batch_processing()
-            return True
-            
-        except Exception as e:
-            logger.error(f"❌ Manual refresh failed: {e}")
-            return False
-    
-    def cleanup_backups(self):
-        """Manually clean up old backup files"""
-        try:
-            self._cleanup_old_backups()
-            return True
-        except Exception as e:
-            logger.error(f"❌ Backup cleanup failed: {e}")
-            return False
 
     def clean_invalid_activities(self) -> Dict[str, Any]:
         """Clean invalid activities from the cache"""
@@ -1990,192 +1966,10 @@ class SmartStravaCache:
             logger.error(f"Cache integrity check error: {e}")
             return False
     
-    def _restore_from_backup(self) -> bool:
-        """Restore cache from the most recent backup"""
-        try:
-            import glob
-            
-            # Find all backup files in backups folder
-            backup_dir = os.path.join(os.path.dirname(self.cache_file), "backups")
-            backup_pattern = os.path.join(backup_dir, "strava_cache_backup_*.json")
-            backup_files = glob.glob(backup_pattern)
-            
-            if not backup_files:
-                logger.error("No backup files found")
-                return False
-            
-            # Sort by modification time (newest first)
-            backup_files.sort(key=lambda x: os.path.getmtime(x), reverse=True)
-            
-            # Try to restore from the most recent backup
-            for backup_file in backup_files:
-                try:
-                    with open(backup_file, 'r') as f:
-                        backup_data = json.load(f)
-                    
-                    # Validate backup integrity
-                    if self._validate_cache_integrity(backup_data):
-                        # Restore the backup
-                        shutil.copy2(backup_file, self.cache_file)
-                        self._cache_data = backup_data
-                        self._cache_loaded_at = datetime.now()
-                        logger.info(f"Successfully restored cache from backup: {os.path.basename(backup_file)}")
-                        return True
-                    else:
-                        logger.warning(f"Backup {os.path.basename(backup_file)} also appears corrupted, trying next...")
-                        continue
-                        
-                except Exception as e:
-                    logger.warning(f"Failed to restore from {os.path.basename(backup_file)}: {e}")
-                    continue
-            
-            logger.error("All backup files are corrupted or invalid")
-            return False
-            
-        except Exception as e:
-            logger.error(f"Failed to restore from backup: {e}")
-            return False
     
     def _trigger_emergency_refresh(self):
-        """Emergency refresh - rebuild from APIs when all sources fail"""
-        try:
-            # Check circuit breaker
-            if self._is_emergency_refresh_circuit_breaker_open():
-                logger.warning("🚨 Emergency refresh circuit breaker is OPEN - skipping emergency refresh")
-                logger.warning("System will continue with empty cache until circuit breaker resets")
-                return
-            
-            logger.info("🚨 EMERGENCY REFRESH: Rebuilding cache from APIs...")
-            
-            # Start emergency refresh in a separate thread to avoid blocking
-            import threading
-            emergency_thread = threading.Thread(target=self._emergency_refresh_worker, daemon=True)
-            emergency_thread.start()
-            
-            logger.info("🚨 Emergency refresh started in background thread")
-            
-            # Wait for completion with timeout to prevent hanging
-            emergency_thread.join(timeout=120)  # 120 second timeout
-            
-            if emergency_thread.is_alive():
-                logger.error("🚨 Emergency refresh timed out after 120 seconds")
-                self._record_emergency_refresh_failure()
-            else:
-                logger.info("✅ Emergency refresh completed successfully")
-            
-        except Exception as e:
-            logger.error(f"Failed to trigger emergency refresh: {e}")
-            self._record_emergency_refresh_failure()
+        """Emergency refresh - simplified to just trigger batch processing"""
+        logger.info("🏃‍♂️ Emergency refresh triggered - starting batch processing")
+        self._start_batch_processing()
     
-    def _emergency_refresh_worker(self):
-        """Emergency refresh worker - runs in background thread"""
-        try:
-            logger.info("🔄 Emergency refresh worker: Starting Strava API fetch...")
-            # Set emergency refresh mode to skip DigitalOcean updates
-            self.token_manager.set_emergency_refresh_mode(True)
-            
-            # TEST: Try a simple API call first to isolate the issue
-            logger.info("🔄 TEST: Attempting simple API call to isolate hanging issue...")
-            try:
-                # FALLBACK: Try direct environment variable access first to bypass token manager issues
-                logger.info("🔄 TEST: Attempting direct token access from environment...")
-                import os
-                direct_token = os.getenv("STRAVA_ACCESS_TOKEN")
-                if direct_token:
-                    logger.info(f"🔄 TEST: Direct token obtained: {direct_token[:20]}...")
-                    access_token = direct_token
-                else:
-                    logger.info("🔄 TEST: No direct token, using token manager...")
-                    access_token = self.token_manager.get_valid_access_token()
-                    logger.info(f"🔄 TEST: Token manager token obtained: {access_token[:20] if access_token else 'None'}...")
-                
-                # Test HTTP client creation
-                logger.info("🔄 TEST: Testing HTTP client creation...")
-                http_client = get_http_client()
-                logger.info("🔄 TEST: HTTP client created successfully")
-                
-                # Test simple API call
-                logger.info("🔄 TEST: Testing simple Strava API call...")
-                test_url = f"{self.base_url}/athlete/activities?per_page=1&page=1"
-                test_headers = {'Authorization': f'Bearer {access_token}'}
-                test_response = http_client.get(test_url, headers=test_headers, timeout=10.0)
-                logger.info(f"🔄 TEST: Simple API call completed: {test_response.status_code}")
-                
-                if test_response.status_code == 200:
-                    logger.info("🔄 TEST: Simple API call successful, proceeding with full fetch...")
-                else:
-                    logger.error(f"🔄 TEST: Simple API call failed with status {test_response.status_code}")
-                    raise Exception(f"Test API call failed: {test_response.status_code}")
-                    
-            except Exception as test_error:
-                logger.error(f"🔄 TEST: Simple API test failed: {test_error}")
-                raise Exception(f"Emergency refresh test failed: {test_error}")
-            
-            # Fetch fresh data from Strava
-            fresh_activities = self._fetch_from_strava(200)
-            logger.info("🔄 Emergency refresh worker: Strava API fetch completed, filtering activities...")
-            filtered_activities = self._filter_activities(fresh_activities)
-            logger.info("🔄 Emergency refresh worker: Activity filtering completed")
-            
-            logger.info(f"✅ Emergency refresh: Fetched {len(fresh_activities)} activities, {len(filtered_activities)} after filtering")
-            
-            # Create new cache with fresh data
-            emergency_cache = {
-                "timestamp": datetime.now().isoformat(),
-                "activities": filtered_activities,
-                "total_fetched": len(fresh_activities),
-                "total_filtered": len(filtered_activities),
-                "emergency_refresh": False,  # Clear the flag after successful refresh
-                "batching_in_progress": True,  # Mark batching as in progress
-                "last_rich_fetch": datetime.now().isoformat()  # Mark as needing rich data
-            }
-            
-            # Save the emergency cache (this will save to both file and Supabase)
-            self._save_cache(emergency_cache)
-            
-            # Update in-memory cache
-            self._cache_data = emergency_cache
-            self._cache_loaded_at = datetime.now()
-            
-            logger.info(f"✅ Emergency refresh complete: {len(filtered_activities)} activities restored")
-            
-            # Clear emergency refresh mode
-            self.token_manager.set_emergency_refresh_mode(False)
-            
-            # CRITICAL: Start batch processing immediately to get complete data
-            # This will fetch polyline, bounds, descriptions, photos, comments for all activities
-            logger.info("🔄 Starting immediate batch processing to fetch complete data...")
-            self._start_batch_processing()
-            
-        except Exception as e:
-            logger.error(f"Emergency refresh worker failed: {e}")
-            # Clear emergency refresh mode on failure
-            self.token_manager.set_emergency_refresh_mode(False)
-            # Record failure for circuit breaker
-            self._record_emergency_refresh_failure()
     
-    def _is_emergency_refresh_circuit_breaker_open(self) -> bool:
-        """Check if emergency refresh circuit breaker is open"""
-        if self.emergency_refresh_failures < self.max_emergency_refresh_failures:
-            return False
-        
-        # Check if enough time has passed to reset the circuit breaker
-        if self.last_emergency_refresh_failure:
-            time_since_failure = datetime.now() - self.last_emergency_refresh_failure
-            if time_since_failure.total_seconds() > (self.emergency_refresh_circuit_breaker_reset_hours * 3600):
-                logger.info("🔄 Emergency refresh circuit breaker reset - failures cleared")
-                self.emergency_refresh_failures = 0
-                self.last_emergency_refresh_failure = None
-                return False
-        
-        return True
-    
-    def _record_emergency_refresh_failure(self):
-        """Record an emergency refresh failure for circuit breaker"""
-        self.emergency_refresh_failures += 1
-        self.last_emergency_refresh_failure = datetime.now()
-        logger.warning(f"🚨 Emergency refresh failure #{self.emergency_refresh_failures}/{self.max_emergency_refresh_failures}")
-        
-        if self.emergency_refresh_failures >= self.max_emergency_refresh_failures:
-            logger.error("🚨 Emergency refresh circuit breaker OPEN - too many failures")
-            logger.error(f"Circuit breaker will reset in {self.emergency_refresh_circuit_breaker_reset_hours} hours")
