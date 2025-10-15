@@ -259,7 +259,7 @@ def get_jawg_token():
     }
 
 @router.get("/map-tiles/{z}/{x}/{y}")
-async def get_map_tiles(z: int, x: int, y: int, style: str = Query("dark"), token: str = Query(None)):
+async def get_map_tiles(z: int, x: int, y: int, style: str = Query("dark"), api_key: str = Depends(verify_api_key)):
     """Secure proxy for Jawg map tiles - keeps token server-side
     
     Supports different map styles:
@@ -268,12 +268,6 @@ async def get_map_tiles(z: int, x: int, y: int, style: str = Query("dark"), toke
     - satellite: Satellite imagery
     - dark: Dark mode street map
     """
-    # Validate frontend token
-    if not token or token != os.getenv("STRAVA_API_KEY"):
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid or missing token for map tiles"
-        )
     
     jawg_token = os.getenv("JAWG_ACCESS_TOKEN", "demo")
     

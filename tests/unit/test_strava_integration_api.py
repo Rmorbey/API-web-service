@@ -393,7 +393,7 @@ class TestMapTilesEndpoint:
         mock_response.headers = {"content-type": "image/png"}
         mock_get.return_value = mock_response
         
-        response = client.get("/api/strava-integration/map-tiles/10/512/384?token=test-api-key")
+        response = client.get("/api/strava-integration/map-tiles/10/512/384", headers={"X-API-Key": "test-api-key"})
         
         assert response.status_code == 200
         assert response.content == b"fake_tile_data"
@@ -408,7 +408,7 @@ class TestMapTilesEndpoint:
         mock_response.headers = {"content-type": "image/png"}
         mock_get.return_value = mock_response
         
-        response = client.get("/api/strava-integration/map-tiles/10/512/384?style=dark&token=test-api-key")
+        response = client.get("/api/strava-integration/map-tiles/10/512/384?style=dark", headers={"X-API-Key": "test-api-key"})
         
         assert response.status_code == 200
         assert response.content == b"fake_tile_data"
@@ -426,7 +426,7 @@ class TestMapTilesEndpoint:
         
         mock_get.side_effect = [Exception("HTTP error"), mock_response]
         
-        response = client.get("/api/strava-integration/map-tiles/10/512/384?token=test-api-key")
+        response = client.get("/api/strava-integration/map-tiles/10/512/384", headers={"X-API-Key": "test-api-key"})
         
         # Should fallback to OpenStreetMap and still return 200
         assert response.status_code == 200
