@@ -424,11 +424,12 @@ class SmartStravaCache:
                 
                 # Make the API call using shared HTTP client with connection pooling
                 # CRITICAL: Add timeout to prevent hanging
+                logger.info(f"🔄 Step 3a1: Getting HTTP client...")
                 http_client = get_http_client()
-                logger.info(f"🔄 Making API call to: {url}")
-                logger.info(f"🔄 Headers: Authorization: Bearer {headers.get('Authorization', 'MISSING')[:20]}...")
+                logger.info(f"🔄 Step 3a2: HTTP client obtained, making API call to: {url}")
+                logger.info(f"🔄 Step 3a3: Headers: Authorization: Bearer {headers.get('Authorization', 'MISSING')[:20]}...")
                 response = http_client.get(url, headers=headers, timeout=30.0)
-                logger.info(f"🔄 API call completed: {response.status_code}")
+                logger.info(f"🔄 Step 3a4: API call completed: {response.status_code}")
                 
                 # Record the API call
                 self._record_api_call()
@@ -552,10 +553,16 @@ class SmartStravaCache:
         """Fetch activities from Strava API with pagination to get ALL activities"""
         try:
             logger.info(f"🔄 Starting Strava API fetch for {limit} activities...")
+            
+            # Add detailed logging for token retrieval
+            logger.info("🔄 Step 1: Getting access token...")
             access_token = self.token_manager.get_valid_access_token()
-            logger.info(f"🔄 Access token received: {access_token[:20] if access_token else 'None'}...")
+            logger.info(f"🔄 Step 1 Complete: Access token received: {access_token[:20] if access_token else 'None'}...")
+            
+            # Add detailed logging for headers
+            logger.info("🔄 Step 2: Creating headers...")
             headers = {'Authorization': f'Bearer {access_token}'}
-            logger.info(f"🔄 Headers created successfully")
+            logger.info(f"🔄 Step 2 Complete: Headers created successfully")
             
             all_activities = []
             page = 1
@@ -564,10 +571,12 @@ class SmartStravaCache:
             
             while len(all_activities) < limit and page <= max_pages:
                 url = f"{self.base_url}/athlete/activities?per_page={per_page}&page={page}"
-                logger.info(f"🔄 Fetching page {page} from URL: {url}")
+                logger.info(f"🔄 Step 3: Fetching page {page} from URL: {url}")
                 
                 # Use the new retry-enabled API call method
+                logger.info(f"🔄 Step 3a: Making API call with retry...")
                 response = self._make_api_call_with_retry(url, headers)
+                logger.info(f"🔄 Step 3b: API call completed, status: {response.status_code}")
                 
                 logger.info(f"🔄 API response received for page {page}, parsing JSON...")
                 page_activities = response.json()
@@ -2044,6 +2053,15 @@ class SmartStravaCache:
             emergency_thread.start()
             
             logger.info("🚨 Emergency refresh started in background thread")
+            
+            # Wait for completion with timeout to prevent hanging
+            emergency_thread.join(timeout=120)  # 120 second timeout
+            
+            if emergency_thread.is_alive():
+                logger.error("🚨 Emergency refresh timed out after 120 seconds")
+                self._record_emergency_refresh_failure()
+            else:
+                logger.info("✅ Emergency refresh completed successfully")
             
         except Exception as e:
             logger.error(f"Failed to trigger emergency refresh: {e}")
