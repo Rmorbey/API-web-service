@@ -276,6 +276,7 @@ async def get_map_tiles(z: int, x: int, y: int, style: str = Query("dark"), api_
         import random
         subdomain = random.choice(['a', 'b', 'c'])
         tile_url = f"https://{subdomain}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        logger.info(f"🗺️ Using OpenStreetMap fallback (no Jawg token): {tile_url}")
     else:
         # Use Jawg tiles with server-side token and style
         style_map = {
@@ -287,10 +288,12 @@ async def get_map_tiles(z: int, x: int, y: int, style: str = Query("dark"), api_
         # Default to dark mode if no style specified
         jawg_style = style_map.get(style, "jawg-dark")
         tile_url = f"https://tile.jawg.io/{jawg_style}/{z}/{x}/{y}.png?access-token={jawg_token}"
+        logger.info(f"🗺️ Using Jawg tiles (style={style}, jawg_style={jawg_style}): {tile_url}")
     
     try:
         async with httpx.AsyncClient() as client:
             response = await client.get(tile_url)
+            logger.info(f"✅ Tile request successful: {response.status_code} for {tile_url}")
             return Response(
                 content=response.content,
                 media_type=response.headers.get("content-type", "image/png"),
@@ -301,10 +304,13 @@ async def get_map_tiles(z: int, x: int, y: int, style: str = Query("dark"), api_
             )
     except Exception as e:
         # Fallback to OpenStreetMap on error
+        logger.error(f"❌ Jawg tile request failed: {e} for {tile_url}")
         import random
         subdomain = random.choice(['a', 'b', 'c'])
+        fallback_url = f"https://{subdomain}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        logger.info(f"🔄 Falling back to OpenStreetMap: {fallback_url}")
         async with httpx.AsyncClient() as client:
-            response = await client.get(f"https://{subdomain}.tile.openstreetmap.org/{z}/{x}/{y}.png")
+            response = await client.get(fallback_url)
             return Response(
                 content=response.content,
                 media_type="image/png",
