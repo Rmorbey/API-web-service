@@ -679,14 +679,19 @@ class SmartStravaCache:
                                         access_token = self.token_manager._cached_token
                                         logger.warning(f"🔄 Using cached token from token manager: {access_token[:20]}...")
                                     else:
-                                        # Fall back to environment token
-                                        import os
-                                        env_token = os.getenv("STRAVA_ACCESS_TOKEN")
-                                        if env_token:
-                                            access_token = env_token
-                                            logger.warning(f"🔄 Using environment access token as last resort: {env_token[:20]}...")
+                                        # Try to get the fresh token from the token manager's tokens dict
+                                        if hasattr(self.token_manager, 'tokens') and self.token_manager.tokens.get('access_token'):
+                                            access_token = self.token_manager.tokens['access_token']
+                                            logger.warning(f"🔄 Using fresh token from token manager: {access_token[:20]}...")
                                         else:
-                                            raise Exception("Fallback token refresh hanging and no token available")
+                                            # Fall back to environment token
+                                            import os
+                                            env_token = os.getenv("STRAVA_ACCESS_TOKEN")
+                                            if env_token:
+                                                access_token = env_token
+                                                logger.warning(f"🔄 Using environment access token as last resort: {env_token[:20]}...")
+                                            else:
+                                                raise Exception("Fallback token refresh hanging and no token available")
                                 except Exception as e:
                                     logger.error(f"❌ Failed to get token from token manager: {e}")
                                     raise Exception("Fallback token refresh hanging and no token available")
