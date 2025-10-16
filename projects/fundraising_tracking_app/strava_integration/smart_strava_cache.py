@@ -554,80 +554,68 @@ class SmartStravaCache:
         try:
             logger.info(f"🔄 Starting Strava API fetch for {limit} activities...")
             
-            # Add timeout to prevent hanging
-            import signal
-            import time
+            # Note: Removed signal-based timeout as it doesn't work in background threads
+            # The _make_api_call_with_retry method already has built-in timeouts
             
-            def timeout_handler(signum, frame):
-                raise TimeoutError("Strava API fetch timed out after 60 seconds")
-            
-            signal.signal(signal.SIGALRM, timeout_handler)
-            signal.alarm(60)  # 60 second timeout
-            
+            # Add detailed logging for token retrieval
+            logger.info("🔄 Step 1: Getting access token...")
             try:
-                # Add detailed logging for token retrieval
-                logger.info("🔄 Step 1: Getting access token...")
-                try:
-                    access_token = self.token_manager.get_valid_access_token()
-                    logger.info(f"🔄 Step 1 Complete: Access token received: {access_token[:20] if access_token else 'None'}...")
-                except Exception as e:
-                    logger.error(f"❌ Failed to get access token: {e}")
-                    # Try to get token directly from environment as fallback
-                    import os
-                    fallback_token = os.getenv("STRAVA_ACCESS_TOKEN")
-                    if fallback_token:
-                        logger.warning("🔄 Using fallback token from environment variables")
-                        access_token = fallback_token
-                    else:
-                        raise Exception(f"No access token available: {e}")
-                
-                # Add detailed logging for headers
-                logger.info("🔄 Step 2: Creating headers...")
-                headers = {'Authorization': f'Bearer {access_token}'}
-                logger.info(f"🔄 Step 2 Complete: Headers created successfully")
-                logger.info(f"🔄 Step 2b: Access token length: {len(access_token) if access_token else 0}")
-                
-                all_activities = []
-                page = 1
-                per_page = 200  # Strava's maximum per page
-                max_pages = 50  # Safety limit to prevent infinite loops
-                
-                while len(all_activities) < limit and page <= max_pages:
-                    url = f"{self.base_url}/athlete/activities?per_page={per_page}&page={page}"
-                    logger.info(f"🔄 Step 3: Fetching page {page} from URL: {url}")
-                    
-                    # Use the new retry-enabled API call method
-                    logger.info(f"🔄 Step 3a: Making API call with retry...")
-                    response = self._make_api_call_with_retry(url, headers)
-                    logger.info(f"🔄 Step 3b: API call completed, status: {response.status_code}")
-                    
-                    logger.info(f"🔄 API response received for page {page}, parsing JSON...")
-                    page_activities = response.json()
-                    
-                    if not page_activities:
-                        logger.info(f"🔄 No more activities on page {page}, stopping pagination")
-                        break
-                    
-                    all_activities.extend(page_activities)
-                    logger.info(f"🔄 Page {page}: fetched {len(page_activities)} activities, total: {len(all_activities)}")
-                    
-                    # If we got fewer activities than requested, we've reached the end
-                    if len(page_activities) < per_page:
-                        logger.info(f"🔄 Reached end of activities (got {len(page_activities)} < {per_page})")
-                        break
-                    
-                    page += 1
-                    
-                    # Small delay to be respectful to Strava API
-                    import time
-                    time.sleep(0.1)
+                access_token = self.token_manager.get_valid_access_token()
+                logger.info(f"🔄 Step 1 Complete: Access token received: {access_token[:20] if access_token else 'None'}...")
+            except Exception as e:
+                logger.error(f"❌ Failed to get access token: {e}")
+                # Try to get token directly from environment as fallback
+                import os
+                fallback_token = os.getenv("STRAVA_ACCESS_TOKEN")
+                if fallback_token:
+                    logger.warning("🔄 Using fallback token from environment variables")
+                    access_token = fallback_token
+                else:
+                    raise Exception(f"No access token available: {e}")
             
-                    logger.info(f"🔄 Successfully fetched {len(all_activities)} total activities from Strava across {page-1} pages")
-                return all_activities[:limit]  # Return only the requested limit
+            # Add detailed logging for headers
+            logger.info("🔄 Step 2: Creating headers...")
+            headers = {'Authorization': f'Bearer {access_token}'}
+            logger.info(f"🔄 Step 2 Complete: Headers created successfully")
+            logger.info(f"🔄 Step 2b: Access token length: {len(access_token) if access_token else 0}")
+            
+            all_activities = []
+            page = 1
+            per_page = 200  # Strava's maximum per page
+            max_pages = 50  # Safety limit to prevent infinite loops
+            
+            while len(all_activities) < limit and page <= max_pages:
+                url = f"{self.base_url}/athlete/activities?per_page={per_page}&page={page}"
+                logger.info(f"🔄 Step 3: Fetching page {page} from URL: {url}")
                 
-            finally:
-                # Cancel the timeout alarm
-                signal.alarm(0)
+                # Use the new retry-enabled API call method
+                logger.info(f"🔄 Step 3a: Making API call with retry...")
+                response = self._make_api_call_with_retry(url, headers)
+                logger.info(f"🔄 Step 3b: API call completed, status: {response.status_code}")
+                
+                logger.info(f"🔄 API response received for page {page}, parsing JSON...")
+                page_activities = response.json()
+                
+                if not page_activities:
+                    logger.info(f"🔄 No more activities on page {page}, stopping pagination")
+                    break
+                
+                all_activities.extend(page_activities)
+                logger.info(f"🔄 Page {page}: fetched {len(page_activities)} activities, total: {len(all_activities)}")
+                
+                # If we got fewer activities than requested, we've reached the end
+                if len(page_activities) < per_page:
+                    logger.info(f"🔄 Reached end of activities (got {len(page_activities)} < {per_page})")
+                    break
+                
+                page += 1
+                
+                # Small delay to be respectful to Strava API
+                import time
+                time.sleep(0.1)
+            
+            logger.info(f"🔄 Successfully fetched {len(all_activities)} total activities from Strava across {page-1} pages")
+            return all_activities[:limit]  # Return only the requested limit
             
         except Exception as e:
             logger.error(f"Failed to fetch activities from Strava: {str(e)}")
