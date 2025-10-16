@@ -52,7 +52,7 @@ class SmartStravaCache:
         # Rate limiting tracking
         self.api_calls_made = 0
         self.api_calls_reset_time = datetime.now()
-        self.max_calls_per_15min = 200
+        self.max_calls_per_15min = 100
         self.max_calls_per_day = 1000
         
         # Emergency refresh tracking
@@ -556,8 +556,19 @@ class SmartStravaCache:
             
             # Add detailed logging for token retrieval
             logger.info("🔄 Step 1: Getting access token...")
-            access_token = self.token_manager.get_valid_access_token()
-            logger.info(f"🔄 Step 1 Complete: Access token received: {access_token[:20] if access_token else 'None'}...")
+            try:
+                access_token = self.token_manager.get_valid_access_token()
+                logger.info(f"🔄 Step 1 Complete: Access token received: {access_token[:20] if access_token else 'None'}...")
+            except Exception as e:
+                logger.error(f"❌ Failed to get access token: {e}")
+                # Try to get token directly from environment as fallback
+                import os
+                fallback_token = os.getenv("STRAVA_ACCESS_TOKEN")
+                if fallback_token:
+                    logger.warning("🔄 Using fallback token from environment variables")
+                    access_token = fallback_token
+                else:
+                    raise Exception(f"No access token available: {e}")
             
             # Add detailed logging for headers
             logger.info("🔄 Step 2: Creating headers...")
@@ -1919,36 +1930,46 @@ class SmartStravaCache:
             return
             
         self._emergency_refresh_in_progress = True
-        logger.info("🏃‍♂️ Emergency refresh triggered - fetching fresh data from Strava")
+        logger.info("🏃‍♂️ Emergency refresh triggered - starting in background thread")
         
-        try:
-            # When cache is empty, we need to fetch fresh data from Strava first
-            logger.info("🏃‍♂️ Fetching fresh activities from Strava API...")
-            fresh_activities = self._fetch_from_strava(200)  # Fetch 200 activities
-            
-            if fresh_activities:
-                logger.info(f"🏃‍♂️ Fetched {len(fresh_activities)} activities from Strava")
+        # Start emergency refresh in background thread to avoid blocking startup
+        def emergency_refresh_worker():
+            try:
+                logger.info("🏃‍♂️ Emergency refresh worker started - fetching fresh data from Strava")
                 
-                # Create initial cache with fresh data
-                initial_cache = {
-                    "timestamp": datetime.now().isoformat(),
-                    "activities": fresh_activities,
-                    "emergency_refresh": True,
-                    "last_updated": datetime.now().isoformat()
-                }
+                # When cache is empty, we need to fetch fresh data from Strava first
+                logger.info("🏃‍♂️ Fetching fresh activities from Strava API...")
+                fresh_activities = self._fetch_from_strava(200)  # Fetch 200 activities
                 
-                # Save the initial cache
-                self._save_cache(initial_cache)
-                logger.info("🏃‍♂️ Initial cache created with fresh Strava data")
-                
-                # Now start batch processing to enrich the data
-                self._start_batch_processing()
-            else:
-                logger.warning("🏃‍♂️ No activities fetched from Strava API")
+                if fresh_activities:
+                    logger.info(f"🏃‍♂️ Fetched {len(fresh_activities)} activities from Strava")
+                    
+                    # Create initial cache with fresh data
+                    initial_cache = {
+                        "timestamp": datetime.now().isoformat(),
+                        "activities": fresh_activities,
+                        "emergency_refresh": True,
+                        "last_updated": datetime.now().isoformat()
+                    }
+                    
+                    # Save the initial cache
+                    self._save_cache(initial_cache)
+                    logger.info("🏃‍♂️ Initial cache created with fresh Strava data")
+                    
+                    # Now start batch processing to enrich the data
+                    self._start_batch_processing()
+                else:
+                    logger.warning("🏃‍♂️ No activities fetched from Strava API")
+                    self._emergency_refresh_in_progress = False
+                    
+            except Exception as e:
+                logger.error(f"🏃‍♂️ Emergency refresh worker failed: {e}")
                 self._emergency_refresh_in_progress = False
-                
-        except Exception as e:
-            logger.error(f"🏃‍♂️ Emergency refresh failed: {e}")
-            self._emergency_refresh_in_progress = False
+        
+        # Start the worker in a background thread
+        import threading
+        worker_thread = threading.Thread(target=emergency_refresh_worker, daemon=True)
+        worker_thread.start()
+        logger.info("🏃‍♂️ Emergency refresh worker thread started")
     
     

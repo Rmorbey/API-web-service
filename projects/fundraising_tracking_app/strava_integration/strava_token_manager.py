@@ -222,8 +222,8 @@ class StravaTokenManager:
         print(f"🔄 get_valid_access_token called, acquiring lock...")
         
         # Add timeout to prevent deadlock
-        if not self._token_lock.acquire(timeout=30):
-            print(f"❌ Failed to acquire token lock within 30 seconds - possible deadlock")
+        if not self._token_lock.acquire(timeout=10):
+            print(f"❌ Failed to acquire token lock within 10 seconds - possible deadlock")
             raise Exception("Token lock timeout - possible deadlock detected")
         
         try:
