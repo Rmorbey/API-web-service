@@ -450,15 +450,63 @@ class SmartStravaCache:
                             continue
                         raise Exception("Authentication failed - token not expired but API returned 401")
                     else:
-                        # Token is actually expired, refresh it
+                        # Token is actually expired, try to refresh it
                         logger.warning("🔄 Access token expired, refreshing...")
-                        new_token = self.token_manager.get_valid_access_token()
-                        # Update headers with new token for retry
-                        headers = headers.copy()
-                        headers["Authorization"] = f"Bearer {new_token}"
-                        if attempt < max_retries - 1:
-                            continue
-                        raise Exception("Authentication failed after token refresh")
+                        try:
+                            # Try to get new token with timeout to avoid deadlock
+                            import threading
+                            import time
+                            
+                            new_token = None
+                            token_error = None
+                            
+                            def get_new_token():
+                                nonlocal new_token, token_error
+                                try:
+                                    new_token = self.token_manager.get_valid_access_token()
+                                except Exception as e:
+                                    token_error = e
+                            
+                            # Start token retrieval in a separate thread with timeout
+                            token_thread = threading.Thread(target=get_new_token)
+                            token_thread.daemon = True
+                            token_thread.start()
+                            token_thread.join(timeout=10)  # 10 second timeout
+                            
+                            if token_thread.is_alive():
+                                logger.error("❌ Token manager hanging during retry - using fallback")
+                                # Use fallback token from environment
+                                import os
+                                fallback_token = os.getenv("STRAVA_ACCESS_TOKEN")
+                                if fallback_token:
+                                    new_token = fallback_token
+                                    logger.warning("🔄 Using fallback token for retry")
+                                else:
+                                    raise Exception("Token manager hanging and no fallback token available")
+                            elif token_error:
+                                logger.error(f"❌ Token refresh failed during retry: {token_error}")
+                                # Use fallback token from environment
+                                import os
+                                fallback_token = os.getenv("STRAVA_ACCESS_TOKEN")
+                                if fallback_token:
+                                    new_token = fallback_token
+                                    logger.warning("🔄 Using fallback token for retry")
+                                else:
+                                    raise Exception(f"Token refresh failed: {token_error}")
+                            
+                            if new_token:
+                                # Update headers with new token for retry
+                                headers = headers.copy()
+                                headers["Authorization"] = f"Bearer {new_token}"
+                                if attempt < max_retries - 1:
+                                    continue
+                                raise Exception("Authentication failed after token refresh")
+                            else:
+                                raise Exception("No token available for retry")
+                                
+                        except Exception as e:
+                            logger.error(f"❌ Token refresh failed: {e}")
+                            raise Exception(f"Authentication failed: {e}")
                 elif response.status_code == 429:
                     # Rate limited by Strava
                     retry_after = int(response.headers.get('Retry-After', 60))
