@@ -475,22 +475,32 @@ class SmartStravaCache:
                             
                             if token_thread.is_alive():
                                 logger.error("❌ Token manager hanging during retry - using fallback")
-                                # Use fallback token from environment
+                                # Use refresh token to get fresh access token
                                 import os
-                                fallback_token = os.getenv("STRAVA_ACCESS_TOKEN")
-                                if fallback_token:
-                                    new_token = fallback_token
-                                    logger.warning("🔄 Using fallback token for retry")
+                                refresh_token = os.getenv("STRAVA_REFRESH_TOKEN")
+                                if refresh_token:
+                                    logger.warning("🔄 Using refresh token to get fresh access token for retry")
+                                    try:
+                                        new_token = self.token_manager._refresh_access_token(refresh_token)
+                                        logger.info("🔄 Successfully got fresh access token via fallback for retry")
+                                    except Exception as e:
+                                        logger.error(f"❌ Fallback token refresh failed during retry: {e}")
+                                        raise Exception(f"Token manager hanging and fallback refresh failed: {e}")
                                 else:
-                                    raise Exception("Token manager hanging and no fallback token available")
+                                    raise Exception("Token manager hanging and no refresh token available")
                             elif token_error:
                                 logger.error(f"❌ Token refresh failed during retry: {token_error}")
-                                # Use fallback token from environment
+                                # Use refresh token to get fresh access token
                                 import os
-                                fallback_token = os.getenv("STRAVA_ACCESS_TOKEN")
-                                if fallback_token:
-                                    new_token = fallback_token
-                                    logger.warning("🔄 Using fallback token for retry")
+                                refresh_token = os.getenv("STRAVA_REFRESH_TOKEN")
+                                if refresh_token:
+                                    logger.warning("🔄 Using refresh token to get fresh access token for retry")
+                                    try:
+                                        new_token = self.token_manager._refresh_access_token(refresh_token)
+                                        logger.info("🔄 Successfully got fresh access token via fallback for retry")
+                                    except Exception as e:
+                                        logger.error(f"❌ Fallback token refresh failed during retry: {e}")
+                                        raise Exception(f"Token refresh failed: {token_error}")
                                 else:
                                     raise Exception(f"Token refresh failed: {token_error}")
                             
@@ -630,14 +640,20 @@ class SmartStravaCache:
                 
                 if token_thread.is_alive():
                     logger.error("❌ Token manager hanging - using fallback")
-                    # Try to get token directly from environment as fallback
+                    # Try to get fresh token using refresh token as fallback
                     import os
-                    fallback_token = os.getenv("STRAVA_ACCESS_TOKEN")
-                    if fallback_token:
-                        logger.warning("🔄 Using fallback token from environment variables")
-                        access_token = fallback_token
+                    refresh_token = os.getenv("STRAVA_REFRESH_TOKEN")
+                    if refresh_token:
+                        logger.warning("🔄 Using refresh token to get fresh access token")
+                        try:
+                            # Use the token manager's refresh method directly
+                            access_token = self.token_manager._refresh_access_token(refresh_token)
+                            logger.info("🔄 Successfully got fresh access token via fallback")
+                        except Exception as e:
+                            logger.error(f"❌ Fallback token refresh failed: {e}")
+                            raise Exception(f"Token manager hanging and fallback refresh failed: {e}")
                     else:
-                        raise Exception("Token manager hanging and no fallback token available")
+                        raise Exception("Token manager hanging and no refresh token available")
                 elif token_error:
                     logger.error(f"❌ Failed to get access token: {token_error}")
                     # Try to get token directly from environment as fallback
