@@ -554,26 +554,37 @@ class SmartStravaCache:
         try:
             logger.info(f"🔄 Starting Strava API fetch for {limit} activities...")
             
-            # Add detailed logging for token retrieval
-            logger.info("🔄 Step 1: Getting access token...")
-            try:
-                access_token = self.token_manager.get_valid_access_token()
-                logger.info(f"🔄 Step 1 Complete: Access token received: {access_token[:20] if access_token else 'None'}...")
-            except Exception as e:
-                logger.error(f"❌ Failed to get access token: {e}")
-                # Try to get token directly from environment as fallback
-                import os
-                fallback_token = os.getenv("STRAVA_ACCESS_TOKEN")
-                if fallback_token:
-                    logger.warning("🔄 Using fallback token from environment variables")
-                    access_token = fallback_token
-                else:
-                    raise Exception(f"No access token available: {e}")
+            # Add timeout to prevent hanging
+            import signal
+            import time
+            
+            def timeout_handler(signum, frame):
+                raise TimeoutError("Strava API fetch timed out after 60 seconds")
+            
+            signal.signal(signal.SIGALRM, timeout_handler)
+            signal.alarm(60)  # 60 second timeout
+            
+                # Add detailed logging for token retrieval
+                logger.info("🔄 Step 1: Getting access token...")
+                try:
+                    access_token = self.token_manager.get_valid_access_token()
+                    logger.info(f"🔄 Step 1 Complete: Access token received: {access_token[:20] if access_token else 'None'}...")
+                except Exception as e:
+                    logger.error(f"❌ Failed to get access token: {e}")
+                    # Try to get token directly from environment as fallback
+                    import os
+                    fallback_token = os.getenv("STRAVA_ACCESS_TOKEN")
+                    if fallback_token:
+                        logger.warning("🔄 Using fallback token from environment variables")
+                        access_token = fallback_token
+                    else:
+                        raise Exception(f"No access token available: {e}")
             
             # Add detailed logging for headers
             logger.info("🔄 Step 2: Creating headers...")
             headers = {'Authorization': f'Bearer {access_token}'}
             logger.info(f"🔄 Step 2 Complete: Headers created successfully")
+            logger.info(f"🔄 Step 2b: Access token length: {len(access_token) if access_token else 0}")
             
             all_activities = []
             page = 1
@@ -610,8 +621,12 @@ class SmartStravaCache:
                 import time
                 time.sleep(0.1)
             
-            logger.info(f"🔄 Successfully fetched {len(all_activities)} total activities from Strava across {page-1} pages")
-            return all_activities[:limit]  # Return only the requested limit
+                logger.info(f"🔄 Successfully fetched {len(all_activities)} total activities from Strava across {page-1} pages")
+                return all_activities[:limit]  # Return only the requested limit
+                
+            finally:
+                # Cancel the timeout alarm
+                signal.alarm(0)
             
         except Exception as e:
             logger.error(f"Failed to fetch activities from Strava: {str(e)}")
@@ -1939,7 +1954,12 @@ class SmartStravaCache:
                 
                 # When cache is empty, we need to fetch fresh data from Strava first
                 logger.info("🏃‍♂️ Fetching fresh activities from Strava API...")
-                fresh_activities = self._fetch_from_strava(200)  # Fetch 200 activities
+                try:
+                    fresh_activities = self._fetch_from_strava(200)  # Fetch 200 activities
+                    logger.info(f"🏃‍♂️ _fetch_from_strava completed, got {len(fresh_activities) if fresh_activities else 0} activities")
+                except Exception as e:
+                    logger.error(f"🏃‍♂️ _fetch_from_strava failed: {e}")
+                    fresh_activities = None
                 
                 if fresh_activities:
                     logger.info(f"🏃‍♂️ Fetched {len(fresh_activities)} activities from Strava")
