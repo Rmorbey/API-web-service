@@ -621,7 +621,6 @@ class SmartStravaCache:
             logger.error(f"Failed to fetch activities from Strava: {str(e)}")
             raise Exception(f"Strava API error: {str(e)}")
 
-
     def _has_complete_data(self, activity: Dict[str, Any]) -> bool:
         """Check if activity has complete data - for Run/Ride activities, all should have polyline and bounds"""
         has_polyline = bool(activity.get("map") and activity.get("map").get("polyline"))
@@ -1941,19 +1940,22 @@ class SmartStravaCache:
             try:
                 logger.info("🏃‍♂️ Emergency refresh worker started - fetching fresh data from Strava")
                 
-                # When cache is empty, we need to fetch fresh data from Strava first
-                logger.info("🏃‍♂️ Fetching fresh activities from Strava API...")
+                # When cache is empty, we need to fetch basic activity data from Strava first
+                logger.info("🏃‍♂️ Fetching basic activity data from Strava API...")
+                logger.info("🏃‍♂️ About to call _fetch_from_strava(200)...")
                 try:
-                    fresh_activities = self._fetch_from_strava(200)  # Fetch 200 activities
+                    fresh_activities = self._fetch_from_strava(200)  # Fetch basic activity data
                     logger.info(f"🏃‍♂️ _fetch_from_strava completed, got {len(fresh_activities) if fresh_activities else 0} activities")
                 except Exception as e:
                     logger.error(f"🏃‍♂️ _fetch_from_strava failed: {e}")
+                    import traceback
+                    logger.error(f"🏃‍♂️ Full traceback: {traceback.format_exc()}")
                     fresh_activities = None
                 
                 if fresh_activities:
-                    logger.info(f"🏃‍♂️ Fetched {len(fresh_activities)} activities from Strava")
+                    logger.info(f"🏃‍♂️ Fetched {len(fresh_activities)} activities with basic data from Strava")
                     
-                    # Create initial cache with fresh data
+                    # Create initial cache with basic activity data
                     initial_cache = {
                         "timestamp": datetime.now().isoformat(),
                         "activities": fresh_activities,
@@ -1963,9 +1965,9 @@ class SmartStravaCache:
                     
                     # Save the initial cache
                     self._save_cache(initial_cache)
-                    logger.info("🏃‍♂️ Initial cache created with fresh Strava data")
+                    logger.info("🏃‍♂️ Initial cache created with basic activity data")
                     
-                    # Now start batch processing to enrich the data
+                    # Now start batch processing to enrich with rich data
                     self._start_batch_processing()
                 else:
                     logger.warning("🏃‍♂️ No activities fetched from Strava API")
