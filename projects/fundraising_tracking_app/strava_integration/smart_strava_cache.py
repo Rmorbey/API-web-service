@@ -560,8 +560,49 @@ class SmartStravaCache:
             # Add detailed logging for token retrieval
             logger.info("🔄 Step 1: Getting access token...")
             try:
-                access_token = self.token_manager.get_valid_access_token()
-                logger.info(f"🔄 Step 1 Complete: Access token received: {access_token[:20] if access_token else 'None'}...")
+                # Add timeout to token retrieval to prevent hanging
+                import threading
+                import time
+                
+                access_token = None
+                token_error = None
+                
+                def get_token():
+                    nonlocal access_token, token_error
+                    try:
+                        access_token = self.token_manager.get_valid_access_token()
+                    except Exception as e:
+                        token_error = e
+                
+                # Start token retrieval in a separate thread with timeout
+                token_thread = threading.Thread(target=get_token)
+                token_thread.daemon = True
+                token_thread.start()
+                token_thread.join(timeout=30)  # 30 second timeout
+                
+                if token_thread.is_alive():
+                    logger.error("❌ Token manager hanging - using fallback")
+                    # Try to get token directly from environment as fallback
+                    import os
+                    fallback_token = os.getenv("STRAVA_ACCESS_TOKEN")
+                    if fallback_token:
+                        logger.warning("🔄 Using fallback token from environment variables")
+                        access_token = fallback_token
+                    else:
+                        raise Exception("Token manager hanging and no fallback token available")
+                elif token_error:
+                    logger.error(f"❌ Failed to get access token: {token_error}")
+                    # Try to get token directly from environment as fallback
+                    import os
+                    fallback_token = os.getenv("STRAVA_ACCESS_TOKEN")
+                    if fallback_token:
+                        logger.warning("🔄 Using fallback token from environment variables")
+                        access_token = fallback_token
+                    else:
+                        raise Exception(f"No access token available: {token_error}")
+                else:
+                    logger.info(f"🔄 Step 1 Complete: Access token received: {access_token[:20] if access_token else 'None'}...")
+                    
             except Exception as e:
                 logger.error(f"❌ Failed to get access token: {e}")
                 # Try to get token directly from environment as fallback
@@ -1943,6 +1984,7 @@ class SmartStravaCache:
                 # When cache is empty, we need to fetch basic activity data from Strava first
                 logger.info("🏃‍♂️ Fetching basic activity data from Strava API...")
                 logger.info("🏃‍♂️ About to call _fetch_from_strava(200)...")
+                
                 try:
                     fresh_activities = self._fetch_from_strava(200)  # Fetch basic activity data
                     logger.info(f"🏃‍♂️ _fetch_from_strava completed, got {len(fresh_activities) if fresh_activities else 0} activities")
