@@ -667,15 +667,29 @@ class SmartStravaCache:
                             refresh_thread.join(timeout=30)  # 30 second timeout
                             
                             if refresh_thread.is_alive():
-                                logger.error("❌ Fallback token refresh hanging - using environment token")
-                                # Use the token from environment as last resort
-                                import os
-                                env_token = os.getenv("STRAVA_ACCESS_TOKEN")
-                                if env_token:
-                                    access_token = env_token
-                                    logger.warning("🔄 Using environment access token as last resort")
-                                else:
-                                    raise Exception("Fallback token refresh hanging and no environment token available")
+                                logger.error("❌ Fallback token refresh hanging - trying to get fresh token")
+                                # Wait a moment for the token refresh to complete and save to environment
+                                import time
+                                time.sleep(3)
+                                
+                                # Try to get the fresh token from the token manager's internal state
+                                try:
+                                    # Check if the token manager has a cached token
+                                    if hasattr(self.token_manager, '_cached_token') and self.token_manager._cached_token:
+                                        access_token = self.token_manager._cached_token
+                                        logger.warning(f"🔄 Using cached token from token manager: {access_token[:20]}...")
+                                    else:
+                                        # Fall back to environment token
+                                        import os
+                                        env_token = os.getenv("STRAVA_ACCESS_TOKEN")
+                                        if env_token:
+                                            access_token = env_token
+                                            logger.warning(f"🔄 Using environment access token as last resort: {env_token[:20]}...")
+                                        else:
+                                            raise Exception("Fallback token refresh hanging and no token available")
+                                except Exception as e:
+                                    logger.error(f"❌ Failed to get token from token manager: {e}")
+                                    raise Exception("Fallback token refresh hanging and no token available")
                             elif refresh_error:
                                 logger.error(f"❌ Fallback token refresh failed: {refresh_error}")
                                 raise Exception(f"Token manager hanging and fallback refresh failed: {refresh_error}")
