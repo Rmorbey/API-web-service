@@ -482,7 +482,7 @@ class SmartStravaCache:
                                     logger.warning("🔄 Using refresh token to get fresh access token for retry")
                                     try:
                                         new_token = self.token_manager._refresh_access_token(refresh_token)
-                                        logger.info("🔄 Successfully got fresh access token via fallback for retry")
+                                        logger.info(f"🔄 Successfully got fresh access token via fallback for retry: {new_token[:20] if new_token else 'None'}...")
                                     except Exception as e:
                                         logger.error(f"❌ Fallback token refresh failed during retry: {e}")
                                         raise Exception(f"Token manager hanging and fallback refresh failed: {e}")
@@ -497,7 +497,7 @@ class SmartStravaCache:
                                     logger.warning("🔄 Using refresh token to get fresh access token for retry")
                                     try:
                                         new_token = self.token_manager._refresh_access_token(refresh_token)
-                                        logger.info("🔄 Successfully got fresh access token via fallback for retry")
+                                        logger.info(f"🔄 Successfully got fresh access token via fallback for retry: {new_token[:20] if new_token else 'None'}...")
                                     except Exception as e:
                                         logger.error(f"❌ Fallback token refresh failed during retry: {e}")
                                         raise Exception(f"Token refresh failed: {token_error}")
@@ -648,7 +648,7 @@ class SmartStravaCache:
                         try:
                             # Use the token manager's refresh method directly
                             access_token = self.token_manager._refresh_access_token(refresh_token)
-                            logger.info("🔄 Successfully got fresh access token via fallback")
+                            logger.info(f"🔄 Successfully got fresh access token via fallback: {access_token[:20] if access_token else 'None'}...")
                         except Exception as e:
                             logger.error(f"❌ Fallback token refresh failed: {e}")
                             raise Exception(f"Token manager hanging and fallback refresh failed: {e}")
