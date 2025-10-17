@@ -59,14 +59,11 @@ class StravaTokenManager:
         print(f"STRAVA_EXPIRES_AT={tokens['expires_at']}")
         print(f"STRAVA_EXPIRES_IN={tokens['expires_in']}")
         
-        # Log to file for debugging (without exposing actual tokens)
-        with open("strava_token_refresh.log", "a") as f:
-            f.write(f"\n=== TOKEN REFRESH - {datetime.now().isoformat()} ===\n")
-            f.write(f"STRAVA_ACCESS_TOKEN={'*' * 20}...{tokens['access_token'][-4:]}\n")
-            f.write(f"STRAVA_REFRESH_TOKEN={'*' * 20}...{tokens['refresh_token'][-4:]}\n")
-            f.write(f"STRAVA_EXPIRES_AT={tokens['expires_at']}\n")
-            f.write(f"STRAVA_EXPIRES_IN={tokens['expires_in']}\n")
-            f.write("==========================================\n")
+        # Log token refresh (without exposing actual tokens)
+        print(f"🔄 Token refresh logged: access_token={'*' * 20}...{tokens['access_token'][-4:]}")
+        print(f"🔄 Token refresh logged: refresh_token={'*' * 20}...{tokens['refresh_token'][-4:]}")
+        print(f"🔄 Token refresh logged: expires_at={tokens['expires_at']}")
+        print(f"🔄 Token refresh logged: expires_in={tokens['expires_in']}")
         
         # Always use local .env file storage - much more reliable than DigitalOcean API
         print("🔄 Using local .env file storage for token persistence (reliable approach)")
@@ -112,9 +109,13 @@ class StravaTokenManager:
             print("🔄 Successfully wrote to .env file")
             
             print("🔄 Reloading environment variables...")
-            # Reload environment variables
-            load_dotenv(override=True)
-            print("🔄 Successfully reloaded environment variables")
+            # Reload environment variables (with error handling)
+            try:
+                load_dotenv(override=True)
+                print("🔄 Successfully reloaded environment variables")
+            except Exception as reload_error:
+                print(f"⚠️ Warning: Failed to reload environment variables: {reload_error}")
+                print("🔄 Continuing without reload - tokens are saved to file")
             
         except Exception as e:
             print(f"❌ Error in _update_env_file: {e}")
