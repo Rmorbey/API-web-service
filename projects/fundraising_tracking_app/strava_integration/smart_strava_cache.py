@@ -96,8 +96,15 @@ class SmartStravaCache:
             
             # Check if we need to trigger emergency refresh (no cache data found during sync init)
             if not self._cache_data:
-                logger.info("🔄 No cache data found during sync init - triggering emergency refresh in background")
-                self.initialize_cache_system()  # This will trigger emergency refresh
+                logger.info("🔄 No cache data found during sync init - scheduling emergency refresh for after startup")
+                # Defer emergency refresh to avoid blocking startup
+                def deferred_emergency_refresh():
+                    time.sleep(15)  # Wait 15 seconds for main app to fully start
+                    logger.info("🔄 Starting deferred emergency refresh...")
+                    self.initialize_cache_system()  # This will trigger emergency refresh
+                
+                emergency_thread = threading.Thread(target=deferred_emergency_refresh, daemon=True)
+                emergency_thread.start()
             
             # Start the automated refresh system
             self._start_automated_refresh()
@@ -1970,6 +1977,10 @@ class SmartStravaCache:
         """Process activities in batches of 20 every 15 minutes using new streamlined architecture"""
         try:
             logger.info("🏃‍♂️ Starting batch processing with new streamlined architecture...")
+            
+            # Wait a bit to ensure main application has fully started
+            logger.info("🔄 Waiting for main application to fully start...")
+            time.sleep(10)  # Give main app time to start
             
             # Step 1: Get a single access token for the entire batch processing session
             try:
