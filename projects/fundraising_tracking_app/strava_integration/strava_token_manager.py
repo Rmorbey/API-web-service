@@ -76,32 +76,51 @@ class StravaTokenManager:
     
     def _update_env_file(self, tokens: Dict[str, Any]):
         """Update .env file (development only)"""
+        print("🔄 Starting _update_env_file...")
         env_file = ".env"
         
-        # Read existing .env file
-        env_lines = []
-        if os.path.exists(env_file):
-            with open(env_file, 'r') as f:
-                env_lines = f.readlines()
-        
-        # Update or add token lines
-        token_keys = ["STRAVA_ACCESS_TOKEN", "STRAVA_REFRESH_TOKEN", "STRAVA_EXPIRES_AT", "STRAVA_EXPIRES_IN"]
-        token_values = [tokens.get("access_token"), tokens.get("refresh_token"), tokens.get("expires_at"), tokens.get("expires_in")]
-        
-        # Remove existing token lines
-        env_lines = [line for line in env_lines if not any(line.startswith(key + "=") for key in token_keys)]
-        
-        # Add updated token lines
-        for key, value in zip(token_keys, token_values):
-            if value is not None:
-                env_lines.append(f"{key}={value}\n")
-        
-        # Write back to .env file
-        with open(env_file, 'w') as f:
-            f.writelines(env_lines)
-        
-        # Reload environment variables
-        load_dotenv(override=True)
+        try:
+            print("🔄 Reading existing .env file...")
+            # Read existing .env file
+            env_lines = []
+            if os.path.exists(env_file):
+                with open(env_file, 'r') as f:
+                    env_lines = f.readlines()
+                print(f"🔄 Read {len(env_lines)} lines from .env file")
+            else:
+                print("🔄 .env file does not exist, creating new one")
+            
+            print("🔄 Processing token updates...")
+            # Update or add token lines
+            token_keys = ["STRAVA_ACCESS_TOKEN", "STRAVA_REFRESH_TOKEN", "STRAVA_EXPIRES_AT", "STRAVA_EXPIRES_IN"]
+            token_values = [tokens.get("access_token"), tokens.get("refresh_token"), tokens.get("expires_at"), tokens.get("expires_in")]
+            
+            # Remove existing token lines
+            env_lines = [line for line in env_lines if not any(line.startswith(key + "=") for key in token_keys)]
+            print(f"🔄 Removed existing token lines, {len(env_lines)} lines remaining")
+            
+            # Add updated token lines
+            for key, value in zip(token_keys, token_values):
+                if value is not None:
+                    env_lines.append(f"{key}={value}\n")
+            print(f"🔄 Added new token lines, {len(env_lines)} lines total")
+            
+            print("🔄 Writing to .env file...")
+            # Write back to .env file
+            with open(env_file, 'w') as f:
+                f.writelines(env_lines)
+            print("🔄 Successfully wrote to .env file")
+            
+            print("🔄 Reloading environment variables...")
+            # Reload environment variables
+            load_dotenv(override=True)
+            print("🔄 Successfully reloaded environment variables")
+            
+        except Exception as e:
+            print(f"❌ Error in _update_env_file: {e}")
+            import traceback
+            print(f"❌ Full traceback: {traceback.format_exc()}")
+            raise
     
     def _is_token_expired(self, expires_at) -> bool:
         """Check if token is expired"""
