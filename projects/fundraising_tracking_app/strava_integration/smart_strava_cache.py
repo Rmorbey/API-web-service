@@ -471,20 +471,24 @@ class SmartStravaCache:
     
     def _schedule_daily_corruption_check(self):
         """Schedule daily corruption check at 2am using internal scheduler"""
-        import schedule
-        import threading
-        
-        def corruption_check_worker():
-            schedule.every().day.at("02:00").do(self._daily_corruption_check)
+        try:
+            import schedule
+            import threading
             
-            while True:
-                schedule.run_pending()
-                time.sleep(60)  # Check every minute
-        
-        # Start scheduler in background thread
-        scheduler_thread = threading.Thread(target=corruption_check_worker, daemon=True)
-        scheduler_thread.start()
-        logger.info("🕐 Daily corruption check scheduled for 2am")
+            def corruption_check_worker():
+                schedule.every().day.at("02:00").do(self._daily_corruption_check)
+                
+                while True:
+                    schedule.run_pending()
+                    time.sleep(60)  # Check every minute
+            
+            # Start scheduler in background thread
+            scheduler_thread = threading.Thread(target=corruption_check_worker, daemon=True)
+            scheduler_thread.start()
+            logger.info("🕐 Daily corruption check scheduled for 2am")
+        except ImportError:
+            logger.warning("⚠️ Schedule module not available - daily corruption check disabled")
+            logger.info("💡 To enable daily corruption check, install: pip install schedule")
     
     def _daily_corruption_check(self):
         """Execute daily corruption check at 2am"""
