@@ -48,6 +48,11 @@ class SecureSupabaseCacheManager:
         
         if self.enabled:
             self._initialize_supabase()
+            # Background retry thread will be started in Phase 3
+    
+    def start_background_services(self):
+        """Start background services after main startup is complete (Phase 3)"""
+        if self.enabled and not self._supabase_retry_thread:
             self._start_background_retry_thread()
     
     def _hash_api_key(self, api_key: str) -> str:

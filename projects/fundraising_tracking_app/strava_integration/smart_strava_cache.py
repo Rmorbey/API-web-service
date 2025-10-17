@@ -79,8 +79,8 @@ class SmartStravaCache:
         self._startup_phase = "initialized"
         self._background_services_started = False
         
-        # Initialize cache system on startup (synchronous)
-        self.initialize_cache_system()
+        # Initialize cache system on startup (synchronous - no background operations)
+        self.initialize_cache_system_sync()
     
     def start_background_services(self):
         """Start background services after main startup is complete (Phase 3)"""
@@ -91,6 +91,14 @@ class SmartStravaCache:
         logger.info("🔄 Starting background services...")
         
         try:
+            # Start Supabase background services first
+            self.supabase_cache.start_background_services()
+            
+            # Check if we need to trigger emergency refresh (no cache data found during sync init)
+            if not self._cache_data:
+                logger.info("🔄 No cache data found during sync init - triggering emergency refresh in background")
+                self.initialize_cache_system()  # This will trigger emergency refresh
+            
             # Start the automated refresh system
             self._start_automated_refresh()
             
@@ -105,8 +113,50 @@ class SmartStravaCache:
             logger.error(f"❌ Failed to start background services: {e}")
             self._startup_phase = "background_services_failed"
     
+    def initialize_cache_system_sync(self):
+        """Initialize cache system synchronously (Phase 2) - no background operations"""
+        logger.info("🔄 Initializing cache system synchronously...")
+        
+        # Only load existing cache data, don't trigger any background operations
+        try:
+            # Try to load existing cache data
+            cache_data = self._load_cache_sync()
+            if cache_data:
+                logger.info("✅ Cache system initialized with existing data")
+            else:
+                logger.info("📭 No existing cache data found - will populate in background")
+        except Exception as e:
+            logger.error(f"❌ Failed to initialize cache system: {e}")
+    
+    def _load_cache_sync(self) -> Optional[Dict[str, Any]]:
+        """Load cache data synchronously without triggering background operations"""
+        now = datetime.now()
+        
+        # 1. Check in-memory cache first
+        if self._cache_data and self._cache_loaded_at:
+            cache_age = (now - self._cache_loaded_at).total_seconds()
+            if cache_age < self._cache_ttl:
+                return self._cache_data
+        
+        # 2. Try to load from Supabase (synchronous only)
+        if self.supabase_cache.enabled:
+            try:
+                supabase_result = self.supabase_cache.get_cache('strava', 'fundraising-app')
+                if supabase_result and supabase_result.get('data'):
+                    cache_data = supabase_result['data']
+                    
+                    # Validate data integrity
+                    if self._validate_cache_integrity(cache_data):
+                        self._cache_data = cache_data
+                        self._cache_loaded_at = now
+                        return cache_data
+            except Exception as e:
+                logger.error(f"❌ Failed to load from Supabase: {e}")
+        
+        return None
+    
     def initialize_cache_system(self):
-        """Initialize cache system on server startup"""
+        """Initialize cache system on server startup (legacy method for background operations)"""
         logger.info("🔄 Initializing cache system on startup...")
         
         if self.supabase_cache.enabled:
