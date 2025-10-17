@@ -319,6 +319,20 @@ class SmartStravaCache:
         """Fetch rich data (photos + comments) only for new activities"""
         rich_data = {}
         
+        # Get a single token for the entire batch to avoid deadlocks
+        try:
+            logger.info(f"🔄 Getting access token for batch of {len(new_activities)} activities...")
+            access_token = self.token_manager.get_valid_access_token()
+            logger.info(f"✅ Got access token for batch processing")
+        except Exception as e:
+            logger.error(f"❌ Failed to get access token for batch: {e}")
+            # Return empty rich data for all activities
+            for activity in new_activities:
+                activity_id = activity.get("id")
+                if activity_id:
+                    rich_data[activity_id] = {"photos": {}, "comments": []}
+            return rich_data
+        
         for activity in new_activities:
             activity_id = activity.get("id")
             if not activity_id:
@@ -327,9 +341,9 @@ class SmartStravaCache:
             try:
                 logger.info(f"🔄 Fetching rich data for new activity {activity_id}")
                 
-                # Fetch photos and comments
-                photos_data = self._fetch_activity_photos(activity_id)
-                comments_data = self._fetch_activity_comments(activity_id)
+                # Fetch photos and comments using the pre-obtained token
+                photos_data = self._fetch_activity_photos(activity_id, access_token=access_token)
+                comments_data = self._fetch_activity_comments(activity_id, access_token=access_token)
                 
                 rich_data[activity_id] = {
                     "photos": photos_data,
@@ -356,6 +370,20 @@ class SmartStravaCache:
         activities = cache_data.get("activities", [])
         rich_data = {}
         
+        # Get a single token for the entire batch to avoid deadlocks
+        try:
+            logger.info(f"🔄 Getting access token for corruption check of {len(activities)} activities...")
+            access_token = self.token_manager.get_valid_access_token()
+            logger.info(f"✅ Got access token for corruption check")
+        except Exception as e:
+            logger.error(f"❌ Failed to get access token for corruption check: {e}")
+            # Return empty rich data for all activities
+            for activity in activities:
+                activity_id = activity.get("id")
+                if activity_id:
+                    rich_data[activity_id] = {"photos": {}, "comments": []}
+            return rich_data
+        
         for activity in activities:
             activity_id = activity.get("id")
             if not activity_id:
@@ -364,9 +392,9 @@ class SmartStravaCache:
             try:
                 logger.info(f"🔄 Fetching rich data for activity {activity_id} (corruption check)")
                 
-                # Fetch photos and comments
-                photos_data = self._fetch_activity_photos(activity_id)
-                comments_data = self._fetch_activity_comments(activity_id)
+                # Fetch photos and comments using the pre-obtained token
+                photos_data = self._fetch_activity_photos(activity_id, access_token=access_token)
+                comments_data = self._fetch_activity_comments(activity_id, access_token=access_token)
                 
                 rich_data[activity_id] = {
                     "photos": photos_data,
@@ -1883,12 +1911,19 @@ class SmartStravaCache:
             search_query = f"{title}%20by%20{artist}".replace(" ", "%20")
             return f'<iframe title="deezer-widget" src="https://widget.deezer.com/widget/auto/search/{search_query}" width="100%" height="300" frameborder="0" allowtransparency="true" allow="encrypted-media; clipboard-write"></iframe>'
     
-    def _fetch_activity_photos(self, activity_id: int) -> Dict[str, Any]:
+    def _fetch_activity_photos(self, activity_id: int, access_token: str = None) -> Dict[str, Any]:
         """Fetch photos for a specific activity - OPTIMIZED: Only essential fields"""
         try:
             # Add size parameter to get actual photos instead of placeholders
             photos_url = f"{self.base_url}/activities/{activity_id}/photos?size=5000"
-            headers = {"Authorization": f"Bearer {self.token_manager.get_valid_access_token()}"}
+            
+            # Use provided token or get a new one
+            if access_token:
+                token = access_token
+            else:
+                token = self.token_manager.get_valid_access_token()
+            
+            headers = {"Authorization": f"Bearer {token}"}
             
             response = self._make_api_call_with_retry(photos_url, headers)
             photos_data = response.json()
@@ -1936,11 +1971,18 @@ class SmartStravaCache:
             print(f"❌ Error fetching photos for activity {activity_id}: {e}")
             return {}
     
-    def _fetch_activity_comments(self, activity_id: int) -> List[Dict[str, Any]]:
+    def _fetch_activity_comments(self, activity_id: int, access_token: str = None) -> List[Dict[str, Any]]:
         """Fetch comments for a specific activity - OPTIMIZED: Only essential fields"""
         try:
             comments_url = f"{self.base_url}/activities/{activity_id}/comments"
-            headers = {"Authorization": f"Bearer {self.token_manager.get_valid_access_token()}"}
+            
+            # Use provided token or get a new one
+            if access_token:
+                token = access_token
+            else:
+                token = self.token_manager.get_valid_access_token()
+            
+            headers = {"Authorization": f"Bearer {token}"}
             
             response = self._make_api_call_with_retry(comments_url, headers)
             comments_data = response.json()
