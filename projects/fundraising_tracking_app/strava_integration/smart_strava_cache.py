@@ -2064,6 +2064,7 @@ class SmartStravaCache:
     def _start_batch_processing(self):
         """Start batch processing of activities (20 every 15 minutes) using new streamlined architecture"""
         if self._batch_thread and self._batch_thread.is_alive():
+            logger.info("🏃‍♂️ Batch processing already running, skipping...")
             return
         
         # Mark batching as in progress
