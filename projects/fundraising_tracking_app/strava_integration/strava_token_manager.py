@@ -70,14 +70,19 @@ class StravaTokenManager:
         
         # In production, only trigger automated update if tokens have actually changed
         if os.getenv("ENVIRONMENT") == "production":
+            print("🔄 Production environment detected - checking for token updates...")
             # Check if tokens have actually changed to avoid unnecessary restarts
             current_tokens = self._load_tokens_from_env()
             tokens_changed = (current_tokens.get("access_token") != tokens["access_token"] or 
                             current_tokens.get("refresh_token") != tokens["refresh_token"])
             
+            print(f"🔄 Token change check: access_token changed={current_tokens.get('access_token') != tokens['access_token']}, refresh_token changed={current_tokens.get('refresh_token') != tokens['refresh_token']}")
+            
             # Also check if we've updated DigitalOcean recently (within last 30 minutes)
             recent_update = (self._last_digitalocean_update and 
                            time.time() - self._last_digitalocean_update < 1800)  # 30 minutes
+            
+            print(f"🔄 Recent update check: last_update={self._last_digitalocean_update}, recent_update={recent_update}")
             
             if tokens_changed and not recent_update:
                 print("🔄 Triggering DigitalOcean automated update...")
@@ -100,6 +105,8 @@ class StravaTokenManager:
             # DigitalOcean API direct update
             do_token = os.getenv("DIGITALOCEAN_API_TOKEN")
             app_id = os.getenv("DIGITALOCEAN_APP_ID")
+            
+            print(f"🔄 DigitalOcean update attempt: do_token={'SET' if do_token else 'NOT SET'}, app_id={'SET' if app_id else 'NOT SET'}")
             
             if do_token and app_id:
                 # Update DigitalOcean App secrets directly
