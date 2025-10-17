@@ -76,6 +76,9 @@ class SmartStravaCache:
         # Start the automated refresh system
         self._start_automated_refresh()
         
+        # Start the daily corruption check scheduler
+        self._schedule_daily_corruption_check()
+        
         # Initialize cache system on startup
         self.initialize_cache_system()
     
@@ -274,6 +277,253 @@ class SmartStravaCache:
             return True, f"Cache expired {datetime.now() - expiry_time} ago"
         
         return False, "Cache is valid"
+    
+    def _should_trigger_8hour_refresh(self) -> bool:
+        """Check if 8-hour refresh should be triggered based on last_fetch timestamp"""
+        cache_data = self._load_cache()
+        if not cache_data:
+            return True  # No cache data, trigger refresh
+        
+        last_fetch = cache_data.get('last_fetch')
+        if not last_fetch:
+            return True  # No last_fetch timestamp, trigger refresh
+        
+        try:
+            last_fetch_time = datetime.fromisoformat(last_fetch)
+            time_since_fetch = datetime.now() - last_fetch_time
+            return time_since_fetch >= timedelta(hours=8)
+        except Exception as e:
+            logger.warning(f"Error parsing last_fetch timestamp: {e}")
+            return True  # If parsing fails, trigger refresh
+    
+    def _identify_new_activities(self, basic_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Compare fresh basic data with database to identify new activities"""
+        cache_data = self._load_cache()
+        if not cache_data:
+            return basic_data  # No existing data, all activities are new
+        
+        existing_activities = cache_data.get("activities", [])
+        existing_ids = {activity.get("id") for activity in existing_activities}
+        
+        new_activities = []
+        for activity in basic_data:
+            activity_id = activity.get("id")
+            if activity_id not in existing_ids:
+                new_activities.append(activity)
+                logger.info(f"🆕 New activity identified: {activity_id} - {activity.get('name', 'Unknown')}")
+        
+        logger.info(f"🆕 Found {len(new_activities)} new activities out of {len(basic_data)} total")
+        return new_activities
+    
+    def _fetch_rich_data_for_new_activities(self, new_activities: List[Dict[str, Any]]) -> Dict[int, Dict[str, Any]]:
+        """Fetch rich data (photos + comments) only for new activities"""
+        rich_data = {}
+        
+        for activity in new_activities:
+            activity_id = activity.get("id")
+            if not activity_id:
+                continue
+            
+            try:
+                logger.info(f"🔄 Fetching rich data for new activity {activity_id}")
+                
+                # Fetch photos and comments
+                photos_data = self._fetch_activity_photos(activity_id)
+                comments_data = self._fetch_activity_comments(activity_id)
+                
+                rich_data[activity_id] = {
+                    "photos": photos_data,
+                    "comments": comments_data
+                }
+                
+                logger.info(f"✅ Successfully fetched rich data for activity {activity_id}")
+                
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to fetch rich data for activity {activity_id}: {e}")
+                rich_data[activity_id] = {
+                    "photos": {},
+                    "comments": []
+                }
+        
+        return rich_data
+    
+    def _fetch_rich_data_for_all_activities(self) -> Dict[int, Dict[str, Any]]:
+        """Fetch rich data for ALL activities (used in daily corruption check)"""
+        cache_data = self._load_cache()
+        if not cache_data:
+            return {}
+        
+        activities = cache_data.get("activities", [])
+        rich_data = {}
+        
+        for activity in activities:
+            activity_id = activity.get("id")
+            if not activity_id:
+                continue
+            
+            try:
+                logger.info(f"🔄 Fetching rich data for activity {activity_id} (corruption check)")
+                
+                # Fetch photos and comments
+                photos_data = self._fetch_activity_photos(activity_id)
+                comments_data = self._fetch_activity_comments(activity_id)
+                
+                rich_data[activity_id] = {
+                    "photos": photos_data,
+                    "comments": comments_data
+                }
+                
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to fetch rich data for activity {activity_id}: {e}")
+                rich_data[activity_id] = {
+                    "photos": {},
+                    "comments": []
+                }
+        
+        return rich_data
+    
+    def _check_photo_fetch_expired(self, activity_date: str) -> bool:
+        """Check if photo fetching should be skipped (24+ hours after activity date)"""
+        try:
+            activity_dt = datetime.fromisoformat(activity_date.replace('Z', '+00:00'))
+            time_since_activity = datetime.now(timezone.utc) - activity_dt
+            return time_since_activity >= timedelta(hours=24)
+        except Exception as e:
+            logger.warning(f"Error parsing activity date {activity_date}: {e}")
+            return False  # If parsing fails, don't skip
+    
+    def _check_comments_fetch_expired(self, activity_date: str) -> bool:
+        """Check if comments fetching should be skipped (168+ hours after activity date)"""
+        try:
+            activity_dt = datetime.fromisoformat(activity_date.replace('Z', '+00:00'))
+            time_since_activity = datetime.now(timezone.utc) - activity_dt
+            return time_since_activity >= timedelta(hours=168)  # 1 week
+        except Exception as e:
+            logger.warning(f"Error parsing activity date {activity_date}: {e}")
+            return False  # If parsing fails, don't skip
+    
+    def _update_activity_expiration_flags(self, activity: Dict[str, Any]) -> Dict[str, Any]:
+        """Update photos_fetch_expired and comments_fetch_expired flags for an activity"""
+        activity_date = activity.get('start_date', '')
+        if not activity_date:
+            return activity
+        
+        activity['photos_fetch_expired'] = self._check_photo_fetch_expired(activity_date)
+        activity['comments_fetch_expired'] = self._check_comments_fetch_expired(activity_date)
+        activity['strava_activity_date'] = activity_date
+        
+        return activity
+    
+    def _compare_fresh_vs_database_data(self, basic_data: List[Dict[str, Any]], rich_data: Dict[int, Dict[str, Any]]) -> Dict[str, Any]:
+        """Compare fresh Strava data with database data to detect corruption"""
+        cache_data = self._load_cache()
+        if not cache_data:
+            return {"corruption_detected": False, "corrupted_activities": []}
+        
+        existing_activities = cache_data.get("activities", [])
+        existing_by_id = {activity.get("id"): activity for activity in existing_activities}
+        
+        corrupted_activities = []
+        
+        for activity in basic_data:
+            activity_id = activity.get("id")
+            existing_activity = existing_by_id.get(activity_id)
+            
+            if not existing_activity:
+                continue  # New activity, no corruption to check
+            
+            # Compare basic data
+            corruption_detected = False
+            corruption_reasons = []
+            
+            # Check name
+            if activity.get("name") != existing_activity.get("name"):
+                corruption_detected = True
+                corruption_reasons.append("name_mismatch")
+            
+            # Check distance
+            if activity.get("distance") != existing_activity.get("distance"):
+                corruption_detected = True
+                corruption_reasons.append("distance_mismatch")
+            
+            # Check map data
+            fresh_map = activity.get("map", {})
+            existing_map = existing_activity.get("map", {})
+            
+            if fresh_map.get("polyline") != existing_map.get("polyline"):
+                corruption_detected = True
+                corruption_reasons.append("polyline_mismatch")
+            
+            if corruption_detected:
+                corrupted_activities.append({
+                    "id": activity_id,
+                    "name": activity.get("name", "Unknown"),
+                    "reasons": corruption_reasons
+                })
+                logger.warning(f"🚨 Corruption detected in activity {activity_id}: {corruption_reasons}")
+        
+        return {
+            "corruption_detected": len(corrupted_activities) > 0,
+            "corrupted_activities": corrupted_activities,
+            "total_checked": len(basic_data),
+            "corrupted_count": len(corrupted_activities)
+        }
+    
+    def _schedule_daily_corruption_check(self):
+        """Schedule daily corruption check at 2am using internal scheduler"""
+        import schedule
+        import threading
+        
+        def corruption_check_worker():
+            schedule.every().day.at("02:00").do(self._daily_corruption_check)
+            
+            while True:
+                schedule.run_pending()
+                time.sleep(60)  # Check every minute
+        
+        # Start scheduler in background thread
+        scheduler_thread = threading.Thread(target=corruption_check_worker, daemon=True)
+        scheduler_thread.start()
+        logger.info("🕐 Daily corruption check scheduled for 2am")
+    
+    def _daily_corruption_check(self):
+        """Execute daily corruption check at 2am"""
+        logger.info("🕐 Starting daily corruption check...")
+        
+        try:
+            # Ensure fresh tokens
+            self.token_manager.get_valid_access_token()
+            
+            # Fetch fresh basic data
+            basic_data = self._fetch_from_strava(200)
+            logger.info(f"🔄 Fetched {len(basic_data)} activities for corruption check")
+            
+            # Fetch rich data for all activities
+            rich_data = self._fetch_rich_data_for_all_activities()
+            logger.info(f"🔄 Fetched rich data for {len(rich_data)} activities")
+            
+            # Compare fresh vs database data
+            corruption_analysis = self._compare_fresh_vs_database_data(basic_data, rich_data)
+            
+            if corruption_analysis["corruption_detected"]:
+                logger.warning(f"🚨 Corruption detected in {corruption_analysis['corrupted_count']} activities")
+                # TODO: Implement data overwrite with fresh data
+            else:
+                logger.info("✅ No corruption detected in daily check")
+            
+            # Update metadata
+            current_time = datetime.now().isoformat()
+            cache_data = self._load_cache()
+            if cache_data:
+                cache_data['last_fetch'] = current_time
+                cache_data['last_basic_data_updated'] = current_time
+                cache_data['last_rich_data_updated'] = current_time
+                self._save_cache(cache_data)
+            
+            logger.info("✅ Daily corruption check completed")
+            
+        except Exception as e:
+            logger.error(f"❌ Daily corruption check failed: {e}")
     
     def check_and_refresh(self):
         """Main entry point - single condition check for all refresh scenarios"""
@@ -778,37 +1028,41 @@ class SmartStravaCache:
             logger.error(f"Failed to fetch activities from Strava: {str(e)}")
             raise Exception(f"Strava API error: {str(e)}")
 
-    def _has_complete_data(self, activity: Dict[str, Any]) -> bool:
-        """Check if activity has complete data - for Run/Ride activities, all should have polyline and bounds"""
-        has_polyline = bool(activity.get("map") and activity.get("map").get("polyline"))
-        has_bounds = bool(activity.get("map") and activity.get("map").get("bounds"))
-        
-        # For Run/Ride activities, both polyline and bounds should be present
-        # (these are outdoor activities with GPS tracking)
-        return has_polyline and has_bounds
+    # COMMENTED OUT - REDUNDANT METHOD (Phase 1: Activity Selection Logic)
+    # def _has_complete_data(self, activity: Dict[str, Any]) -> bool:
+    #     """Check if activity has complete data - for Run/Ride activities, all should have polyline and bounds"""
+    #     has_polyline = bool(activity.get("map") and activity.get("map").get("polyline"))
+    #     has_bounds = bool(activity.get("map") and activity.get("map").get("bounds"))
+    #     
+    #     # For Run/Ride activities, both polyline and bounds should be present
+    #     # (these are outdoor activities with GPS tracking)
+    #     return has_polyline and has_bounds
 
-    def _get_missing_rich_data(self, activity: Dict[str, Any]) -> Dict[str, bool]:
-        """Check what specific rich data is missing from an activity"""
-        return {
-            "polyline": not bool(activity.get("map") and activity.get("map").get("polyline")),
-            "bounds": not bool(activity.get("map") and activity.get("map").get("bounds")),
-            "description": not bool(activity.get("description", "").strip()),
-            "photos": not bool(activity.get("photos", {})),
-            "comments": not bool(activity.get("comments", []))
-        }
+    # COMMENTED OUT - REDUNDANT METHOD (Phase 1: Activity Selection Logic)
+    # def _get_missing_rich_data(self, activity: Dict[str, Any]) -> Dict[str, bool]:
+    #     """Check what specific rich data is missing from an activity"""
+    #     return {
+    #         "polyline": not bool(activity.get("map") and activity.get("map").get("polyline")),
+    #         "bounds": not bool(activity.get("map") and activity.get("map").get("bounds")),
+    #         "description": not bool(activity.get("description", "").strip()),
+    #         "photos": not bool(activity.get("photos", {})),
+    #         "comments": not bool(activity.get("comments", []))
+    #     }
 
-    def _has_essential_map_data(self, activity: Dict[str, Any]) -> bool:
-        """Check if activity has essential map data (polyline AND bounds)"""
-        has_polyline = bool(activity.get("map") and activity.get("map").get("polyline"))
-        has_bounds = bool(activity.get("map") and activity.get("map").get("bounds"))
-        return has_polyline and has_bounds
+    # COMMENTED OUT - REDUNDANT METHOD (Phase 1: Activity Selection Logic)
+    # def _has_essential_map_data(self, activity: Dict[str, Any]) -> bool:
+    #     """Check if activity has essential map data (polyline AND bounds)"""
+    #     has_polyline = bool(activity.get("map") and activity.get("map").get("polyline"))
+    #     has_bounds = bool(activity.get("map") and activity.get("map").get("bounds"))
+    #     return has_polyline and has_bounds
 
-    def _has_optional_rich_data(self, activity: Dict[str, Any]) -> bool:
-        """Check if activity has optional rich data (description, photos, comments)"""
-        has_description = bool(activity.get("description", "").strip())
-        has_photos = bool(activity.get("photos", {}))
-        has_comments = bool(activity.get("comments", []))
-        return has_description or has_photos or has_comments
+    # COMMENTED OUT - REDUNDANT METHOD (Phase 1: Activity Selection Logic)
+    # def _has_optional_rich_data(self, activity: Dict[str, Any]) -> bool:
+    #     """Check if activity has optional rich data (description, photos, comments)"""
+    #     has_description = bool(activity.get("description", "").strip())
+    #     has_photos = bool(activity.get("photos", {}))
+    #     has_comments = bool(activity.get("comments", []))
+    #     return has_description or has_photos or has_comments
 
     def _is_activity_recent_enough(self, activity: Dict[str, Any]) -> bool:
         """Check if activity is recent enough to fetch rich data (less than 3 weeks old)"""
@@ -832,112 +1086,120 @@ class SmartStravaCache:
             logger.warning(f"Error checking activity age: {e}")
             return False
 
-    def _get_rich_data_retry_count(self, activity: Dict[str, Any]) -> int:
-        """Get the number of times we've tried to fetch rich data for this activity"""
-        return activity.get('_rich_data_retry_count', 0)
+    # COMMENTED OUT - REDUNDANT METHOD (Phase 2: Retry Logic)
+    # def _get_rich_data_retry_count(self, activity: Dict[str, Any]) -> int:
+    #     """Get the number of times we've tried to fetch rich data for this activity"""
+    #     return activity.get('_rich_data_retry_count', 0)
 
-    def _get_last_retry_attempt(self, activity: Dict[str, Any]) -> Optional[str]:
-        """Get the timestamp of the last retry attempt"""
-        return activity.get('_last_retry_attempt')
+    # COMMENTED OUT - REDUNDANT METHOD (Phase 2: Retry Logic)
+    # def _get_last_retry_attempt(self, activity: Dict[str, Any]) -> Optional[str]:
+    #     """Get the timestamp of the last retry attempt"""
+    #     return activity.get('_last_retry_attempt')
 
-    def _increment_rich_data_retry_count(self, activity: Dict[str, Any]) -> Dict[str, Any]:
-        """Increment the retry counter and update last attempt timestamp"""
-        activity['_rich_data_retry_count'] = activity.get('_rich_data_retry_count', 0) + 1
-        activity['_last_retry_attempt'] = datetime.now().isoformat()
-        return activity
+    # COMMENTED OUT - REDUNDANT METHOD (Phase 2: Retry Logic)
+    # def _increment_rich_data_retry_count(self, activity: Dict[str, Any]) -> Dict[str, Any]:
+    #     """Increment the retry counter and update last attempt timestamp"""
+    #     activity['_rich_data_retry_count'] = activity.get('_rich_data_retry_count', 0) + 1
+    #     activity['_last_retry_attempt'] = datetime.now().isoformat()
+    #     return activity
 
-    def _mark_rich_data_success(self, activity: Dict[str, Any]) -> Dict[str, Any]:
-        """Mark that rich data was successfully fetched (don't reset counter)"""
-        # Don't reset the counter - just ensure it exists
-        if '_rich_data_retry_count' not in activity:
-            activity['_rich_data_retry_count'] = 0
-        return activity
+    # COMMENTED OUT - REDUNDANT METHOD (Phase 2: Retry Logic)
+    # def _mark_rich_data_success(self, activity: Dict[str, Any]) -> Dict[str, Any]:
+    #     """Mark that rich data was successfully fetched (don't reset counter)"""
+    #     # Don't reset the counter - just ensure it exists
+    #     if '_rich_data_retry_count' not in activity:
+    #         activity['_rich_data_retry_count'] = 0
+    #     return activity
 
-    def _can_retry_rich_data(self, activity: Dict[str, Any]) -> bool:
-        """Check if enough time has passed since last retry attempt (24 hours)"""
-        last_attempt = self._get_last_retry_attempt(activity)
-        if not last_attempt:
-            return True  # Never tried before
-        
-        try:
-            last_attempt_dt = datetime.fromisoformat(last_attempt)
-            time_since_last = datetime.now() - last_attempt_dt
-            return time_since_last.total_seconds() >= 86400  # 24 hours
-        except Exception:
-            return True  # If parsing fails, allow retry
+    # COMMENTED OUT - REDUNDANT METHOD (Phase 2: Retry Logic)
+    # def _can_retry_rich_data(self, activity: Dict[str, Any]) -> bool:
+    #     """Check if enough time has passed since last retry attempt (24 hours)"""
+    #     last_attempt = self._get_last_retry_attempt(activity)
+    #     if not last_attempt:
+    #         return True  # Never tried before
+    #     
+    #     try:
+    #         last_attempt_dt = datetime.fromisoformat(last_attempt)
+    #         time_since_last = datetime.now() - last_attempt_dt
+    #         return time_since_last.total_seconds() >= 86400  # 24 hours
+    #     except Exception:
+    #         return True  # If parsing fails, allow retry
 
-    def _should_attempt_rich_data_update(self, activity: Dict[str, Any]) -> bool:
-        """Check if we should attempt to update rich data for this activity"""
-        # Check if activity is recent enough
-        if not self._is_activity_recent_enough(activity):
-            return False
-        
-        # Check if enough time has passed since last retry (24 hours)
-        if not self._can_retry_rich_data(activity):
-            return False
-        
-        # Get what data is missing
-        missing_data = self._get_missing_rich_data(activity)
-        retry_count = self._get_rich_data_retry_count(activity)
-        
-        # If we have essential map data (polyline + bounds), only try 5 times for optional data
-        if self._has_essential_map_data(activity):
-            if retry_count >= 5:
-                # Already tried 5 times for optional data, don't try again
-                return False
-            # Try to get optional rich data (description, photos, comments)
-            return missing_data["description"] or missing_data["photos"] or missing_data["comments"]
-        
-        # If we don't have essential map data, keep trying (unlimited attempts)
-        return missing_data["polyline"] or missing_data["bounds"]
+    # COMMENTED OUT - REDUNDANT METHOD (Phase 2: Retry Logic)
+    # def _should_attempt_rich_data_update(self, activity: Dict[str, Any]) -> bool:
+    #     """Check if we should attempt to update rich data for this activity"""
+    #     # Check if activity is recent enough
+    #     if not self._is_activity_recent_enough(activity):
+    #         return False
+    #     
+    #     # Check if enough time has passed since last retry (24 hours)
+    #     if not self._can_retry_rich_data(activity):
+    #         return False
+    #     
+    #     # Get what data is missing
+    #     missing_data = self._get_missing_rich_data(activity)
+    #     retry_count = self._get_rich_data_retry_count(activity)
+    #     
+    #     # If we have essential map data (polyline + bounds), only try 5 times for optional data
+    #     if self._has_essential_map_data(activity):
+    #         if retry_count >= 5:
+    #             # Already tried 5 times for optional data, don't try again
+    #             return False
+    #         # Try to get optional rich data (description, photos, comments)
+    #         return missing_data["description"] or missing_data["photos"] or missing_data["comments"]
+    #     
+    #     # If we don't have essential map data, keep trying (unlimited attempts)
+    #     return missing_data["polyline"] or missing_data["bounds"]
 
-    def _should_attempt_essential_map_data_update(self, activity: Dict[str, Any]) -> bool:
-        """Check if we should attempt to fetch only essential map data (polyline + bounds)"""
-        # Check if activity is recent enough
-        if not self._is_activity_recent_enough(activity):
-            return False
-        
-        # Only attempt if we've tried 5 times and still missing critical map data
-        retry_count = self._get_rich_data_retry_count(activity)
-        if retry_count < 5:
-            return False
-        
-        # Check if we're missing critical map data
-        has_polyline = bool(activity.get("map") and activity.get("map").get("polyline"))
-        has_bounds = bool(activity.get("map") and activity.get("map").get("bounds"))
-        return not (has_polyline and has_bounds)
+    # COMMENTED OUT - REDUNDANT METHOD (Phase 2: Retry Logic)
+    # def _should_attempt_essential_map_data_update(self, activity: Dict[str, Any]) -> bool:
+    #     """Check if we should attempt to fetch only essential map data (polyline + bounds)"""
+    #     # Check if activity is recent enough
+    #     if not self._is_activity_recent_enough(activity):
+    #         return False
+    #     
+    #     # Only attempt if we've tried 5 times and still missing critical map data
+    #     retry_count = self._get_rich_data_retry_count(activity)
+    #     if retry_count < 5:
+    #         return False
+    #     
+    #     # Check if we're missing critical map data
+    #     has_polyline = bool(activity.get("map") and activity.get("map").get("polyline"))
+    #     has_bounds = bool(activity.get("map") and activity.get("map").get("bounds"))
+    #     return not (has_polyline and has_bounds)
 
-    def _fetch_essential_map_data_only(self, activity_id: int) -> Dict[str, Any]:
-        """Fetch only essential map data (polyline + bounds) for activities that failed 5 times"""
-        try:
-            logger.info(f"🗺️ Fetching essential map data only for activity {activity_id}")
-            
-            # Fetch basic activity data to get map information
-            activity_url = f"{self.base_url}/activities/{activity_id}"
-            headers = {"Authorization": f"Bearer {self.token_manager.get_valid_access_token()}"}
-            
-            response = self._make_api_call_with_retry(activity_url, headers)
-            activity_data = response.json()
-            
-            # Extract only essential map data
-            map_data = activity_data.get("map", {})
-            essential_map = {
-                "polyline": map_data.get("polyline"),
-                "bounds": map_data.get("bounds", {})
-            }
-            
-            # Calculate bounds from polyline if not provided
-            if not essential_map["bounds"] and essential_map["polyline"]:
-                coordinates = self._decode_polyline(essential_map["polyline"])
-                if coordinates:
-                    essential_map["bounds"] = self._calculate_polyline_bounds(coordinates)
-            
-            logger.info(f"✅ Successfully fetched essential map data for activity {activity_id}")
-            return essential_map
-            
-        except Exception as e:
-            logger.error(f"❌ Failed to fetch essential map data for activity {activity_id}: {e}")
-            return {}
+    # COMMENTED OUT - REDUNDANT METHOD (Phase 2: Retry Logic)
+    # def _fetch_essential_map_data_only(self, activity_id: int) -> Dict[str, Any]:
+    #     """Fetch only essential map data (polyline + bounds) for activities that failed 5 times"""
+    #     try:
+    #         logger.info(f"🗺️ Fetching essential map data only for activity {activity_id}")
+    #         
+    #         # Fetch basic activity data to get map information
+    #         activity_url = f"{self.base_url}/activities/{activity_id}"
+    #         headers = {"Authorization": f"Bearer {self.token_manager.get_valid_access_token()}"}
+    #         
+    #         response = self._make_api_call_with_retry(activity_url, headers)
+    #         activity_data = response.json()
+    #         
+    #         # Extract only essential map data
+    #         map_data = activity_data.get("map", {})
+    #         essential_map = {
+    #             "polyline": map_data.get("polyline"),
+    #             "bounds": map_data.get("bounds", {})
+    #         }
+    #         
+    #         # Calculate bounds from polyline if not provided
+    #         if not essential_map["bounds"] and essential_map["polyline"]:
+    #             coordinates = self._decode_polyline(essential_map["polyline"])
+    #             if coordinates:
+    #                 essential_map["bounds"] = self._calculate_polyline_bounds(coordinates)
+    #         
+    #         logger.info(f"✅ Successfully fetched essential map data for activity {activity_id}")
+    #         return essential_map
+    #         
+    #     except Exception as e:
+    #         logger.error(f"❌ Failed to fetch essential map data for activity {activity_id}: {e}")
+    #         return {}
 
     def _fetch_complete_activity_data(self, activity_id: int) -> Dict[str, Any]:
         """Fetch complete activity data from Strava API with enhanced error handling - OPTIMIZED FOR FRONTEND"""
@@ -1235,82 +1497,83 @@ class SmartStravaCache:
         
         return cleaned
 
-    def _smart_merge_activities(self, existing_activities: List[Dict[str, Any]], fresh_activities: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """
-        Smart merge: Preserve ALL existing data, update only basic fields from fresh data
-        FIXED: Never overwrite existing activities with fresh data to prevent data loss
-        """
-        # Clean existing activities first to remove any invalid entries
-        existing_activities = self._clean_invalid_activities(existing_activities)
-        
-        # Create lookup maps
-        existing_by_id = {activity.get("id"): activity for activity in existing_activities}
-        fresh_by_id = {activity.get("id"): activity for activity in fresh_activities}
-        
-        merged_activities = []
-        
-        # Process fresh activities (maintains order from Strava)
-        for fresh_activity in fresh_activities:
-            activity_id = fresh_activity.get("id")
-            existing_activity = existing_by_id.get(activity_id)
-            
-            if existing_activity:
-                # PRESERVE: Always keep existing data, update only basic fields
-                merged_activity = existing_activity.copy()
-                
-                # Update only basic fields that might have changed
-                basic_fields = ["name", "type", "distance", "moving_time", "elapsed_time", 
-                              "start_date", "start_date_local", "timezone", "total_elevation_gain"]
-                
-                for field in basic_fields:
-                    if field in fresh_activity:
-                        merged_activity[field] = fresh_activity[field]
-                
-                logger.info(f"Preserved existing data for activity {activity_id}: {fresh_activity.get('name', 'Unknown')}")
-                
-            else:
-                # NEW ACTIVITY: Use fresh data and add timestamp tracking
-                merged_activity = fresh_activity
-                current_time = datetime.now().isoformat()
-                merged_activity["_metadata"] = {
-                    "basic_data_added": current_time,
-                    "rich_data_added": None,
-                    "last_updated": current_time
-                }
-                logger.info(f"New activity {activity_id}: {fresh_activity.get('name', 'Unknown')}")
-            
-            # Check if ANY activity (new or existing) needs rich data collection
-            if self._should_attempt_rich_data_update(merged_activity):
-                try:
-                    retry_count = self._get_rich_data_retry_count(merged_activity)
-                    logger.info(f"🔄 Fetching rich data for activity {activity_id} (attempt {retry_count + 1}/5)")
-                    
-                    complete_data = self._fetch_complete_activity_data(activity_id)
-                    merged_activity = complete_data
-                    
-                    # Reset retry count on success
-                    merged_activity['_rich_data_retry_count'] = 0
-                    logger.info(f"✅ Successfully fetched rich data for activity {activity_id}")
-                    
-                except Exception as e:
-                    # Increment retry count on failure
-                    merged_activity = self._increment_rich_data_retry_count(merged_activity)
-                    retry_count = self._get_rich_data_retry_count(merged_activity)
-                    
-                    if retry_count >= 5:
-                        logger.warning(f"⚠️ Max retries reached for activity {activity_id} (5/5): {e}")
-                    else:
-                        logger.warning(f"⚠️ Failed to fetch rich data for activity {activity_id} (attempt {retry_count}/5): {e}")
-            
-            merged_activities.append(merged_activity)
-        
-        # Add any existing activities that weren't in fresh data (shouldn't happen with Strava)
-        for activity_id, existing_activity in existing_by_id.items():
-            if activity_id not in fresh_by_id:
-                merged_activities.append(existing_activity)
-                logger.info(f"Preserved existing activity not in fresh data: {activity_id}")
-        
-        return merged_activities
+    # COMMENTED OUT - REDUNDANT METHOD (Phase 3: Smart Merging)
+    # def _smart_merge_activities(self, existing_activities: List[Dict[str, Any]], fresh_activities: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    #     """
+    #     Smart merge: Preserve ALL existing data, update only basic fields from fresh data
+    #     FIXED: Never overwrite existing activities with fresh data to prevent data loss
+    #     """
+    #     # Clean existing activities first to remove any invalid entries
+    #     existing_activities = self._clean_invalid_activities(existing_activities)
+    #     
+    #     # Create lookup maps
+    #     existing_by_id = {activity.get("id"): activity for activity in existing_activities}
+    #     fresh_by_id = {activity.get("id"): activity for activity in fresh_activities}
+    #     
+    #     merged_activities = []
+    #     
+    #     # Process fresh activities (maintains order from Strava)
+    #     for fresh_activity in fresh_activities:
+    #         activity_id = fresh_activity.get("id")
+    #         existing_activity = existing_by_id.get(activity_id)
+    #         
+    #         if existing_activity:
+    #             # PRESERVE: Always keep existing data, update only basic fields
+    #             merged_activity = existing_activity.copy()
+    #             
+    #             # Update only basic fields that might have changed
+    #             basic_fields = ["name", "type", "distance", "moving_time", "elapsed_time", 
+    #                           "start_date", "start_date_local", "timezone", "total_elevation_gain"]
+    #             
+    #             for field in basic_fields:
+    #                 if field in fresh_activity:
+    #                     merged_activity[field] = fresh_activity[field]
+    #             
+    #             logger.info(f"Preserved existing data for activity {activity_id}: {fresh_activity.get('name', 'Unknown')}")
+    #             
+    #         else:
+    #             # NEW ACTIVITY: Use fresh data and add timestamp tracking
+    #             merged_activity = fresh_activity
+    #             current_time = datetime.now().isoformat()
+    #             merged_activity["_metadata"] = {
+    #                 "basic_data_added": current_time,
+    #                 "rich_data_added": None,
+    #                 "last_updated": current_time
+    #             }
+    #             logger.info(f"New activity {activity_id}: {fresh_activity.get('name', 'Unknown')}")
+    #         
+    #         # Check if ANY activity (new or existing) needs rich data collection
+    #         if self._should_attempt_rich_data_update(merged_activity):
+    #             try:
+    #                 retry_count = self._get_rich_data_retry_count(merged_activity)
+    #                 logger.info(f"🔄 Fetching rich data for activity {activity_id} (attempt {retry_count + 1}/5)")
+    #                 
+    #                 complete_data = self._fetch_complete_activity_data(activity_id)
+    #                 merged_activity = complete_data
+    #                 
+    #                 # Reset retry count on success
+    #                 merged_activity['_rich_data_retry_count'] = 0
+    #                 logger.info(f"✅ Successfully fetched rich data for activity {activity_id}")
+    #                 
+    #             except Exception as e:
+    #                 # Increment retry count on failure
+    #                 merged_activity = self._increment_rich_data_retry_count(merged_activity)
+    #                 retry_count = self._get_rich_data_retry_count(merged_activity)
+    #                 
+    #                 if retry_count >= 5:
+    #                     logger.warning(f"⚠️ Max retries reached for activity {activity_id} (5/5): {e}")
+    #                 else:
+    #                     logger.warning(f"⚠️ Failed to fetch rich data for activity {activity_id} (attempt {retry_count}/5): {e}")
+    #         
+    #         merged_activities.append(merged_activity)
+    #     
+    #     # Add any existing activities that weren't in fresh data (shouldn't happen with Strava)
+    #     for activity_id, existing_activity in existing_by_id.items():
+    #         if activity_id not in fresh_by_id:
+    #             merged_activities.append(existing_activity)
+    #             logger.info(f"Preserved existing activity not in fresh data: {activity_id}")
+    #     
+    #     return merged_activities
 
     def _check_and_update_all_activities_rich_data(self, activities: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Check ALL activities within last 3 weeks and update rich data if needed"""
@@ -1714,97 +1977,99 @@ class SmartStravaCache:
     
     # Backup operations removed - using Supabase-only storage
     
-    def _start_batch_processing(self):
-        """Start batch processing of activities (20 every 15 minutes)"""
-        if self._batch_thread and self._batch_thread.is_alive():
-            return
-        
-        # Mark batching as in progress
-        self._mark_batching_in_progress(True)
-        
-        self._batch_thread = threading.Thread(target=self._batch_processing_loop, daemon=True)
-        self._batch_thread.start()
-        logger.info("🏃‍♂️ Batch processing started (20 activities every 15 minutes)")
+    # COMMENTED OUT - OLD BATCH PROCESSING LOGIC (Replaced with new simplified system)
+    # def _start_batch_processing(self):
+    #     """Start batch processing of activities (20 every 15 minutes)"""
+    #     if self._batch_thread and self._batch_thread.is_alive():
+    #         return
+    #     
+    #     # Mark batching as in progress
+    #     self._mark_batching_in_progress(True)
+    #     
+    #     self._batch_thread = threading.Thread(target=self._batch_processing_loop, daemon=True)
+    #     self._batch_thread.start()
+    #     logger.info("🏃‍♂️ Batch processing started (20 activities every 15 minutes)")
     
-    def _batch_processing_loop(self):
-        """Process activities in batches of 20 every 15 minutes"""
-        try:
-            # Get all activities from cache
-            cache_data = self._cache_data or {"activities": []}
-            all_activities = cache_data.get('activities', [])
-            
-            if not all_activities:
-                logger.info("✅ No activities in cache to process")
-                return
-            
-            # Check if cache is fresh from emergency refresh
-            is_emergency_refresh = cache_data.get('emergency_refresh', False)
-            
-            if is_emergency_refresh:
-                # Process ALL activities when cache is fresh from emergency refresh
-                activities_to_process = all_activities
-                logger.info(f"🏃‍♂️ Emergency refresh detected - processing ALL {len(activities_to_process)} activities")
-            else:
-                # For regular refreshes, filter to last 3 weeks
-                three_weeks_ago = datetime.now() - timedelta(weeks=3)
-                activities_to_process = []
-                
-                for activity in all_activities:
-                    start_date_str = activity.get('start_date_local', '')
-                    if start_date_str:
-                        try:
-                            start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
-                            if start_date >= three_weeks_ago:
-                                activities_to_process.append(activity)
-                        except:
-                            # If date parsing fails, include the activity to be safe
-                            activities_to_process.append(activity)
-                
-                logger.info(f"🏃‍♂️ Regular refresh - processing {len(activities_to_process)} activities from last 3 weeks")
-            
-            if not activities_to_process:
-                logger.info("✅ No activities need updating")
-                return
-            
-            # Process in batches of 20
-            batch_size = 20
-            for i in range(0, len(activities_to_process), batch_size):
-                batch = activities_to_process[i:i + batch_size]
-                
-                logger.info(f"🏃‍♂️ Processing batch {i//batch_size + 1}: {len(batch)} activities")
-                
-                # Process the batch
-                self._process_activity_batch(batch)
-                
-                # Wait 15 minutes before next batch (except for last batch)
-                if i + batch_size < len(activities_to_process):
-                    logger.info("⏳ Waiting 15 minutes before next batch...")
-                    time.sleep(900)  # 15 minutes
-            
-            logger.info("🏃‍♂️ Batch processing complete")
-            
-            # Mark batching as complete and validate results
-            self._mark_batching_in_progress(False)
-            self._validate_post_batch_results()
-            
-            # Clear emergency refresh flags
-            self._emergency_refresh_in_progress = False
-            
-            # Clear emergency refresh flag from cache data for future batch processing
-            if self._cache_data and self._cache_data.get('emergency_refresh'):
-                self._cache_data['emergency_refresh'] = False
-                logger.info("🏃‍♂️ Cleared emergency refresh flag from cache data")
-            
-        except Exception as e:
-            logger.error(f"❌ Batch processing failed: {e}")
-            # Mark batching as complete even on failure
-            self._mark_batching_in_progress(False)
-            # Clear emergency refresh flags
-            self._emergency_refresh_in_progress = False
-            # Clear emergency refresh flag from cache data
-            if self._cache_data and self._cache_data.get('emergency_refresh'):
-                self._cache_data['emergency_refresh'] = False
-                logger.info("🏃‍♂️ Cleared emergency refresh flag from cache data (after error)")
+    # COMMENTED OUT - OLD BATCH PROCESSING LOGIC (Replaced with new simplified system)
+    # def _batch_processing_loop(self):
+    #     """Process activities in batches of 20 every 15 minutes"""
+    #     try:
+    #         # Get all activities from cache
+    #         cache_data = self._cache_data or {"activities": []}
+    #         all_activities = cache_data.get('activities', [])
+    #         
+    #         if not all_activities:
+    #             logger.info("✅ No activities in cache to process")
+    #             return
+    #         
+    #         # Check if cache is fresh from emergency refresh
+    #         is_emergency_refresh = cache_data.get('emergency_refresh', False)
+    #         
+    #         if is_emergency_refresh:
+    #             # Process ALL activities when cache is fresh from emergency refresh
+    #             activities_to_process = all_activities
+    #             logger.info(f"🏃‍♂️ Emergency refresh detected - processing ALL {len(activities_to_process)} activities")
+    #         else:
+    #             # For regular refreshes, filter to last 3 weeks
+    #             three_weeks_ago = datetime.now() - timedelta(weeks=3)
+    #             activities_to_process = []
+    #             
+    #             for activity in all_activities:
+    #                 start_date_str = activity.get('start_date_local', '')
+    #                 if start_date_str:
+    #                     try:
+    #                         start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
+    #                         if start_date >= three_weeks_ago:
+    #                             activities_to_process.append(activity)
+    #                     except:
+    #                         # If date parsing fails, include the activity to be safe
+    #                         activities_to_process.append(activity)
+    #             
+    #             logger.info(f"🏃‍♂️ Regular refresh - processing {len(activities_to_process)} activities from last 3 weeks")
+    #         
+    #         if not activities_to_process:
+    #             logger.info("✅ No activities need updating")
+    #             return
+    #         
+    #         # Process in batches of 20
+    #         batch_size = 20
+    #         for i in range(0, len(activities_to_process), batch_size):
+    #             batch = activities_to_process[i:i + batch_size]
+    #             
+    #             logger.info(f"🏃‍♂️ Processing batch {i//batch_size + 1}: {len(batch)} activities")
+    #             
+    #             # Process the batch
+    #             self._process_activity_batch(batch)
+    #             
+    #             # Wait 15 minutes before next batch (except for last batch)
+    #             if i + batch_size < len(activities_to_process):
+    #                 logger.info("⏳ Waiting 15 minutes before next batch...")
+    #                 time.sleep(900)  # 15 minutes
+    #         
+    #         logger.info("🏃‍♂️ Batch processing complete")
+    #         
+    #         # Mark batching as complete and validate results
+    #         self._mark_batching_in_progress(False)
+    #         self._validate_post_batch_results()
+    #         
+    #         # Clear emergency refresh flags
+    #         self._emergency_refresh_in_progress = False
+    #         
+    #         # Clear emergency refresh flag from cache data for future batch processing
+    #         if self._cache_data and self._cache_data.get('emergency_refresh'):
+    #             self._cache_data['emergency_refresh'] = False
+    #             logger.info("🏃‍♂️ Cleared emergency refresh flag from cache data")
+    #         
+    #     except Exception as e:
+    #         logger.error(f"❌ Batch processing failed: {e}")
+    #         # Mark batching as complete even on failure
+    #         self._mark_batching_in_progress(False)
+    #         # Clear emergency refresh flags
+    #         self._emergency_refresh_in_progress = False
+    #         # Clear emergency refresh flag from cache data
+    #         if self._cache_data and self._cache_data.get('emergency_refresh'):
+    #             self._cache_data['emergency_refresh'] = False
+    #             logger.info("🏃‍♂️ Cleared emergency refresh flag from cache data (after error)")
     
     def _mark_batching_in_progress(self, in_progress: bool):
         """Mark batching as in progress or complete in cache"""
@@ -1858,163 +2123,166 @@ class SmartStravaCache:
     
     # _get_activities_needing_update removed - redundant in streamlined logic
     
-    def _process_activity_batch(self, batch: List[Dict[str, Any]]):
-        """Process a batch of activities with data validation and complete data fetching"""
-        try:
-            for activity in batch:
-                activity_id = activity.get('id')
-                if activity_id:
-                    logger.info(f"🏃‍♂️ Processing activity {activity_id}: {activity.get('name', 'Unknown')}")
-                    
-                    try:
-                        # Fetch fresh data from Strava API
-                        fresh_data = self._fetch_complete_activity_data(activity_id)
-                        
-                        # Trust Strava API data - always update with fresh data
-                        # No validation needed - Strava API is reliable
-                        self._update_activity_in_cache(activity_id, fresh_data)
-                        logger.info(f"🏃‍♂️ Updated activity {activity_id} with fresh Strava data")
-                        
-                    except Exception as e:
-                        logger.warning(f"⚠️ Failed to process activity {activity_id}: {e}")
-                    
-                    time.sleep(1)  # Small delay to respect API limits
-                    
-        except Exception as e:
-            logger.error(f"❌ Error processing activity batch: {e}")
+    # COMMENTED OUT - OLD BATCH PROCESSING LOGIC (Replaced with new simplified system)
+    # def _process_activity_batch(self, batch: List[Dict[str, Any]]):
+    #     """Process a batch of activities with data validation and complete data fetching"""
+    #     try:
+    #         for activity in batch:
+    #             activity_id = activity.get('id')
+    #             if activity_id:
+    #                 logger.info(f"🏃‍♂️ Processing activity {activity_id}: {activity.get('name', 'Unknown')}")
+    #                 
+    #                 try:
+    #                     # Fetch fresh data from Strava API
+    #                     fresh_data = self._fetch_complete_activity_data(activity_id)
+    #                     
+    #                     # Trust Strava API data - always update with fresh data
+    #                     # No validation needed - Strava API is reliable
+    #                     self._update_activity_in_cache(activity_id, fresh_data)
+    #                     logger.info(f"🏃‍♂️ Updated activity {activity_id} with fresh Strava data")
+    #                     
+    #                 except Exception as e:
+    #                     logger.warning(f"⚠️ Failed to process activity {activity_id}: {e}")
+    #                 
+    #                 time.sleep(1)  # Small delay to respect API limits
+    #                 
+    #     except Exception as e:
+    #         logger.error(f"❌ Error processing activity batch: {e}")
     
-    def analyze_cache_data_loss(self) -> Dict[str, Any]:
-        """Analyze cache to identify data loss and timestamp information"""
-        try:
-            cache_data = self._load_cache()
-            activities = cache_data.get("activities", [])
-            
-            analysis = {
-                "total_activities": len(activities),
-                "activities_with_polyline": 0,
-                "activities_with_bounds": 0,
-                "activities_with_metadata": 0,
-                "activities_with_corrupted_polyline": 0,
-                "data_loss_analysis": [],
-                "timestamp_analysis": [],
-                "corrupted_activities": []
-            }
-            
-            for activity in activities:
-                activity_id = activity.get("id")
-                activity_name = activity.get("name", "Unknown")
-                
-                # Check polyline data
-                has_polyline = bool(activity.get("map", {}).get("polyline"))
-                has_bounds = bool(activity.get("map", {}).get("bounds"))
-                has_metadata = bool(activity.get("_metadata"))
-                
-                # Check for polyline corruption
-                is_corrupted = False
-                if has_polyline:
-                    polyline_str = activity.get("map", {}).get("polyline", "")
-                    try:
-                        import polyline
-                        coordinates = polyline.decode(polyline_str)
-                        # Trust Strava API data - no validation needed
-                        # If polyline decodes successfully, it's valid
-                    except Exception:
-                        is_corrupted = True
-                        analysis["activities_with_corrupted_polyline"] += 1
-                
-                if has_polyline:
-                    analysis["activities_with_polyline"] += 1
-                if has_bounds:
-                    analysis["activities_with_bounds"] += 1
-                if has_metadata:
-                    analysis["activities_with_metadata"] += 1
-                
-                # Analyze metadata if available
-                metadata = activity.get("_metadata", {})
-                if metadata:
-                    analysis["timestamp_analysis"].append({
-                        "activity_id": activity_id,
-                        "activity_name": activity_name,
-                        "basic_data_added": metadata.get("basic_data_added"),
-                        "rich_data_added": metadata.get("rich_data_added"),
-                        "last_updated": metadata.get("last_updated"),
-                        "has_polyline": has_polyline,
-                        "has_bounds": has_bounds,
-                        "is_corrupted": is_corrupted
-                    })
-                else:
-                    analysis["data_loss_analysis"].append({
-                        "activity_id": activity_id,
-                        "activity_name": activity_name,
-                        "issue": "No metadata - cannot track when data was added",
-                        "has_polyline": has_polyline,
-                        "has_bounds": has_bounds,
-                        "is_corrupted": is_corrupted
-                    })
-                
-                # Add to corrupted activities list if corrupted
-                if is_corrupted:
-                    analysis["corrupted_activities"].append({
-                        "activity_id": activity_id,
-                        "activity_name": activity_name,
-                        "issue": "Corrupted polyline data - causes weird route visualization"
-                    })
-            
-            # Calculate percentages
-            total = analysis["total_activities"]
-            analysis["polyline_percentage"] = (analysis["activities_with_polyline"] / total * 100) if total > 0 else 0
-            analysis["bounds_percentage"] = (analysis["activities_with_bounds"] / total * 100) if total > 0 else 0
-            analysis["metadata_percentage"] = (analysis["activities_with_metadata"] / total * 100) if total > 0 else 0
-            analysis["corruption_percentage"] = (analysis["activities_with_corrupted_polyline"] / total * 100) if total > 0 else 0
-            
-            return analysis
-            
-        except Exception as e:
-            logger.error(f"Error analyzing cache data loss: {e}")
-            return {"error": str(e)}
+    # COMMENTED OUT - REDUNDANT METHOD (Phase 5: Diagnostic Methods)
+    # def analyze_cache_data_loss(self) -> Dict[str, Any]:
+    #     """Analyze cache to identify data loss and timestamp information"""
+    #     try:
+    #         cache_data = self._load_cache()
+    #         activities = cache_data.get("activities", [])
+    #         
+    #         analysis = {
+    #             "total_activities": len(activities),
+    #             "activities_with_polyline": 0,
+    #             "activities_with_bounds": 0,
+    #             "activities_with_metadata": 0,
+    #             "activities_with_corrupted_polyline": 0,
+    #             "data_loss_analysis": [],
+    #             "timestamp_analysis": [],
+    #             "corrupted_activities": []
+    #         }
+    #         
+    #         for activity in activities:
+    #             activity_id = activity.get("id")
+    #             activity_name = activity.get("name", "Unknown")
+    #             
+    #             # Check polyline data
+    #             has_polyline = bool(activity.get("map", {}).get("polyline"))
+    #             has_bounds = bool(activity.get("map", {}).get("bounds"))
+    #             has_metadata = bool(activity.get("_metadata"))
+    #             
+    #             # Check for polyline corruption
+    #             is_corrupted = False
+    #             if has_polyline:
+    #                 polyline_str = activity.get("map", {}).get("polyline", "")
+    #                 try:
+    #                     import polyline
+    #                     coordinates = polyline.decode(polyline_str)
+    #                     # Trust Strava API data - no validation needed
+    #                     # If polyline decodes successfully, it's valid
+    #                 except Exception:
+    #                     is_corrupted = True
+    #                     analysis["activities_with_corrupted_polyline"] += 1
+    #             
+    #             if has_polyline:
+    #                 analysis["activities_with_polyline"] += 1
+    #             if has_bounds:
+    #                 analysis["activities_with_bounds"] += 1
+    #             if has_metadata:
+    #                 analysis["activities_with_metadata"] += 1
+    #             
+    #             # Analyze metadata if available
+    #             metadata = activity.get("_metadata", {})
+    #             if metadata:
+    #                 analysis["timestamp_analysis"].append({
+    #                     "activity_id": activity_id,
+    #                     "activity_name": activity_name,
+    #                     "basic_data_added": metadata.get("basic_data_added"),
+    #                     "rich_data_added": metadata.get("rich_data_added"),
+    #                     "last_updated": metadata.get("last_updated"),
+    #                     "has_polyline": has_polyline,
+    #                     "has_bounds": has_bounds,
+    #                     "is_corrupted": is_corrupted
+    #                 })
+    #             else:
+    #                 analysis["data_loss_analysis"].append({
+    #                     "activity_id": activity_id,
+    #                     "activity_name": activity_name,
+    #                     "issue": "No metadata - cannot track when data was added",
+    #                     "has_polyline": has_polyline,
+    #                     "has_bounds": has_bounds,
+    #                     "is_corrupted": is_corrupted
+    #                 })
+    #             
+    #             # Add to corrupted activities list if corrupted
+    #             if is_corrupted:
+    #                 analysis["corrupted_activities"].append({
+    #                     "activity_id": activity_id,
+    #                     "activity_name": activity_name,
+    #                     "issue": "Corrupted polyline data - causes weird route visualization"
+    #                 })
+    #         
+    #         # Calculate percentages
+    #         total = analysis["total_activities"]
+    #         analysis["polyline_percentage"] = (analysis["activities_with_polyline"] / total * 100) if total > 0 else 0
+    #         analysis["bounds_percentage"] = (analysis["activities_with_bounds"] / total * 100) if total > 0 else 0
+    #         analysis["metadata_percentage"] = (analysis["activities_with_metadata"] / total * 100) if total > 0 else 0
+    #         analysis["corruption_percentage"] = (analysis["activities_with_corrupted_polyline"] / total * 100) if total > 0 else 0
+    #         
+    #         return analysis
+    #         
+    #     except Exception as e:
+    #         logger.error(f"Error analyzing cache data loss: {e}")
+    #         return {"error": str(e)}
     
 
-    def clean_invalid_activities(self) -> Dict[str, Any]:
-        """Clean invalid activities from the cache"""
-        try:
-            # Load current cache
-            cache_data = self._load_cache()
-            if not cache_data:
-                return {"success": False, "message": "No cache data found"}
-            
-            activities = cache_data.get("activities", [])
-            original_count = len(activities)
-            
-            # Clean invalid activities
-            cleaned_activities = self._clean_invalid_activities(activities)
-            removed_count = original_count - len(cleaned_activities)
-            
-            if removed_count > 0:
-                # Update cache with cleaned activities
-                cache_data["activities"] = cleaned_activities
-                cache_data["timestamp"] = datetime.now().isoformat()
-                cache_data["cleaned_invalid_activities"] = True
-                
-                self._save_cache(cache_data)
-                logger.info(f"Cleaned {removed_count} invalid activities from cache")
-                
-                return {
-                    "success": True,
-                    "message": f"Cleaned {removed_count} invalid activities from cache",
-                    "activities_removed": removed_count,
-                    "activities_remaining": len(cleaned_activities)
-                }
-            else:
-                return {
-                    "success": True,
-                    "message": "No invalid activities found in cache",
-                    "activities_removed": 0,
-                    "activities_remaining": len(cleaned_activities)
-                }
-                
-        except Exception as e:
-            logger.error(f"Error cleaning invalid activities: {e}")
-            return {"success": False, "message": f"Error cleaning invalid activities: {str(e)}"}
+    # COMMENTED OUT - REDUNDANT METHOD (Phase 5: Diagnostic Methods)
+    # def clean_invalid_activities(self) -> Dict[str, Any]:
+    #     """Clean invalid activities from the cache"""
+    #     try:
+    #         # Load current cache
+    #         cache_data = self._load_cache()
+    #         if not cache_data:
+    #             return {"success": False, "message": "No cache data found"}
+    #         
+    #         activities = cache_data.get("activities", [])
+    #         original_count = len(activities)
+    #         
+    #         # Clean invalid activities
+    #         cleaned_activities = self._clean_invalid_activities(activities)
+    #         removed_count = original_count - len(cleaned_activities)
+    #         
+    #         if removed_count > 0:
+    #             # Update cache with cleaned activities
+    #             cache_data["activities"] = cleaned_activities
+    #             cache_data["timestamp"] = datetime.now().isoformat()
+    #             cache_data["cleaned_invalid_activities"] = True
+    #             
+    #             self._save_cache(cache_data)
+    #             logger.info(f"Cleaned {removed_count} invalid activities from cache")
+    #             
+    #             return {
+    #                 "success": True,
+    #                 "message": f"Cleaned {removed_count} invalid activities from cache",
+    #                 "activities_removed": removed_count,
+    #                 "activities_remaining": len(cleaned_activities)
+    #             }
+    #         else:
+    #             return {
+    #                 "success": True,
+    #                 "message": "No invalid activities found in cache",
+    #                 "activities_removed": 0,
+    #                 "activities_remaining": len(cleaned_activities)
+    #             }
+    #             
+    #     except Exception as e:
+    #         logger.error(f"Error cleaning invalid activities: {e}")
+    #         return {"success": False, "message": f"Error cleaning invalid activities: {str(e)}"}
     
     def _validate_cache_integrity(self, cache_data: Dict[str, Any]) -> bool:
         """Validate cache integrity - check for data loss indicators with proper batching support"""
@@ -2083,62 +2351,63 @@ class SmartStravaCache:
             return False
     
     
-    def _trigger_emergency_refresh(self):
-        """Emergency refresh - fetch fresh data from Strava when cache is empty"""
-        if self._emergency_refresh_in_progress:
-            logger.info("🏃‍♂️ Emergency refresh already in progress, skipping...")
-            return
-            
-        self._emergency_refresh_in_progress = True
-        logger.info("🏃‍♂️ Emergency refresh triggered - starting in background thread")
-        
-        # Start emergency refresh in background thread to avoid blocking startup
-        def emergency_refresh_worker():
-            try:
-                logger.info("🏃‍♂️ Emergency refresh worker started - fetching fresh data from Strava")
-                
-                # When cache is empty, we need to fetch basic activity data from Strava first
-                logger.info("🏃‍♂️ Fetching basic activity data from Strava API...")
-                logger.info("🏃‍♂️ About to call _fetch_from_strava(200)...")
-                
-                try:
-                    fresh_activities = self._fetch_from_strava(200)  # Fetch basic activity data
-                    logger.info(f"🏃‍♂️ _fetch_from_strava completed, got {len(fresh_activities) if fresh_activities else 0} activities")
-                except Exception as e:
-                    logger.error(f"🏃‍♂️ _fetch_from_strava failed: {e}")
-                    import traceback
-                    logger.error(f"🏃‍♂️ Full traceback: {traceback.format_exc()}")
-                    fresh_activities = None
-                
-                if fresh_activities:
-                    logger.info(f"🏃‍♂️ Fetched {len(fresh_activities)} activities with basic data from Strava")
-                    
-                    # Create initial cache with basic activity data
-                    initial_cache = {
-                        "timestamp": datetime.now().isoformat(),
-                        "activities": fresh_activities,
-                        "emergency_refresh": True,
-                        "last_updated": datetime.now().isoformat()
-                    }
-                    
-                    # Save the initial cache
-                    self._save_cache(initial_cache)
-                    logger.info("🏃‍♂️ Initial cache created with basic activity data")
-                    
-                    # Now start batch processing to enrich with rich data
-                    self._start_batch_processing()
-                else:
-                    logger.warning("🏃‍♂️ No activities fetched from Strava API")
-                    self._emergency_refresh_in_progress = False
-                    
-            except Exception as e:
-                logger.error(f"🏃‍♂️ Emergency refresh worker failed: {e}")
-                self._emergency_refresh_in_progress = False
-        
-        # Start the worker in a background thread
-        import threading
-        worker_thread = threading.Thread(target=emergency_refresh_worker, daemon=True)
-        worker_thread.start()
-        logger.info("🏃‍♂️ Emergency refresh worker thread started")
+    # COMMENTED OUT - OLD EMERGENCY REFRESH LOGIC (Replaced with new simplified system)
+    # def _trigger_emergency_refresh(self):
+    #     """Emergency refresh - fetch fresh data from Strava when cache is empty"""
+    #     if self._emergency_refresh_in_progress:
+    #         logger.info("🏃‍♂️ Emergency refresh already in progress, skipping...")
+    #         return
+    #         
+    #     self._emergency_refresh_in_progress = True
+    #     logger.info("🏃‍♂️ Emergency refresh triggered - starting in background thread")
+    #     
+    #     # Start emergency refresh in background thread to avoid blocking startup
+    #     def emergency_refresh_worker():
+    #         try:
+    #             logger.info("🏃‍♂️ Emergency refresh worker started - fetching fresh data from Strava")
+    #             
+    #             # When cache is empty, we need to fetch basic activity data from Strava first
+    #             logger.info("🏃‍♂️ Fetching basic activity data from Strava API...")
+    #             logger.info("🏃‍♂️ About to call _fetch_from_strava(200)...")
+    #             
+    #             try:
+    #                 fresh_activities = self._fetch_from_strava(200)  # Fetch basic activity data
+    #                 logger.info(f"🏃‍♂️ _fetch_from_strava completed, got {len(fresh_activities) if fresh_activities else 0} activities")
+    #             except Exception as e:
+    #                 logger.error(f"🏃‍♂️ _fetch_from_strava failed: {e}")
+    #                 import traceback
+    #                 logger.error(f"🏃‍♂️ Full traceback: {traceback.format_exc()}")
+    #                 fresh_activities = None
+    #             
+    #             if fresh_activities:
+    #                 logger.info(f"🏃‍♂️ Fetched {len(fresh_activities)} activities with basic data from Strava")
+    #                 
+    #                 # Create initial cache with basic activity data
+    #                 initial_cache = {
+    #                     "timestamp": datetime.now().isoformat(),
+    #                     "activities": fresh_activities,
+    #                     "emergency_refresh": True,
+    #                     "last_updated": datetime.now().isoformat()
+    #                 }
+    #                 
+    #                 # Save the initial cache
+    #                 self._save_cache(initial_cache)
+    #                 logger.info("🏃‍♂️ Initial cache created with basic activity data")
+    #                 
+    #                 # Now start batch processing to enrich with rich data
+    #                 self._start_batch_processing()
+    #             else:
+    #                 logger.warning("🏃‍♂️ No activities fetched from Strava API")
+    #                 self._emergency_refresh_in_progress = False
+    #                 
+    #         except Exception as e:
+    #             logger.error(f"🏃‍♂️ Emergency refresh worker failed: {e}")
+    #             self._emergency_refresh_in_progress = False
+    #     
+    #     # Start the worker in a background thread
+    #     import threading
+    #     worker_thread = threading.Thread(target=emergency_refresh_worker, daemon=True)
+    #     worker_thread.start()
+    #     logger.info("🏃‍♂️ Emergency refresh worker thread started")
     
     
