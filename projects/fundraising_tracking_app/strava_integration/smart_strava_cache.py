@@ -111,8 +111,8 @@ class SmartStravaCache:
         else:
             logger.info("📝 Supabase disabled, using file-based cache only")
         
-    def _load_cache(self) -> Dict[str, Any]:
-        """Load cache: In-Memory → Supabase → Emergency Refresh"""
+    def _load_cache(self, trigger_emergency_refresh: bool = True) -> Dict[str, Any]:
+        """Load cache: In-Memory → Supabase → Emergency Refresh (if requested)"""
         now = datetime.now()
         
         # 1. Check in-memory cache first (fastest)
@@ -144,16 +144,16 @@ class SmartStravaCache:
             except Exception as e:
                 logger.error(f"❌ Supabase read failed: {e}")
         
-        # 4. Emergency refresh (all sources failed)
-        if not self._emergency_refresh_in_progress:
+        # 4. Emergency refresh (all sources failed) - only if requested
+        if trigger_emergency_refresh and not self._emergency_refresh_in_progress:
             logger.warning("🚨 All cache sources failed, triggering emergency refresh...")
             
             # CRITICAL: Start batch processing in background to avoid blocking startup
             # This allows health checks to respond while batch processing runs
             logger.info("🔄 Starting batch processing in background during startup...")
             self._start_batch_processing()
-        else:
-            logger.info("🔄 Emergency refresh already in progress, skipping...")
+        elif not trigger_emergency_refresh:
+            logger.debug("🔄 Emergency refresh not triggered (called from batch processing)")
         
         # Return empty cache immediately to allow app to start
         # Emergency refresh will populate cache in background
@@ -298,7 +298,7 @@ class SmartStravaCache:
     
     def _identify_new_activities(self, basic_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Compare fresh basic data with database to identify new activities"""
-        cache_data = self._load_cache()
+        cache_data = self._load_cache(trigger_emergency_refresh=False)
         if not cache_data:
             return basic_data  # No existing data, all activities are new
         
@@ -349,7 +349,7 @@ class SmartStravaCache:
     
     def _fetch_rich_data_for_all_activities(self) -> Dict[int, Dict[str, Any]]:
         """Fetch rich data for ALL activities (used in daily corruption check)"""
-        cache_data = self._load_cache()
+        cache_data = self._load_cache(trigger_emergency_refresh=False)
         if not cache_data:
             return {}
         
@@ -449,7 +449,7 @@ class SmartStravaCache:
     
     def _compare_fresh_vs_database_data(self, basic_data: List[Dict[str, Any]], rich_data: Dict[int, Dict[str, Any]]) -> Dict[str, Any]:
         """Compare fresh Strava data with database data to detect corruption"""
-        cache_data = self._load_cache()
+        cache_data = self._load_cache(trigger_emergency_refresh=False)
         if not cache_data:
             return {"corruption_detected": False, "corrupted_activities": []}
         
@@ -554,7 +554,7 @@ class SmartStravaCache:
             
             # Step 4: Update metadata
             current_time = datetime.now().isoformat()
-            cache_data = self._load_cache()
+            cache_data = self._load_cache(trigger_emergency_refresh=False)
             if cache_data:
                 cache_data['last_fetch'] = current_time
                 cache_data['last_basic_data_updated'] = current_time
@@ -2110,7 +2110,7 @@ class SmartStravaCache:
     def _mark_batching_in_progress(self, in_progress: bool):
         """Mark batching as in progress or complete in cache"""
         try:
-            cache_data = self._load_cache()
+            cache_data = self._load_cache(trigger_emergency_refresh=False)
             cache_data["batching_in_progress"] = in_progress
             cache_data["batching_status_updated"] = datetime.now().isoformat()
             
@@ -2126,7 +2126,7 @@ class SmartStravaCache:
     def _validate_post_batch_results(self):
         """Validate results after batch processing completes"""
         try:
-            cache_data = self._load_cache()
+            cache_data = self._load_cache(trigger_emergency_refresh=False)
             activities = cache_data.get("activities", [])
             
             if not activities:
@@ -2190,7 +2190,7 @@ class SmartStravaCache:
     def _update_cache_with_batch_results(self, basic_data: List[Dict[str, Any]], new_activities: List[Dict[str, Any]]):
         """Update cache with batch processing results"""
         try:
-            cache_data = self._load_cache()
+            cache_data = self._load_cache(trigger_emergency_refresh=False)
             if not cache_data:
                 cache_data = {"activities": [], "metadata": {}}
             
