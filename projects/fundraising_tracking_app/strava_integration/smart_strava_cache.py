@@ -532,8 +532,12 @@ class SmartStravaCache:
             self.token_manager.get_valid_access_token()
             
             # Step 1: Fetch fresh basic data (1 API call - fine to do all at once)
-            basic_data = self._fetch_from_strava(200)
-            logger.info(f"🔄 Fetched {len(basic_data)} activities for corruption check")
+            raw_data = self._fetch_from_strava(200)
+            logger.info(f"🔄 Fetched {len(raw_data)} raw activities for corruption check")
+            
+            # Step 1b: Filter for runs/rides from May 22nd, 2025 onwards
+            basic_data = self._filter_activities(raw_data)
+            logger.info(f"🔄 Filtered to {len(basic_data)} runs/rides from May 22nd, 2025 onwards")
             
             # Step 2: Fetch rich data for ALL activities using batch processing
             rich_data = self._fetch_rich_data_for_all_activities_with_batching(basic_data)
@@ -2032,8 +2036,12 @@ class SmartStravaCache:
             logger.info("🏃‍♂️ Starting batch processing with new streamlined architecture...")
             
             # Step 1: Fetch fresh basic data from Strava (following our new flow)
-            basic_data = self._fetch_from_strava(200)
-            logger.info(f"🔄 Fetched {len(basic_data)} activities from Strava")
+            raw_data = self._fetch_from_strava(200)
+            logger.info(f"🔄 Fetched {len(raw_data)} raw activities from Strava")
+            
+            # Step 1b: Filter for runs/rides from May 22nd, 2025 onwards
+            basic_data = self._filter_activities(raw_data)
+            logger.info(f"🔄 Filtered to {len(basic_data)} runs/rides from May 22nd, 2025 onwards")
             
             # Step 2: Identify new activities (following our new flow)
             new_activities = self._identify_new_activities(basic_data)
