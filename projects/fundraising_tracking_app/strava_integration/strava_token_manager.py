@@ -70,6 +70,12 @@ class StravaTokenManager:
         
         # In production, only trigger automated update if tokens have actually changed
         if os.getenv("ENVIRONMENT") == "production":
+            # Skip DigitalOcean updates if they're causing issues
+            skip_do_updates = os.getenv("SKIP_DIGITALOCEAN_UPDATES", "false").lower() == "true"
+            if skip_do_updates:
+                print("🔄 Skipping DigitalOcean updates (SKIP_DIGITALOCEAN_UPDATES=true)")
+                return
+                
             print("🔄 Production environment detected - checking for token updates...")
             # Check if tokens have actually changed to avoid unnecessary restarts
             current_tokens = self._load_tokens_from_env()
@@ -148,13 +154,20 @@ class StravaTokenManager:
                 
                 # Get current app spec with timeout
                 print(f"🔄 Making DigitalOcean API call to: {url}")
+                print(f"🔄 Using token format: {do_token[:10]}...{do_token[-4:] if len(do_token) > 14 else 'SHORT'}")
                 response = requests.get(url, headers=headers, timeout=10)  # Reduced timeout
                 print(f"🔄 DigitalOcean API response: {response.status_code}")
+                if response.status_code != 200:
+                    print(f"🔄 DigitalOcean API error: {response.text}")
+                    return
                 if response.status_code == 200:
                     app_spec = response.json()["app"]["spec"]
                     
                     # Update environment variables
+                    print(f"🔄 Found {len(app_spec.get('services', []))} services in app spec")
                     for service in app_spec.get("services", []):
+                        service_name = service.get("name", "UNKNOWN")
+                        print(f"🔄 Checking service: {service_name}")
                         if service.get("name") == "api":
                             env_vars = service.get("envs", [])
                             
@@ -360,8 +373,41 @@ class StravaTokenManager:
             }
             
             print(f"🔄 Saving new tokens to environment...")
-            # Save to .env file
-            self._save_tokens_to_env(new_tokens)
+            # Save to .env file with timeout to prevent hanging
+            try:
+                import threading
+                import time
+                
+                save_success = False
+                save_error = None
+                
+                def do_save():
+                    nonlocal save_success, save_error
+                    try:
+                        print("🔄 Starting _save_tokens_to_env in thread...")
+                        self._save_tokens_to_env(new_tokens)
+                        print("🔄 _save_tokens_to_env completed successfully")
+                        save_success = True
+                    except Exception as e:
+                        print(f"🔄 _save_tokens_to_env failed with error: {e}")
+                        save_error = e
+                
+                # Run save in thread with timeout
+                print("🔄 Starting save thread with 15 second timeout...")
+                save_thread = threading.Thread(target=do_save)
+                save_thread.daemon = True
+                save_thread.start()
+                save_thread.join(timeout=15)  # 15 second timeout
+                
+                if save_success:
+                    print("✅ Tokens saved successfully")
+                elif save_error:
+                    print(f"⚠️ Token save failed: {save_error}")
+                else:
+                    print(f"⚠️ Token save timed out after 15 seconds - thread still alive: {save_thread.is_alive()}")
+                    
+            except Exception as e:
+                print(f"⚠️ Token save error: {e}")
             
             # Update instance tokens
             self.tokens = new_tokens
