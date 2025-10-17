@@ -382,6 +382,39 @@ class SmartStravaCache:
         
         return rich_data
     
+    def _fetch_rich_data_for_all_activities_with_batching(self, basic_data: List[Dict[str, Any]]) -> Dict[int, Dict[str, Any]]:
+        """Fetch rich data for ALL activities using batch processing (20 activities every 15 minutes)"""
+        rich_data = {}
+        
+        if not basic_data:
+            logger.info("🔄 No activities to fetch rich data for")
+            return rich_data
+        
+        logger.info(f"🔄 Starting batch processing for {len(basic_data)} activities (corruption check)")
+        
+        # Process in batches of 20
+        batch_size = 20
+        for i in range(0, len(basic_data), batch_size):
+            batch = basic_data[i:i + batch_size]
+            batch_num = i // batch_size + 1
+            total_batches = (len(basic_data) + batch_size - 1) // batch_size
+            
+            logger.info(f"🏃‍♂️ Processing batch {batch_num}/{total_batches}: {len(batch)} activities")
+            
+            # Fetch rich data for this batch
+            batch_rich_data = self._fetch_rich_data_for_new_activities(batch)
+            rich_data.update(batch_rich_data)
+            
+            logger.info(f"✅ Completed batch {batch_num}/{total_batches}: {len(batch_rich_data)} activities with rich data")
+            
+            # Wait 15 minutes between batches (except for the last batch)
+            if i + batch_size < len(basic_data):
+                logger.info("⏰ Waiting 15 minutes before next batch...")
+                time.sleep(900)  # 15 minutes
+        
+        logger.info(f"✅ Batch processing completed: {len(rich_data)} activities with rich data")
+        return rich_data
+    
     def _check_photo_fetch_expired(self, activity_date: str) -> bool:
         """Check if photo fetching should be skipped (24+ hours after activity date)"""
         try:
@@ -491,22 +524,22 @@ class SmartStravaCache:
             logger.info("💡 To enable daily corruption check, install: pip install schedule")
     
     def _daily_corruption_check(self):
-        """Execute daily corruption check at 2am"""
+        """Execute daily corruption check at 2am using batch processing"""
         logger.info("🕐 Starting daily corruption check...")
         
         try:
             # Ensure fresh tokens
             self.token_manager.get_valid_access_token()
             
-            # Fetch fresh basic data
+            # Step 1: Fetch fresh basic data (1 API call - fine to do all at once)
             basic_data = self._fetch_from_strava(200)
             logger.info(f"🔄 Fetched {len(basic_data)} activities for corruption check")
             
-            # Fetch rich data for all activities
-            rich_data = self._fetch_rich_data_for_all_activities()
-            logger.info(f"🔄 Fetched rich data for {len(rich_data)} activities")
+            # Step 2: Fetch rich data for ALL activities using batch processing
+            rich_data = self._fetch_rich_data_for_all_activities_with_batching(basic_data)
+            logger.info(f"🔄 Fetched rich data for {len(rich_data)} activities using batch processing")
             
-            # Compare fresh vs database data
+            # Step 3: Compare fresh vs database data
             corruption_analysis = self._compare_fresh_vs_database_data(basic_data, rich_data)
             
             if corruption_analysis["corruption_detected"]:
@@ -515,7 +548,7 @@ class SmartStravaCache:
             else:
                 logger.info("✅ No corruption detected in daily check")
             
-            # Update metadata
+            # Step 4: Update metadata
             current_time = datetime.now().isoformat()
             cache_data = self._load_cache()
             if cache_data:
@@ -533,22 +566,24 @@ class SmartStravaCache:
         """Main entry point - single condition check for all refresh scenarios"""
         cache_data = self._load_cache()
         
-        # SINGLE CONDITION: Empty database OR 6+ hours old
+        # SINGLE CONDITION: Empty database OR 8+ hours old
         if (not cache_data or 
             not cache_data.get("activities") or 
-            self._should_refresh_cache(cache_data)[0]):
+            self._should_trigger_8hour_refresh()):
             
-            logger.info("🏃‍♂️ Triggering batch processing")
+            logger.info("🏃‍♂️ Starting batch processing")
             self._start_batch_processing()
             return
         
         logger.info("🏃‍♂️ Cache is valid - no refresh needed")
     
+    
     def get_cache_status(self) -> Dict[str, Any]:
         """Get comprehensive cache status for monitoring"""
         try:
             cache_data = self._load_cache()
-            should_refresh, reason = self._should_refresh_cache(cache_data)
+            should_refresh = self._should_trigger_8hour_refresh()
+            reason = "8+ hours old" if should_refresh else "Cache is valid"
             
             status = {
                 "cache_valid": not should_refresh,
@@ -1926,16 +1961,16 @@ class SmartStravaCache:
             return []
     
     def _start_automated_refresh(self):
-        """Start the automated refresh system with 6-hour intervals"""
+        """Start the automated refresh system with 8-hour intervals"""
         if self._refresh_thread and self._refresh_thread.is_alive():
             return
         
         self._refresh_thread = threading.Thread(target=self._automated_refresh_loop, daemon=True)
         self._refresh_thread.start()
-        logger.info("🔄 Automated refresh system started (6-hour intervals)")
+        logger.info("🔄 Automated refresh system started (8-hour intervals)")
     
     def _automated_refresh_loop(self):
-        """Main loop for automated refresh every 6 hours"""
+        """Main loop for automated refresh every 8 hours"""
         while True:
             try:
                 now = datetime.now()
@@ -1969,11 +2004,9 @@ class SmartStravaCache:
             logger.error(f"❌ Failed to start scheduled refresh: {e}")
     
     def _perform_scheduled_refresh(self):
-        """Perform a scheduled refresh with backup and batch processing"""
+        """Perform a scheduled refresh using streamlined logic"""
         try:
-            # Backup operations removed - using Supabase-only storage
-            
-            # Start batch processing
+            logger.info("🔄 Normal scheduled refresh...")
             self._start_batch_processing()
             
         except Exception as e:
@@ -1981,69 +2014,60 @@ class SmartStravaCache:
     
     # Backup operations removed - using Supabase-only storage
     
-    # COMMENTED OUT - OLD BATCH PROCESSING LOGIC (Replaced with new simplified system)
-    # def _start_batch_processing(self):
-    #     """Start batch processing of activities (20 every 15 minutes)"""
-    #     if self._batch_thread and self._batch_thread.is_alive():
-    #         return
-    #     
-    #     # Mark batching as in progress
-    #     self._mark_batching_in_progress(True)
-    #     
-    #     self._batch_thread = threading.Thread(target=self._batch_processing_loop, daemon=True)
-    #     self._batch_thread.start()
-    #     logger.info("🏃‍♂️ Batch processing started (20 activities every 15 minutes)")
+    def _start_batch_processing(self):
+        """Start batch processing of activities (20 every 15 minutes) using new streamlined architecture"""
+        if self._batch_thread and self._batch_thread.is_alive():
+            return
+        
+        # Mark batching as in progress
+        self._mark_batching_in_progress(True)
+        
+        self._batch_thread = threading.Thread(target=self._batch_processing_loop, daemon=True)
+        self._batch_thread.start()
+        logger.info("🏃‍♂️ Batch processing started (20 activities every 15 minutes)")
     
-    # COMMENTED OUT - OLD BATCH PROCESSING LOGIC (Replaced with new simplified system)
-    # def _batch_processing_loop(self):
-    #     """Process activities in batches of 20 every 15 minutes"""
-    #     try:
-    #         # Get all activities from cache
-    #         cache_data = self._cache_data or {"activities": []}
-    #         all_activities = cache_data.get('activities', [])
-    #         
-    #         if not all_activities:
-    #             logger.info("✅ No activities in cache to process")
-    #             return
-    #         
-    #         # Check if cache is fresh from emergency refresh
-    #         is_emergency_refresh = cache_data.get('emergency_refresh', False)
-    #         
-    #         if is_emergency_refresh:
-    #             # Process ALL activities when cache is fresh from emergency refresh
-    #             activities_to_process = all_activities
-    #             logger.info(f"🏃‍♂️ Emergency refresh detected - processing ALL {len(activities_to_process)} activities")
-    #         else:
-    #             # For regular refreshes, filter to last 3 weeks
-    #             three_weeks_ago = datetime.now() - timedelta(weeks=3)
-    #             activities_to_process = []
-    #             
-    #             for activity in all_activities:
-    #                 start_date_str = activity.get('start_date_local', '')
-    #                 if start_date_str:
-    #                     try:
-    #                         start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
-    #                         if start_date >= three_weeks_ago:
-    #                             activities_to_process.append(activity)
-    #                     except:
-    #                         # If date parsing fails, include the activity to be safe
-    #                         activities_to_process.append(activity)
-    #             
-    #             logger.info(f"🏃‍♂️ Regular refresh - processing {len(activities_to_process)} activities from last 3 weeks")
-    #         
-    #         if not activities_to_process:
-    #             logger.info("✅ No activities need updating")
-    #             return
-    #         
-    #         # Process in batches of 20
-    #         batch_size = 20
-    #         for i in range(0, len(activities_to_process), batch_size):
-    #             batch = activities_to_process[i:i + batch_size]
-    #             
-    #             logger.info(f"🏃‍♂️ Processing batch {i//batch_size + 1}: {len(batch)} activities")
-    #             
-    #             # Process the batch
-    #             self._process_activity_batch(batch)
+    def _batch_processing_loop(self):
+        """Process activities in batches of 20 every 15 minutes using new streamlined architecture"""
+        try:
+            logger.info("🏃‍♂️ Starting batch processing with new streamlined architecture...")
+            
+            # Step 1: Fetch fresh basic data from Strava (following our new flow)
+            basic_data = self._fetch_from_strava(200)
+            logger.info(f"🔄 Fetched {len(basic_data)} activities from Strava")
+            
+            # Step 2: Identify new activities (following our new flow)
+            new_activities = self._identify_new_activities(basic_data)
+            logger.info(f"🆕 Found {len(new_activities)} new activities")
+            
+            # Step 3: Process new activities in batches of 20 every 15 minutes
+            if new_activities:
+                batch_size = 20
+                for i in range(0, len(new_activities), batch_size):
+                    batch = new_activities[i:i + batch_size]
+                    
+                    logger.info(f"🏃‍♂️ Processing batch {i//batch_size + 1}: {len(batch)} new activities")
+                    
+                    # Process the batch (fetch rich data for new activities)
+                    self._process_activity_batch(batch)
+                    
+                    # Wait 15 minutes between batches (except for the last batch)
+                    if i + batch_size < len(new_activities):
+                        logger.info("⏰ Waiting 15 minutes before next batch...")
+                        time.sleep(900)  # 15 minutes
+            else:
+                logger.info("✅ No new activities to process")
+            
+            # Step 4: Update cache with all data
+            self._update_cache_with_batch_results(basic_data, new_activities)
+            
+            # Step 5: Mark batching as complete
+            self._mark_batching_in_progress(False)
+            
+            logger.info("✅ Batch processing completed successfully")
+            
+        except Exception as e:
+            logger.error(f"❌ Batch processing failed: {e}")
+            self._mark_batching_in_progress(False)
     #             
     #             # Wait 15 minutes before next batch (except for last batch)
     #             if i + batch_size < len(activities_to_process):
@@ -2128,30 +2152,69 @@ class SmartStravaCache:
     # _get_activities_needing_update removed - redundant in streamlined logic
     
     # COMMENTED OUT - OLD BATCH PROCESSING LOGIC (Replaced with new simplified system)
-    # def _process_activity_batch(self, batch: List[Dict[str, Any]]):
-    #     """Process a batch of activities with data validation and complete data fetching"""
-    #     try:
-    #         for activity in batch:
-    #             activity_id = activity.get('id')
-    #             if activity_id:
-    #                 logger.info(f"🏃‍♂️ Processing activity {activity_id}: {activity.get('name', 'Unknown')}")
-    #                 
-    #                 try:
-    #                     # Fetch fresh data from Strava API
-    #                     fresh_data = self._fetch_complete_activity_data(activity_id)
-    #                     
-    #                     # Trust Strava API data - always update with fresh data
-    #                     # No validation needed - Strava API is reliable
-    #                     self._update_activity_in_cache(activity_id, fresh_data)
-    #                     logger.info(f"🏃‍♂️ Updated activity {activity_id} with fresh Strava data")
-    #                     
-    #                 except Exception as e:
-    #                     logger.warning(f"⚠️ Failed to process activity {activity_id}: {e}")
-    #                 
-    #                 time.sleep(1)  # Small delay to respect API limits
-    #                 
-    #     except Exception as e:
-    #         logger.error(f"❌ Error processing activity batch: {e}")
+    def _process_activity_batch(self, batch: List[Dict[str, Any]]):
+        """Process a batch of new activities using new streamlined architecture"""
+        try:
+            logger.info(f"🏃‍♂️ Processing batch of {len(batch)} new activities...")
+            
+            # Fetch rich data for all activities in this batch
+            rich_data = self._fetch_rich_data_for_new_activities(batch)
+            
+            # Update each activity with rich data
+            for activity in batch:
+                activity_id = activity.get('id')
+                if activity_id and activity_id in rich_data:
+                    # Update activity with rich data
+                    activity.update(rich_data[activity_id])
+                    
+                    # Update expiration flags
+                    activity = self._update_activity_expiration_flags(activity)
+                    
+                    logger.info(f"✅ Updated activity {activity_id} with rich data")
+                else:
+                    logger.warning(f"⚠️ No rich data found for activity {activity_id}")
+                
+                time.sleep(1)  # Small delay to respect API limits
+                
+        except Exception as e:
+            logger.error(f"❌ Error processing activity batch: {e}")
+    
+    def _update_cache_with_batch_results(self, basic_data: List[Dict[str, Any]], new_activities: List[Dict[str, Any]]):
+        """Update cache with batch processing results"""
+        try:
+            cache_data = self._load_cache()
+            if not cache_data:
+                cache_data = {"activities": [], "metadata": {}}
+            
+            existing_activities = cache_data.get("activities", [])
+            existing_by_id = {activity.get("id"): activity for activity in existing_activities}
+            
+            # Update existing activities with fresh basic data
+            for activity in basic_data:
+                activity_id = activity.get("id")
+                if activity_id in existing_by_id:
+                    # Update existing activity with fresh basic data
+                    existing_by_id[activity_id].update(activity)
+                else:
+                    # Add new activity
+                    existing_activities.append(activity)
+            
+            # Save updated cache
+            cache_data["activities"] = existing_activities
+            
+            # Update metadata
+            current_time = datetime.now().isoformat()
+            cache_data['last_fetch'] = current_time
+            cache_data['last_basic_data_updated'] = current_time
+            if new_activities:
+                cache_data['last_rich_data_updated'] = current_time
+            
+            self._save_cache(cache_data)
+            
+            logger.info(f"✅ Updated cache with {len(basic_data)} activities ({len(new_activities)} new)")
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to update cache with batch results: {e}")
     
     # COMMENTED OUT - REDUNDANT METHOD (Phase 5: Diagnostic Methods)
     # def analyze_cache_data_loss(self) -> Dict[str, Any]:
