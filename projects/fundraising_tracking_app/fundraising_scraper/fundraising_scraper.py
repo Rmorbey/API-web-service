@@ -43,11 +43,32 @@ class SmartFundraisingCache:
         os.makedirs(os.path.dirname(cache_file), exist_ok=True)
         os.makedirs(self.backup_dir, exist_ok=True)
         
-        # Initialize cache system on startup
-        self.initialize_cache_system()
+        # Startup phase tracking
+        self._startup_phase = "initialized"
+        self._background_services_started = False
         
-        # Start the scraper
-        self._start_scraper()
+        # Initialize cache system on startup (synchronous)
+        self.initialize_cache_system()
+    
+    def start_background_services(self):
+        """Start background services after main startup is complete (Phase 3)"""
+        if self._background_services_started:
+            logger.info("🔄 Fundraising background services already started")
+            return
+        
+        logger.info("🔄 Starting fundraising background services...")
+        
+        try:
+            # Start the scraper
+            self._start_scraper()
+            
+            self._background_services_started = True
+            self._startup_phase = "background_services_started"
+            logger.info("✅ Fundraising background services started successfully")
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to start fundraising background services: {e}")
+            self._startup_phase = "background_services_failed"
     
     def initialize_cache_system(self):
         """Initialize cache system on server startup"""

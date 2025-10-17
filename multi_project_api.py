@@ -44,28 +44,40 @@ load_dotenv()
 # Create startup initialization function
 @asynccontextmanager
 async def lifespan_with_cache_init(app: FastAPI):
-    """Application lifespan with cache system initialization"""
-    # Startup
-    logger.info("🚀 Starting Multi-Project API with cache initialization...")
+    """Application lifespan with proper startup hierarchy"""
+    # Phase 1: Foundation (Synchronous)
+    logger.info("🚀 Phase 1: Starting Multi-Project API foundation...")
     
     # Initialize HTTP clients first
     async with lifespan_http_clients(app):
-        # Initialize cache systems to start automated refresh threads
+        # Phase 2: Core Services (Synchronous)
+        logger.info("🔄 Phase 2: Initializing core services...")
+        
         try:
-            # Initialize Strava cache system
+            # Initialize Strava cache system (synchronous - no background threads)
             from projects.fundraising_tracking_app.strava_integration.strava_integration_api import get_cache as get_strava_cache
             strava_cache = get_strava_cache()
-            logger.info("✅ Strava cache system initialized with automated refresh")
+            logger.info("✅ Strava cache system initialized (core services)")
             
-            # Initialize Fundraising cache system  
+            # Initialize Fundraising cache system (synchronous - no background threads)
             from projects.fundraising_tracking_app.fundraising_scraper.fundraising_api import get_cache as get_fundraising_cache
             fundraising_cache = get_fundraising_cache()
-            logger.info("✅ Fundraising cache system initialized with automated refresh")
+            logger.info("✅ Fundraising cache system initialized (core services)")
             
-            logger.info("🔄 All automated refresh systems started successfully!")
+            # Phase 3: Background Services (Asynchronous)
+            logger.info("🔄 Phase 3: Starting background services...")
+            
+            # Start background services after core initialization
+            strava_cache.start_background_services()
+            fundraising_cache.start_background_services()
+            
+            logger.info("✅ All services initialized with proper startup hierarchy!")
             
         except Exception as e:
             logger.error(f"❌ Failed to initialize cache systems: {e}")
+        
+        # Phase 4: API Ready
+        logger.info("🚀 Phase 4: API ready - health checks active")
         
         yield
         

@@ -75,15 +75,35 @@ class SmartStravaCache:
         # Thread safety for batch processing
         self._batch_lock = threading.Lock()
         
+        # Startup phase tracking
+        self._startup_phase = "initialized"
+        self._background_services_started = False
         
-        # Start the automated refresh system
-        self._start_automated_refresh()
-        
-        # Start the daily corruption check scheduler
-        self._schedule_daily_corruption_check()
-        
-        # Initialize cache system on startup
+        # Initialize cache system on startup (synchronous)
         self.initialize_cache_system()
+    
+    def start_background_services(self):
+        """Start background services after main startup is complete (Phase 3)"""
+        if self._background_services_started:
+            logger.info("🔄 Background services already started")
+            return
+        
+        logger.info("🔄 Starting background services...")
+        
+        try:
+            # Start the automated refresh system
+            self._start_automated_refresh()
+            
+            # Start the daily corruption check scheduler
+            self._schedule_daily_corruption_check()
+            
+            self._background_services_started = True
+            self._startup_phase = "background_services_started"
+            logger.info("✅ Background services started successfully")
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to start background services: {e}")
+            self._startup_phase = "background_services_failed"
     
     def initialize_cache_system(self):
         """Initialize cache system on server startup"""
@@ -154,8 +174,22 @@ class SmartStravaCache:
             # CRITICAL: Start batch processing in background to avoid blocking startup
             # This allows health checks to respond while batch processing runs
             logger.info("🔄 Starting batch processing in background during startup...")
-            # Don't call _start_batch_processing() here - let check_and_refresh() handle it
-            # to avoid duplicate calls
+            try:
+                # Start batch processing with a timeout to prevent hanging
+                def start_batch_with_timeout():
+                    try:
+                        self._start_batch_processing()
+                    except Exception as e:
+                        logger.error(f"❌ Failed to start batch processing: {e}")
+                
+                batch_startup_thread = threading.Thread(target=start_batch_with_timeout, daemon=True)
+                batch_startup_thread.start()
+                
+                # Don't wait for it - let it run in background
+                logger.info("🔄 Batch processing startup initiated in background")
+                
+            except Exception as e:
+                logger.error(f"❌ Failed to initiate batch processing: {e}")
         elif not trigger_emergency_refresh:
             logger.debug("🔄 Emergency refresh not triggered (called from batch processing)")
         
@@ -1851,9 +1885,36 @@ class SmartStravaCache:
             # Mark batching as in progress
             self._mark_batching_in_progress(True)
             
-            self._batch_thread = threading.Thread(target=self._batch_processing_loop, daemon=True)
+            # Start batch processing with additional safety measures
+            self._batch_thread = threading.Thread(
+                target=self._batch_processing_loop, 
+                daemon=True,
+                name="BatchProcessingThread"
+            )
             self._batch_thread.start()
             logger.info("🏃‍♂️ Batch processing started (20 activities every 15 minutes)")
+            
+            # Add a safety check - if batch processing doesn't start within 60 seconds, mark it as failed
+            def safety_check():
+                time.sleep(60)  # Wait 60 seconds
+                if self._batch_thread and self._batch_thread.is_alive():
+                    # Check if batch processing is actually making progress
+                    try:
+                        cache_data = self._load_cache(trigger_emergency_refresh=False)
+                        if cache_data and cache_data.get("batching_in_progress"):
+                            # Batch processing is running, check if it's stuck
+                            status_time = cache_data.get("batching_status_updated")
+                            if status_time:
+                                status_dt = datetime.fromisoformat(status_time)
+                                if (datetime.now() - status_dt).total_seconds() > 300:  # 5 minutes
+                                    logger.warning("⚠️ Batch processing appears stuck - marking as failed")
+                                    self._mark_batching_in_progress(False)
+                    except Exception as e:
+                        logger.error(f"❌ Safety check failed: {e}")
+            
+            # Start safety check in background
+            safety_thread = threading.Thread(target=safety_check, daemon=True)
+            safety_thread.start()
     
     def _batch_processing_loop(self):
         """Process activities in batches of 20 every 15 minutes using new streamlined architecture"""
@@ -1879,10 +1940,14 @@ class SmartStravaCache:
                         token_error = e
                 
                 # Run token acquisition in thread with timeout
-                token_thread = threading.Thread(target=get_token)
-                token_thread.daemon = True
+                token_thread = threading.Thread(target=get_token, daemon=True)
                 token_thread.start()
                 token_thread.join(timeout=30)  # 30 second timeout
+                
+                # Force cleanup if thread is still alive
+                if token_thread.is_alive():
+                    logger.warning("⚠️ Token thread still alive after timeout - forcing cleanup")
+                    # Don't wait for it - let it die as daemon thread
                 
                 if access_token:
                     logger.info(f"✅ Got access token for entire batch processing session")
