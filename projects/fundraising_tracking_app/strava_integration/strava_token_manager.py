@@ -71,7 +71,7 @@ class StravaTokenManager:
         # In production, only trigger automated update if tokens have actually changed
         if os.getenv("ENVIRONMENT") == "production":
             # Skip DigitalOcean updates if they're causing issues
-            skip_do_updates = os.getenv("SKIP_DIGITALOCEAN_UPDATES", "false").lower() == "true"
+            skip_do_updates = os.getenv("SKIP_DIGITALOCEAN_UPDATES", "true").lower() == "true"  # Default to true
             if skip_do_updates:
                 print("🔄 Skipping DigitalOcean updates (SKIP_DIGITALOCEAN_UPDATES=true)")
                 return
@@ -414,11 +414,13 @@ class StravaTokenManager:
                     print(f"⚠️ Token save failed: {save_error}")
                 else:
                     print(f"⚠️ Token save timed out after 15 seconds - thread still alive: {save_thread.is_alive()}")
+                    print("🔄 Continuing with token refresh despite save timeout...")
                     
             except Exception as e:
                 print(f"⚠️ Token save error: {e}")
+                print("🔄 Continuing with token refresh despite save error...")
             
-            # Update instance tokens
+            # Update instance tokens (always do this regardless of save status)
             self.tokens = new_tokens
             
             # Update cached token to prevent using old token
