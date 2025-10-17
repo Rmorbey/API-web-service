@@ -2085,8 +2085,38 @@ class SmartStravaCache:
             # Step 1: Get a single access token for the entire batch processing session
             try:
                 logger.info(f"🔄 Getting access token for entire batch processing session...")
-                access_token = self.token_manager.get_valid_access_token()
-                logger.info(f"✅ Got access token for entire batch processing session")
+                
+                # Add timeout to token acquisition to prevent hanging
+                import threading
+                import time
+                
+                access_token = None
+                token_error = None
+                
+                def get_token():
+                    nonlocal access_token, token_error
+                    try:
+                        access_token = self.token_manager.get_valid_access_token()
+                    except Exception as e:
+                        token_error = e
+                
+                # Run token acquisition in thread with timeout
+                token_thread = threading.Thread(target=get_token)
+                token_thread.daemon = True
+                token_thread.start()
+                token_thread.join(timeout=30)  # 30 second timeout
+                
+                if access_token:
+                    logger.info(f"✅ Got access token for entire batch processing session")
+                elif token_error:
+                    logger.error(f"❌ Failed to get access token for batch processing: {token_error}")
+                    logger.error(f"❌ Batch processing aborted - cannot proceed without valid token")
+                    return
+                else:
+                    logger.error(f"❌ Token acquisition timed out after 30 seconds")
+                    logger.error(f"❌ Batch processing aborted - cannot proceed without valid token")
+                    return
+                    
             except Exception as e:
                 logger.error(f"❌ Failed to get access token for batch processing: {e}")
                 logger.error(f"❌ Batch processing aborted - cannot proceed without valid token")

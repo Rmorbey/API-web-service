@@ -174,10 +174,17 @@ class StravaTokenManager:
                     
                     # Update environment variables
                     print(f"🔄 Found {len(app_spec.get('services', []))} services in app spec")
+                    service_updated = False
                     for service in app_spec.get("services", []):
                         service_name = service.get("name", "UNKNOWN")
                         print(f"🔄 Checking service: {service_name}")
-                        if service.get("name") == "api":
+                        # Update the first service we find (most apps have only one service)
+                        # or look for common service names including api-web-service
+                        if (service.get("name") == "api" or 
+                            service.get("name") == "web" or 
+                            service.get("name") == "main" or
+                            service.get("name") == "api-web-service" or  # Your specific service name
+                            len(app_spec.get("services", [])) == 1):  # If only one service, update it
                             env_vars = service.get("envs", [])
                             
                             # Update Strava token environment variables
@@ -201,21 +208,33 @@ class StravaTokenManager:
                                     env_vars.append({
                                         "key": key,
                                         "value": value,
-                                        "scope": "RUN_TIME",
+                                        "scope": "RUN_TIME",  # Match existing scope in your app spec
                                         "type": "SECRET"
                                     })
                             
                             service["envs"] = env_vars
+                            service_updated = True
+                            print(f"✅ Updated environment variables for service: {service_name}")
                             break
                     
+                    if not service_updated:
+                        print("⚠️ No service found to update - check service names in app spec")
+                        print(f"Available services: {[s.get('name', 'UNKNOWN') for s in app_spec.get('services', [])]}")
+                        return
+                    
                     # Update the app with timeout
+                    print(f"🔄 Updating DigitalOcean app spec with new tokens...")
                     update_response = requests.put(url, headers=headers, json={"spec": app_spec}, timeout=10)  # Reduced timeout
+                    print(f"🔄 DigitalOcean update response: {update_response.status_code}")
+                    
                     if update_response.status_code == 200:
                         print("✅ DigitalOcean secrets updated successfully")
                         print("🔄 App will restart automatically with new tokens")
                     else:
                         print(f"⚠️ Failed to update DigitalOcean secrets: {update_response.status_code}")
                         print(f"Response: {update_response.text}")
+                        print(f"Request headers: {headers}")
+                        print(f"Request URL: {url}")
                 else:
                     print(f"⚠️ Failed to get app spec: {response.status_code}")
             else:
