@@ -72,6 +72,9 @@ class SmartStravaCache:
         self._last_refresh = None
         self._batch_queue = []
         
+        # Thread safety for batch processing
+        self._batch_lock = threading.Lock()
+        
         
         # Start the automated refresh system
         self._start_automated_refresh()
@@ -1840,16 +1843,17 @@ class SmartStravaCache:
     
     def _start_batch_processing(self):
         """Start batch processing of activities (20 every 15 minutes) using new streamlined architecture"""
-        if self._batch_thread and self._batch_thread.is_alive():
-            logger.info("🏃‍♂️ Batch processing already running, skipping...")
-            return
-        
-        # Mark batching as in progress
-        self._mark_batching_in_progress(True)
-        
-        self._batch_thread = threading.Thread(target=self._batch_processing_loop, daemon=True)
-        self._batch_thread.start()
-        logger.info("🏃‍♂️ Batch processing started (20 activities every 15 minutes)")
+        with self._batch_lock:  # Thread-safe batch thread creation
+            if self._batch_thread and self._batch_thread.is_alive():
+                logger.info("🏃‍♂️ Batch processing already running, skipping...")
+                return
+            
+            # Mark batching as in progress
+            self._mark_batching_in_progress(True)
+            
+            self._batch_thread = threading.Thread(target=self._batch_processing_loop, daemon=True)
+            self._batch_thread.start()
+            logger.info("🏃‍♂️ Batch processing started (20 activities every 15 minutes)")
     
     def _batch_processing_loop(self):
         """Process activities in batches of 20 every 15 minutes using new streamlined architecture"""
@@ -1953,17 +1957,18 @@ class SmartStravaCache:
     #         # Clear emergency refresh flag from cache data
     
     def _mark_batching_in_progress(self, in_progress: bool):
-        """Mark batching as in progress or complete in cache"""
+        """Mark batching as in progress or complete in cache (thread-safe)"""
         try:
-            cache_data = self._load_cache(trigger_emergency_refresh=False)
-            cache_data["batching_in_progress"] = in_progress
-            cache_data["batching_status_updated"] = datetime.now().isoformat()
-            
-            # Save to file and Supabase
-            self._save_cache(cache_data)
-            
-            status = "started" if in_progress else "completed"
-            logger.info(f"🔄 Batching process {status}")
+            with self._batch_lock:  # Thread-safe cache modification
+                cache_data = self._load_cache(trigger_emergency_refresh=False)
+                cache_data["batching_in_progress"] = in_progress
+                cache_data["batching_status_updated"] = datetime.now().isoformat()
+                
+                # Save to file and Supabase
+                self._save_cache(cache_data)
+                
+                status = "started" if in_progress else "completed"
+                logger.info(f"🔄 Batching process {status}")
             
         except Exception as e:
             logger.error(f"❌ Failed to update batching status: {e}")

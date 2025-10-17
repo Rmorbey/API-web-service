@@ -29,6 +29,7 @@ class SmartFundraisingCache:
         self.backup_dir = os.path.join(os.path.dirname(cache_file), "backups")
         self.scraper_thread = None
         self.running = False
+        self._scraper_lock = threading.Lock()  # Thread safety for scraper state
         
         # Cache management
         self._cache_data = None
@@ -83,14 +84,25 @@ class SmartFundraisingCache:
         if self.scraper_thread and self.scraper_thread.is_alive():
             return
         
-        self.running = True
-        self.scraper_thread = threading.Thread(target=self._scraper_loop, daemon=True)
-        self.scraper_thread.start()
-        logger.info("🔄 Fundraising scraper started (15-minute intervals)")
+        with self._scraper_lock:  # Thread-safe scraper start
+            self.running = True
+            self.scraper_thread = threading.Thread(target=self._scraper_loop, daemon=True)
+            self.scraper_thread.start()
+            logger.info("🔄 Fundraising scraper started (15-minute intervals)")
+    
+    def stop_scraper(self):
+        """Stop the fundraising scraper (thread-safe)"""
+        with self._scraper_lock:
+            self.running = False
+            logger.info("🛑 Fundraising scraper stopped")
     
     def _scraper_loop(self):
-        """Main scraper loop - runs every 15 minutes"""
-        while self.running:
+        """Main scraper loop - runs every 15 minutes (thread-safe)"""
+        while True:
+            with self._scraper_lock:  # Thread-safe check of running state
+                if not self.running:
+                    break
+            
             try:
                 logger.info("🔍 Starting fundraising data scrape...")
                 self._perform_smart_refresh()

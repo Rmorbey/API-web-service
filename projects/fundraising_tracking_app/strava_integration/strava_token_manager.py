@@ -47,10 +47,9 @@ class StravaTokenManager:
         # Update in-memory tokens
         self.tokens = tokens
         
-        # Clear cached token to force reload from environment
-        with self._token_lock:
-            self._cached_token = None
-            self._cached_token_expires_at = None
+        # Clear cached token to force reload from environment (no lock needed - already in locked context)
+        self._cached_token = None
+        self._cached_token_expires_at = None
         
         # Log token refresh (without exposing actual tokens)
         print("🔄 NEW STRAVA TOKENS - TRIGGERING AUTOMATED UPDATE:")

@@ -44,6 +44,7 @@ class SecureSupabaseCacheManager:
         self._pending_supabase_saves = []
         self._supabase_retry_thread = None
         self._shutdown_in_progress = False
+        self._retry_lock = threading.Lock()  # Thread safety for retry queue
         
         if self.enabled:
             self._initialize_supabase()
@@ -429,36 +430,38 @@ class SecureSupabaseCacheManager:
         logger.info("🔄 Background Supabase retry thread started")
     
     def _supabase_retry_loop(self):
-        """Background loop to retry failed Supabase saves"""
+        """Background loop to retry failed Supabase saves (thread-safe)"""
         while not self._shutdown_in_progress:
             try:
-                if self._pending_supabase_saves:
-                    save_item = self._pending_supabase_saves[0]
-                    
-                    # Try to save
-                    success = self.save_cache(
-                        save_item['cache_type'],
-                        save_item['data'],
-                        save_item['last_fetch'],
-                        save_item['last_rich_fetch'],
-                        save_item['project_id']
-                    )
-                    
-                    if success:
-                        # Success - remove from queue
-                        self._pending_supabase_saves.pop(0)
-                        logger.info("✅ Background retry successful")
-                    else:
-                        # Still failing, increment retry count
-                        save_item['retry_count'] += 1
+                with self._retry_lock:  # Thread-safe access to retry queue
+                    if self._pending_supabase_saves:
+                        save_item = self._pending_supabase_saves[0]
                         
-                        if save_item['retry_count'] > 10:  # Max 10 retries
-                            logger.error("Max retries exceeded, removing from queue")
+                        # Try to save
+                        success = self.save_cache(
+                            save_item['cache_type'],
+                            save_item['data'],
+                            save_item['last_fetch'],
+                            save_item['last_rich_fetch'],
+                            save_item['project_id']
+                        )
+                        
+                        if success:
+                            # Success - remove from queue
                             self._pending_supabase_saves.pop(0)
+                            logger.info("✅ Background retry successful")
                         else:
-                            # Wait longer before next retry
-                            time.sleep(300)  # 5 minutes
-                else:
+                            # Still failing, increment retry count
+                            save_item['retry_count'] += 1
+                            
+                            if save_item['retry_count'] > 10:  # Max 10 retries
+                                logger.error("Max retries exceeded, removing from queue")
+                                self._pending_supabase_saves.pop(0)
+                            else:
+                                # Wait longer before next retry
+                                time.sleep(300)  # 5 minutes
+                
+                if not self._pending_supabase_saves:
                     # No pending saves, wait
                     time.sleep(60)  # Check every minute
                     
