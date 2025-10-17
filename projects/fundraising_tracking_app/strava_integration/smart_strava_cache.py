@@ -1054,9 +1054,11 @@ class SmartStravaCache:
             
             # Add detailed logging for headers
             logger.info("🔄 Step 2: Creating headers...")
-            headers = {'Authorization': f'Bearer {access_token}'}
+            # Fix double Bearer issue - ensure token doesn't already have Bearer prefix
+            clean_token = access_token.replace('Bearer ', '') if access_token else ''
+            headers = {'Authorization': f'Bearer {clean_token}'}
             logger.info(f"🔄 Step 2 Complete: Headers created successfully")
-            logger.info(f"🔄 Step 2b: Access token length: {len(access_token) if access_token else 0}")
+            logger.info(f"🔄 Step 2b: Access token length: {len(clean_token) if clean_token else 0}")
             
             all_activities = []
             page = 1

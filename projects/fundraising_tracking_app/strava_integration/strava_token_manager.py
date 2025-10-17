@@ -75,6 +75,15 @@ class StravaTokenManager:
             if skip_do_updates:
                 print("🔄 Skipping DigitalOcean updates (SKIP_DIGITALOCEAN_UPDATES=true)")
                 return
+            
+            # Emergency bypass - if we're in a restart loop, skip updates
+            if hasattr(self, '_update_count'):
+                self._update_count += 1
+                if self._update_count > 3:  # More than 3 updates in this session
+                    print("🔄 Emergency bypass: Too many DigitalOcean updates, skipping to prevent restart loop")
+                    return
+            else:
+                self._update_count = 1
                 
             print("🔄 Production environment detected - checking for token updates...")
             # Check if tokens have actually changed to avoid unnecessary restarts
@@ -412,8 +421,14 @@ class StravaTokenManager:
             # Update instance tokens
             self.tokens = new_tokens
             
+            # Update cached token to prevent using old token
+            with self._token_lock:
+                self._cached_token = token_data["access_token"]
+                self._cached_token_expires_at = expires_at
+            
             expires_datetime = datetime.fromtimestamp(expires_at)
             print(f"✅ Token refreshed successfully, expires at: {expires_datetime}")
+            print(f"🔄 Updated cached token: {token_data['access_token'][:20]}...")
             
             return token_data["access_token"]
             
