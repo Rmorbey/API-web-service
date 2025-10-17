@@ -315,23 +315,24 @@ class SmartStravaCache:
         logger.info(f"🆕 Found {len(new_activities)} new activities out of {len(basic_data)} total")
         return new_activities
     
-    def _fetch_rich_data_for_new_activities(self, new_activities: List[Dict[str, Any]]) -> Dict[int, Dict[str, Any]]:
+    def _fetch_rich_data_for_new_activities(self, new_activities: List[Dict[str, Any]], access_token: str = None) -> Dict[int, Dict[str, Any]]:
         """Fetch rich data (photos + comments) only for new activities"""
         rich_data = {}
         
-        # Get a single token for the entire batch to avoid deadlocks
-        try:
-            logger.info(f"🔄 Getting access token for batch of {len(new_activities)} activities...")
-            access_token = self.token_manager.get_valid_access_token()
-            logger.info(f"✅ Got access token for batch processing")
-        except Exception as e:
-            logger.error(f"❌ Failed to get access token for batch: {e}")
-            # Return empty rich data for all activities
-            for activity in new_activities:
-                activity_id = activity.get("id")
-                if activity_id:
-                    rich_data[activity_id] = {"photos": {}, "comments": []}
-            return rich_data
+        # Use provided token or get a new one (fallback for backward compatibility)
+        if not access_token:
+            try:
+                logger.info(f"🔄 Getting access token for batch of {len(new_activities)} activities...")
+                access_token = self.token_manager.get_valid_access_token()
+                logger.info(f"✅ Got access token for batch processing")
+            except Exception as e:
+                logger.error(f"❌ Failed to get access token for batch: {e}")
+                # Return empty rich data for all activities
+                for activity in new_activities:
+                    activity_id = activity.get("id")
+                    if activity_id:
+                        rich_data[activity_id] = {"photos": {}, "comments": []}
+                return rich_data
         
         for activity in new_activities:
             activity_id = activity.get("id")
@@ -2077,19 +2078,29 @@ class SmartStravaCache:
         try:
             logger.info("🏃‍♂️ Starting batch processing with new streamlined architecture...")
             
-            # Step 1: Fetch fresh basic data from Strava (following our new flow)
+            # Step 1: Get a single access token for the entire batch processing session
+            try:
+                logger.info(f"🔄 Getting access token for entire batch processing session...")
+                access_token = self.token_manager.get_valid_access_token()
+                logger.info(f"✅ Got access token for entire batch processing session")
+            except Exception as e:
+                logger.error(f"❌ Failed to get access token for batch processing: {e}")
+                logger.error(f"❌ Batch processing aborted - cannot proceed without valid token")
+                return
+            
+            # Step 2: Fetch fresh basic data from Strava (following our new flow)
             raw_data = self._fetch_from_strava(200)
             logger.info(f"🔄 Fetched {len(raw_data)} raw activities from Strava")
             
-            # Step 1b: Filter for runs/rides from May 22nd, 2025 onwards
+            # Step 2b: Filter for runs/rides from May 22nd, 2025 onwards
             basic_data = self._filter_activities(raw_data)
             logger.info(f"🔄 Filtered to {len(basic_data)} runs/rides from May 22nd, 2025 onwards")
             
-            # Step 2: Identify new activities (following our new flow)
+            # Step 3: Identify new activities (following our new flow)
             new_activities = self._identify_new_activities(basic_data)
             logger.info(f"🆕 Found {len(new_activities)} new activities")
             
-            # Step 3: Process new activities in batches of 20 every 15 minutes
+            # Step 4: Process new activities in batches of 20 every 15 minutes
             if new_activities:
                 batch_size = 20
                 for i in range(0, len(new_activities), batch_size):
@@ -2097,8 +2108,8 @@ class SmartStravaCache:
                     
                     logger.info(f"🏃‍♂️ Processing batch {i//batch_size + 1}: {len(batch)} new activities")
                     
-                    # Process the batch (fetch rich data for new activities)
-                    self._process_activity_batch(batch)
+                    # Process the batch (fetch rich data for new activities) with the pre-obtained token
+                    self._process_activity_batch(batch, access_token=access_token)
                     
                     # Wait 15 minutes between batches (except for the last batch)
                     if i + batch_size < len(new_activities):
@@ -2202,13 +2213,13 @@ class SmartStravaCache:
     # _get_activities_needing_update removed - redundant in streamlined logic
     
     # COMMENTED OUT - OLD BATCH PROCESSING LOGIC (Replaced with new simplified system)
-    def _process_activity_batch(self, batch: List[Dict[str, Any]]):
+    def _process_activity_batch(self, batch: List[Dict[str, Any]], access_token: str = None):
         """Process a batch of new activities using new streamlined architecture"""
         try:
             logger.info(f"🏃‍♂️ Processing batch of {len(batch)} new activities...")
             
-            # Fetch rich data for all activities in this batch
-            rich_data = self._fetch_rich_data_for_new_activities(batch)
+            # Fetch rich data for all activities in this batch using the pre-obtained token
+            rich_data = self._fetch_rich_data_for_new_activities(batch, access_token=access_token)
             
             # Update each activity with rich data
             for activity in batch:
