@@ -148,10 +148,10 @@ class SmartStravaCache:
         if not self._emergency_refresh_in_progress:
             logger.warning("🚨 All cache sources failed, triggering emergency refresh...")
             
-            # CRITICAL: Start emergency refresh in background to avoid blocking startup
-            # This allows health checks to respond while emergency refresh runs
-            logger.info("🔄 Starting emergency refresh in background during startup...")
-            self._trigger_emergency_refresh()
+            # CRITICAL: Start batch processing in background to avoid blocking startup
+            # This allows health checks to respond while batch processing runs
+            logger.info("🔄 Starting batch processing in background during startup...")
+            self._start_batch_processing()
         else:
             logger.info("🔄 Emergency refresh already in progress, skipping...")
         
