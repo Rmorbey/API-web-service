@@ -151,7 +151,8 @@ class SmartStravaCache:
             # CRITICAL: Start batch processing in background to avoid blocking startup
             # This allows health checks to respond while batch processing runs
             logger.info("🔄 Starting batch processing in background during startup...")
-            self._start_batch_processing()
+            # Don't call _start_batch_processing() here - let check_and_refresh() handle it
+            # to avoid duplicate calls
         elif not trigger_emergency_refresh:
             logger.debug("🔄 Emergency refresh not triggered (called from batch processing)")
         
