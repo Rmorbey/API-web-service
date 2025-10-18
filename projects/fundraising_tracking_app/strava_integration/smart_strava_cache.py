@@ -102,10 +102,14 @@ class SmartStravaCache:
                     time.sleep(30)  # Wait 30 seconds for main app to fully start
                     logger.info("🔄 Starting deferred emergency refresh...")
                     try:
+                        logger.info("🔄 Calling _start_batch_processing()...")
                         # Use the same emergency refresh logic but with better error handling
                         self._start_batch_processing()
+                        logger.info("✅ _start_batch_processing() completed successfully")
                     except Exception as e:
                         logger.error(f"❌ Deferred emergency refresh failed: {e}")
+                        import traceback
+                        logger.error(f"❌ Full traceback: {traceback.format_exc()}")
                 
                 emergency_thread = threading.Thread(target=deferred_emergency_refresh, daemon=True)
                 emergency_thread.start()
@@ -1939,44 +1943,56 @@ class SmartStravaCache:
     
     def _start_batch_processing(self):
         """Start batch processing of activities (20 every 15 minutes) using new streamlined architecture"""
-        with self._batch_lock:  # Thread-safe batch thread creation
-            if self._batch_thread and self._batch_thread.is_alive():
-                logger.info("🏃‍♂️ Batch processing already running, skipping...")
-                return
-            
-            # Mark batching as in progress
-            self._mark_batching_in_progress(True)
-            
-            # Start batch processing with additional safety measures
-            self._batch_thread = threading.Thread(
-                target=self._batch_processing_loop, 
-                daemon=True,
-                name="BatchProcessingThread"
-            )
-            self._batch_thread.start()
-            logger.info("🏃‍♂️ Batch processing started (20 activities every 15 minutes)")
-            
-            # Add a safety check - if batch processing doesn't start within 60 seconds, mark it as failed
-            def safety_check():
-                time.sleep(60)  # Wait 60 seconds
+        logger.info("🔄 _start_batch_processing() called")
+        try:
+            with self._batch_lock:  # Thread-safe batch thread creation
+                logger.info("🔄 Acquired batch lock")
                 if self._batch_thread and self._batch_thread.is_alive():
-                    # Check if batch processing is actually making progress
-                    try:
-                        cache_data = self._load_cache(trigger_emergency_refresh=False)
-                        if cache_data and cache_data.get("batching_in_progress"):
-                            # Batch processing is running, check if it's stuck
-                            status_time = cache_data.get("batching_status_updated")
-                            if status_time:
-                                status_dt = datetime.fromisoformat(status_time)
-                                if (datetime.now() - status_dt).total_seconds() > 300:  # 5 minutes
-                                    logger.warning("⚠️ Batch processing appears stuck - marking as failed")
-                                    self._mark_batching_in_progress(False)
-                    except Exception as e:
-                        logger.error(f"❌ Safety check failed: {e}")
-            
-            # Start safety check in background
-            safety_thread = threading.Thread(target=safety_check, daemon=True)
-            safety_thread.start()
+                    logger.info("🏃‍♂️ Batch processing already running, skipping...")
+                    return
+                
+                logger.info("🔄 Marking batching as in progress...")
+                # Mark batching as in progress
+                self._mark_batching_in_progress(True)
+                
+                logger.info("🔄 Creating batch processing thread...")
+                # Start batch processing with additional safety measures
+                self._batch_thread = threading.Thread(
+                    target=self._batch_processing_loop, 
+                    daemon=True,
+                    name="BatchProcessingThread"
+                )
+                logger.info("🔄 Starting batch processing thread...")
+                self._batch_thread.start()
+                logger.info("🏃‍♂️ Batch processing started (20 activities every 15 minutes)")
+                
+                # Add a safety check - if batch processing doesn't start within 60 seconds, mark it as failed
+                def safety_check():
+                    time.sleep(60)  # Wait 60 seconds
+                    if self._batch_thread and self._batch_thread.is_alive():
+                        # Check if batch processing is actually making progress
+                        try:
+                            cache_data = self._load_cache(trigger_emergency_refresh=False)
+                            if cache_data and cache_data.get("batching_in_progress"):
+                                # Batch processing is running, check if it's stuck
+                                status_time = cache_data.get("batching_status_updated")
+                                if status_time:
+                                    status_dt = datetime.fromisoformat(status_time)
+                                    if (datetime.now() - status_dt).total_seconds() > 300:  # 5 minutes
+                                        logger.warning("⚠️ Batch processing appears stuck - marking as failed")
+                                        self._mark_batching_in_progress(False)
+                        except Exception as e:
+                            logger.error(f"❌ Safety check failed: {e}")
+                
+                # Start safety check in background
+                safety_thread = threading.Thread(target=safety_check, daemon=True)
+                safety_thread.start()
+                
+        except Exception as e:
+            logger.error(f"❌ Error in _start_batch_processing: {e}")
+            import traceback
+            logger.error(f"❌ Full traceback: {traceback.format_exc()}")
+            raise
     
     def _batch_processing_loop(self):
         """Process activities in batches of 20 every 15 minutes using new streamlined architecture"""
