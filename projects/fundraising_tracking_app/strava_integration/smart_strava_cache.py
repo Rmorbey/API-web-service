@@ -1248,3 +1248,272 @@ class SmartStravaCache:
         except Exception as e:
             logger.error(f"Cache integrity check error: {e}")
             return False
+
+    def _start_automated_refresh(self):
+        """Start automated refresh system (8-hour intervals)"""
+        try:
+            logger.info("🔄 Automated refresh system started (8-hour intervals)")
+            # Start the automated refresh loop in a background thread
+            import threading
+            refresh_thread = threading.Thread(target=self._automated_refresh_loop, daemon=True)
+            refresh_thread.start()
+        except Exception as e:
+            logger.error(f"❌ Failed to start automated refresh: {e}")
+
+    def _automated_refresh_loop(self):
+        """Main loop for automated refresh every 8 hours"""
+        while True:
+            try:
+                now = datetime.now()
+                
+                # Check if it's time for a refresh (00:00, 06:00, 12:00, 18:00)
+                current_hour = now.hour
+                if current_hour in [0, 6, 12, 18] and (self._last_refresh is None or 
+                    (now - self._last_refresh).total_seconds() > 3600):  # At least 1 hour since last refresh
+                    
+                    logger.info(f"🔄 Starting scheduled refresh at {now.strftime('%H:%M')}")
+                    self._perform_scheduled_refresh()
+                    self._last_refresh = now
+                
+                # Sleep for 1 hour and check again
+                time.sleep(3600)
+                
+            except Exception as e:
+                logger.error(f"❌ Error in automated refresh loop: {e}")
+                time.sleep(300)  # Wait 5 minutes before retrying
+
+    def _perform_scheduled_refresh(self):
+        """Perform a scheduled refresh using streamlined logic"""
+        try:
+            logger.info("🔄 Normal scheduled refresh...")
+            self._start_batch_processing()
+            
+        except Exception as e:
+            logger.error(f"❌ Scheduled refresh failed: {e}")
+
+    def _start_batch_processing(self):
+        """Start batch processing of activities (20 every 15 minutes) using new streamlined architecture"""
+        logger.info("🔄 _start_batch_processing() called")
+        try:
+            with self._batch_lock:  # Thread-safe batch thread creation
+                logger.info("🔄 Acquired batch lock")
+                if self._batch_thread and self._batch_thread.is_alive():
+                    logger.info("🏃‍♂️ Batch processing already running, skipping...")
+                    return
+                
+                logger.info("🔄 Marking batching as in progress...")
+                # Mark batching as in progress
+                self._mark_batching_in_progress(True)
+                
+                logger.info("🔄 Creating batch processing thread...")
+                # Start batch processing with additional safety measures
+                self._batch_thread = threading.Thread(
+                    target=self._batch_processing_loop, 
+                    daemon=True,
+                    name="BatchProcessingThread"
+                )
+                logger.info("🔄 Starting batch processing thread...")
+                self._batch_thread.start()
+                logger.info("🏃‍♂️ Batch processing started (20 activities every 15 minutes)")
+                
+        except Exception as e:
+            logger.error(f"❌ Error in _start_batch_processing: {e}")
+            import traceback
+            logger.error(f"❌ Full traceback: {traceback.format_exc()}")
+            raise
+
+    def _batch_processing_loop(self):
+        """Process activities in batches of 20 every 15 minutes using new streamlined architecture"""
+        try:
+            logger.info("🏃‍♂️ Starting batch processing with new streamlined architecture...")
+            
+            # Import required modules at the start
+            import threading
+            import time
+            
+            # Wait a bit to ensure main application has fully started
+            logger.info("🔄 Waiting for main application to fully start...")
+            time.sleep(20)  # Give main app more time to start
+            
+            # Step 1: Get a single access token for the entire batch processing session
+            logger.info(f"🔄 Getting access token for entire batch processing session...")
+            
+            # Use a simpler, more reliable token acquisition approach
+            access_token = None
+            try:
+                # Try to get token directly with a shorter timeout
+                access_token = self.token_manager.get_valid_access_token()
+                logger.info(f"✅ Got access token for entire batch processing session")
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to get access token initially: {e}")
+                logger.info("🔄 Will acquire tokens individually for each batch")
+                access_token = None
+            
+            # Step 2: Fetch fresh basic data from Strava (following our new flow)
+            raw_data = self._fetch_from_strava(200)
+            logger.info(f"🔄 Fetched {len(raw_data)} raw activities from Strava")
+            
+            # Step 2b: Filter for runs/rides from May 22nd, 2025 onwards
+            basic_data = self._filter_activities(raw_data)
+            logger.info(f"🔄 Filtered to {len(basic_data)} runs/rides from May 22nd, 2025 onwards")
+            
+            # Step 3: Identify new activities (following our new flow)
+            new_activities = self._identify_new_activities(basic_data)
+            logger.info(f"🆕 Found {len(new_activities)} new activities")
+            
+            # Step 4: Process new activities in batches of 20 every 15 minutes
+            if new_activities:
+                batch_size = 20
+                for i in range(0, len(new_activities), batch_size):
+                    batch = new_activities[i:i + batch_size]
+                    
+                    logger.info(f"🏃‍♂️ Processing batch {i//batch_size + 1}: {len(batch)} new activities")
+                    
+                    # Process the batch (fetch rich data for new activities) with the pre-obtained token
+                    self._process_activity_batch(batch, access_token=access_token)
+                    
+                    # Wait 15 minutes between batches (except for the last batch)
+                    if i + batch_size < len(new_activities):
+                        logger.info("⏰ Waiting 15 minutes before next batch...")
+                        time.sleep(900)  # 15 minutes
+            else:
+                logger.info("✅ No new activities to process")
+            
+            # Step 4: Update cache with all data
+            self._update_cache_with_batch_results(basic_data, new_activities)
+            
+            # Step 5: Mark batching as complete
+            self._mark_batching_in_progress(False)
+            
+            logger.info("✅ Batch processing completed successfully")
+            
+        except Exception as e:
+            logger.error(f"❌ Batch processing failed: {e}")
+            self._mark_batching_in_progress(False)
+
+    def _process_activity_batch(self, batch: List[Dict[str, Any]], access_token: str = None):
+        """Process a batch of new activities using new streamlined architecture"""
+        try:
+            logger.info(f"🏃‍♂️ Processing batch of {len(batch)} new activities...")
+            
+            # Fetch rich data for all activities in this batch using the pre-obtained token
+            rich_data = self._fetch_rich_data_for_new_activities(batch, access_token=access_token)
+            
+            # Update each activity with rich data
+            for activity in batch:
+                activity_id = activity.get('id')
+                if activity_id and activity_id in rich_data:
+                    # Update activity with rich data
+                    activity.update(rich_data[activity_id])
+                    
+                    # Update expiration flags
+                    activity = self._update_activity_expiration_flags(activity)
+                    
+                    logger.info(f"✅ Updated activity {activity_id} with rich data")
+                else:
+                    logger.warning(f"⚠️ No rich data found for activity {activity_id}")
+                
+                time.sleep(1)  # Small delay to respect API limits
+                
+        except Exception as e:
+            logger.error(f"❌ Error processing activity batch: {e}")
+
+    def _mark_batching_in_progress(self, in_progress: bool):
+        """Mark batching as in progress or complete in cache (thread-safe)"""
+        try:
+            logger.info("🔄 _mark_batching_in_progress: Starting...")
+            # Note: This method is called from within _start_batch_processing() which already holds _batch_lock
+            # So we don't need to acquire the lock again to avoid deadlock
+            
+            # Use existing cache data or create minimal cache structure
+            if self._cache_data is not None:
+                cache_data = self._cache_data.copy()
+                logger.info("🔄 _mark_batching_in_progress: Using existing cache data")
+            else:
+                # Create minimal cache structure for startup
+                cache_data = {
+                    "timestamp": None,
+                    "activities": [],
+                    "batching_in_progress": False,
+                    "batching_status_updated": None
+                }
+                logger.info("🔄 _mark_batching_in_progress: Created minimal cache structure")
+            
+            cache_data["batching_in_progress"] = in_progress
+            cache_data["batching_status_updated"] = datetime.now().isoformat()
+            logger.info("🔄 _mark_batching_in_progress: Updated cache data with batching status")
+            
+            # Update in-memory cache immediately (don't wait for Supabase save)
+            self._cache_data = cache_data
+            self._cache_loaded_at = datetime.now()
+            logger.info("🔄 _mark_batching_in_progress: Updated in-memory cache")
+            
+            # Skip Supabase operations during startup to avoid hanging
+            logger.info("🔄 Skipping Supabase operations during batching startup to avoid hanging")
+            
+            status = "started" if in_progress else "completed"
+            logger.info(f"🔄 Batching process {status}")
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to update batching status: {e}")
+            import traceback
+            logger.error(f"❌ Full traceback: {traceback.format_exc()}")
+
+    def _identify_new_activities(self, basic_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Compare fresh basic data with database to identify new activities"""
+        try:
+            # Load existing cache to compare
+            existing_cache = self._load_cache(trigger_emergency_refresh=False)
+            existing_activities = existing_cache.get("activities", [])
+            existing_ids = {activity.get("id") for activity in existing_activities}
+            
+            # Find new activities
+            new_activities = []
+            for activity in basic_data:
+                activity_id = activity.get("id")
+                if activity_id and activity_id not in existing_ids:
+                    new_activities.append(activity)
+                    logger.info(f"🆕 New activity identified: {activity_id} - {activity.get('name', 'Unknown')}")
+            
+            logger.info(f"🆕 Found {len(new_activities)} new activities out of {len(basic_data)} total")
+            return new_activities
+            
+        except Exception as e:
+            logger.error(f"❌ Error identifying new activities: {e}")
+            return basic_data  # Return all activities as new if comparison fails
+
+    def _update_activity_expiration_flags(self, activity: Dict[str, Any]) -> Dict[str, Any]:
+        """Update photos_fetch_expired and comments_fetch_expired flags for an activity"""
+        try:
+            activity_date = activity.get('start_date_local', '')
+            if activity_date:
+                activity['photos_fetch_expired'] = self._check_photos_fetch_expired(activity_date)
+                activity['comments_fetch_expired'] = self._check_comments_fetch_expired(activity_date)
+            return activity
+        except Exception as e:
+            logger.warning(f"Error updating expiration flags: {e}")
+            return activity
+
+    def _check_photos_fetch_expired(self, activity_date: str) -> bool:
+        """Check if photos fetching should be skipped (24+ hours after activity date)"""
+        try:
+            activity_dt = datetime.fromisoformat(activity_date.replace('Z', '+00:00'))
+            if activity_dt.tzinfo is None:
+                activity_dt = activity_dt.replace(tzinfo=timezone.utc)
+            time_since_activity = datetime.now(timezone.utc) - activity_dt
+            return time_since_activity >= timedelta(hours=24)
+        except Exception as e:
+            logger.warning(f"Error parsing activity date {activity_date}: {e}")
+            return False  # If parsing fails, don't skip
+
+    def _check_comments_fetch_expired(self, activity_date: str) -> bool:
+        """Check if comments fetching should be skipped (168+ hours after activity date)"""
+        try:
+            activity_dt = datetime.fromisoformat(activity_date.replace('Z', '+00:00'))
+            if activity_dt.tzinfo is None:
+                activity_dt = activity_dt.replace(tzinfo=timezone.utc)
+            time_since_activity = datetime.now(timezone.utc) - activity_dt
+            return time_since_activity >= timedelta(hours=168)  # 1 week
+        except Exception as e:
+            logger.warning(f"Error parsing activity date {activity_date}: {e}")
+            return False  # If parsing fails, don't skip
