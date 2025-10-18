@@ -2022,8 +2022,10 @@ class SmartStravaCache:
                     nonlocal access_token, token_error
                     try:
                         access_token = self.token_manager.get_valid_access_token()
+                        logger.info(f"✅ Token acquired successfully in background thread")
                     except Exception as e:
                         token_error = e
+                        logger.error(f"❌ Token acquisition failed in background thread: {e}")
                 
                 # Run token acquisition in thread with timeout
                 token_thread = threading.Thread(target=get_token, daemon=True)
@@ -2046,13 +2048,13 @@ class SmartStravaCache:
                         if access_token:
                             logger.info(f"✅ Got access token after extended timeout")
                         else:
-                            logger.error(f"❌ Token acquisition timed out after 35 seconds")
-                            logger.error(f"❌ Batch processing aborted - cannot proceed without valid token")
-                            return
+                            logger.warning("⚠️ Token acquisition timed out after 35 seconds - but token refresh may have succeeded")
+                            logger.info("🔄 Continuing batch processing - will acquire token when needed")
+                            # Don't abort - let the batch processing continue and acquire tokens as needed
                     else:
-                        logger.error(f"❌ Token acquisition timed out after 30 seconds")
-                        logger.error(f"❌ Batch processing aborted - cannot proceed without valid token")
-                        return
+                        logger.warning("⚠️ Token acquisition timed out after 30 seconds - but token refresh may have succeeded")
+                        logger.info("🔄 Continuing batch processing - will acquire token when needed")
+                        # Don't abort - let the batch processing continue and acquire tokens as needed
                     
             except Exception as e:
                 logger.error(f"❌ Failed to get access token for batch processing: {e}")
