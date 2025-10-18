@@ -429,16 +429,35 @@ class SmartStravaCache:
         if not access_token:
             try:
                 logger.info(f"🔄 Getting access token for batch of {len(new_activities)} activities...")
+                # Use a more reliable token acquisition approach
                 access_token = self.token_manager.get_valid_access_token()
                 logger.info(f"✅ Got access token for batch processing")
             except Exception as e:
                 logger.error(f"❌ Failed to get access token for batch: {e}")
-                # Return empty rich data for all activities
-                for activity in new_activities:
-                    activity_id = activity.get("id")
-                    if activity_id:
-                        rich_data[activity_id] = {"photos": {}, "comments": []}
-                return rich_data
+                logger.warning("⚠️ Continuing without rich data - will use fallback token from environment")
+                # Try to use fallback token from environment
+                try:
+                    import os
+                    fallback_token = os.getenv("STRAVA_ACCESS_TOKEN")
+                    if fallback_token:
+                        access_token = fallback_token
+                        logger.info("🔄 Using fallback token from environment variables")
+                    else:
+                        logger.error("❌ No fallback token available")
+                        # Return empty rich data for all activities
+                        for activity in new_activities:
+                            activity_id = activity.get("id")
+                            if activity_id:
+                                rich_data[activity_id] = {"photos": {}, "comments": []}
+                        return rich_data
+                except Exception as fallback_error:
+                    logger.error(f"❌ Fallback token acquisition failed: {fallback_error}")
+                    # Return empty rich data for all activities
+                    for activity in new_activities:
+                        activity_id = activity.get("id")
+                        if activity_id:
+                            rich_data[activity_id] = {"photos": {}, "comments": []}
+                    return rich_data
         
         for activity in new_activities:
             activity_id = activity.get("id")
@@ -1040,170 +1059,63 @@ class SmartStravaCache:
         try:
             logger.info(f"🔄 Starting Strava API fetch for {limit} activities...")
             
-            # Note: Removed signal-based timeout as it doesn't work in background threads
-            # The _make_api_call_with_retry method already has built-in timeouts
-            
-            # Add detailed logging for token retrieval
+            # Step 1: Get access token
             logger.info("🔄 Step 1: Getting access token...")
             try:
-                # Add timeout to token retrieval to prevent hanging
-                import threading
-                import time
-                
-                access_token = None
-                token_error = None
-                
-                def get_token():
-                    nonlocal access_token, token_error
-                    try:
-                        access_token = self.token_manager.get_valid_access_token()
-                    except Exception as e:
-                        token_error = e
-                
-                # Start token retrieval in a separate thread with timeout
-                token_thread = threading.Thread(target=get_token)
-                token_thread.daemon = True
-                token_thread.start()
-                token_thread.join(timeout=30)  # 30 second timeout
-                
-                if token_thread.is_alive():
-                    logger.error("❌ Token manager hanging - using fallback")
-                    # Try to get fresh token using refresh token as fallback
-                    import os
-                    refresh_token = os.getenv("STRAVA_REFRESH_TOKEN")
-                    if refresh_token:
-                        logger.warning("🔄 Using refresh token to get fresh access token")
-                        try:
-                            # Use the token manager's refresh method directly with timeout
-                            import threading
-                            import time
-                            
-                            access_token = None
-                            refresh_error = None
-                            
-                            def refresh_token_worker():
-                                nonlocal access_token, refresh_error
-                                try:
-                                    access_token = self.token_manager._refresh_access_token(refresh_token)
-                                except Exception as e:
-                                    refresh_error = e
-                            
-                            # Start token refresh in a separate thread with timeout
-                            refresh_thread = threading.Thread(target=refresh_token_worker)
-                            refresh_thread.daemon = True
-                            refresh_thread.start()
-                            refresh_thread.join(timeout=30)  # 30 second timeout
-                            
-                            if refresh_thread.is_alive():
-                                logger.error("❌ Fallback token refresh hanging - trying to get fresh token")
-                                # Wait a moment for the token refresh to complete and save to environment
-                                import time
-                                time.sleep(3)
-                                
-                                # Try to get the fresh token from the token manager's internal state
-                                try:
-                                    # Check if the token manager has a cached token
-                                    if hasattr(self.token_manager, '_cached_token') and self.token_manager._cached_token:
-                                        access_token = self.token_manager._cached_token
-                                        logger.warning(f"🔄 Using cached token from token manager: {access_token[:20]}...")
-                                    else:
-                                        # Try to get the fresh token from the token manager's tokens dict
-                                        if hasattr(self.token_manager, 'tokens') and self.token_manager.tokens.get('access_token'):
-                                            access_token = self.token_manager.tokens['access_token']
-                                            logger.warning(f"🔄 Using fresh token from token manager: {access_token[:20]}...")
-                                        else:
-                                            # Fall back to environment token
-                                            import os
-                                            env_token = os.getenv("STRAVA_ACCESS_TOKEN")
-                                            if env_token:
-                                                access_token = env_token
-                                                logger.warning(f"🔄 Using environment access token as last resort: {env_token[:20]}...")
-                                            else:
-                                                raise Exception("Fallback token refresh hanging and no token available")
-                                except Exception as e:
-                                    logger.error(f"❌ Failed to get token from token manager: {e}")
-                                    raise Exception("Fallback token refresh hanging and no token available")
-                            elif refresh_error:
-                                logger.error(f"❌ Fallback token refresh failed: {refresh_error}")
-                                raise Exception(f"Token manager hanging and fallback refresh failed: {refresh_error}")
-                            else:
-                                logger.info(f"🔄 Successfully got fresh access token via fallback: {access_token[:20] if access_token else 'None'}...")
-                                
-                        except Exception as e:
-                            logger.error(f"❌ Fallback token refresh failed: {e}")
-                            raise Exception(f"Token manager hanging and fallback refresh failed: {e}")
-                    else:
-                        raise Exception("Token manager hanging and no refresh token available")
-                elif token_error:
-                    logger.error(f"❌ Failed to get access token: {token_error}")
-                    # Try to get token directly from environment as fallback
-                    import os
-                    fallback_token = os.getenv("STRAVA_ACCESS_TOKEN")
-                    if fallback_token:
-                        logger.warning("🔄 Using fallback token from environment variables")
-                        access_token = fallback_token
-                    else:
-                        raise Exception(f"No access token available: {token_error}")
-                else:
-                    logger.info(f"🔄 Step 1 Complete: Access token received: {access_token[:20] if access_token else 'None'}...")
-                    
+                access_token = self.token_manager.get_valid_access_token()
+                logger.info("✅ Got access token for Strava API fetch")
             except Exception as e:
                 logger.error(f"❌ Failed to get access token: {e}")
-                # Try to get token directly from environment as fallback
+                logger.warning("🔄 Using fallback token from environment variables")
                 import os
                 fallback_token = os.getenv("STRAVA_ACCESS_TOKEN")
                 if fallback_token:
-                    logger.warning("🔄 Using fallback token from environment variables")
                     access_token = fallback_token
+                    logger.info("🔄 Using fallback token from environment variables")
                 else:
-                    raise Exception(f"No access token available: {e}")
+                    logger.error("❌ No fallback token available")
+                    return []
             
-            # Add detailed logging for headers
+            # Step 2: Create headers
             logger.info("🔄 Step 2: Creating headers...")
-            # Fix double Bearer issue - ensure token doesn't already have Bearer prefix
-            clean_token = access_token.replace('Bearer ', '') if access_token else ''
-            headers = {'Authorization': f'Bearer {clean_token}'}
-            logger.info(f"🔄 Step 2 Complete: Headers created successfully")
-            logger.info(f"🔄 Step 2b: Access token length: {len(clean_token) if clean_token else 0}")
+            headers = {"Authorization": f"Bearer {access_token}"}
+            logger.info("🔄 Step 2 Complete: Headers created successfully")
             
-            all_activities = []
-            page = 1
-            per_page = 200  # Strava's maximum per page
-            max_pages = 50  # Safety limit to prevent infinite loops
+            # Step 3: Fetch activities from Strava API
+            logger.info("🔄 Step 3: Fetching page 1 from URL: https://www.strava.com/api/v3/athlete/activities?per_page=200&page=1")
+            logger.info("🔄 Step 3a: Making API call with retry...")
+            logger.info("🔄 Step 3a1: Getting HTTP client...")
+            http_client = get_http_client()
+            logger.info("🔄 Step 3a2: HTTP client obtained, making API call to: https://www.strava.com/api/v3/athlete/activities?per_page=200&page=1")
+            logger.info(f"🔄 Step 3a3: Headers: Authorization: Bearer {access_token[:20]}...")
             
-            while len(all_activities) < limit and page <= max_pages:
-                url = f"{self.base_url}/athlete/activities?per_page={per_page}&page={page}"
-                logger.info(f"🔄 Step 3: Fetching page {page} from URL: {url}")
-                
-                # Use the new retry-enabled API call method
-                logger.info(f"🔄 Step 3a: Making API call with retry...")
-                response = self._make_api_call_with_retry(url, headers)
-                logger.info(f"🔄 Step 3b: API call completed, status: {response.status_code}")
-                
-                logger.info(f"🔄 API response received for page {page}, parsing JSON...")
-                page_activities = response.json()
-                
-                if not page_activities:
-                    logger.info(f"🔄 No more activities on page {page}, stopping pagination")
-                    break
-                
-                all_activities.extend(page_activities)
-                logger.info(f"🔄 Page {page}: fetched {len(page_activities)} activities, total: {len(all_activities)}")
-                
-                # If we got fewer activities than requested, we've reached the end
-                if len(page_activities) < per_page:
-                    logger.info(f"🔄 Reached end of activities (got {len(page_activities)} < {per_page})")
-                    break
-                
-                page += 1
-                
-                # Small delay to be respectful to Strava API
-                import time
-                time.sleep(0.1)
+            response = self._make_api_call_with_retry(
+                "https://www.strava.com/api/v3/athlete/activities?per_page=200&page=1", 
+                headers
+            )
             
-            logger.info(f"🔄 Successfully fetched {len(all_activities)} total activities from Strava across {page-1} pages")
-            return all_activities[:limit]  # Return only the requested limit
+            logger.info(f"🔄 Step 3a4: API call completed: {response.status_code}")
+            self._record_api_call()
+            logger.info(f"🔄 Step 3b: API call completed, status: {response.status_code}")
             
+            if response.status_code == 200:
+                logger.info("🔄 API response received for page 1, parsing JSON...")
+                activities = response.json()
+                logger.info(f"🔄 Page 1: fetched {len(activities)} activities, total: {len(activities)}")
+                
+                # Check if we need more pages
+                if len(activities) >= 200:
+                    logger.info("🔄 More activities available, but limiting to requested amount")
+                else:
+                    logger.info(f"🔄 Reached end of activities (got {len(activities)} < 200)")
+                
+                all_activities = activities
+                logger.info(f"🔄 Successfully fetched {len(all_activities)} total activities from Strava across 0 pages")
+                return all_activities[:limit]  # Return only the requested limit
+            else:
+                logger.error(f"❌ API call failed with status {response.status_code}")
+                return []
+                
         except Exception as e:
             logger.error(f"Failed to fetch activities from Strava: {str(e)}")
             raise Exception(f"Strava API error: {str(e)}")
@@ -1231,1037 +1143,63 @@ class SmartStravaCache:
             logger.warning(f"Error checking activity age: {e}")
             return False
 
-    # COMMENTED OUT - REDUNDANT METHOD (Phase 2: Retry Logic)
-    def _fetch_complete_activity_data(self, activity_id: int) -> Dict[str, Any]:
-        """Fetch complete activity data from Strava API with enhanced error handling - OPTIMIZED FOR FRONTEND"""
-        print(f"🔄 ENABLED: Fetching complete data for activity {activity_id}")
-        print(f"🔄 ENABLED: Making API calls to get descriptions, comments, photos, music")
-        
+    def _filter_activities(self, raw_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Filter activities to only include runs/rides from May 22nd, 2025 onwards"""
         try:
-            # Fetch complete activity data from Strava API
-            activity_url = f"{self.base_url}/activities/{activity_id}"
-            headers = {"Authorization": f"Bearer {self.token_manager.get_valid_access_token()}"}
+            filtered_activities = []
+            cutoff_date = datetime(2025, 5, 22, tzinfo=timezone.utc)
             
-            response = self._make_api_call_with_retry(activity_url, headers)
-            activity_data = response.json()
-            
-            # Fetch photos and comments
-            photos_data = self._fetch_activity_photos(activity_id)
-            comments_data = self._fetch_activity_comments(activity_id)
-            
-            # OPTIMIZED: Only cache essential fields needed by frontend
-            # Based on frontend analysis, we only need these fields:
-            processed_activity = {
-                # Core activity data (required by frontend)
-                "id": activity_data.get("id"),
-                "name": activity_data.get("name", ""),
-                "type": activity_data.get("type", ""),
-                "distance": activity_data.get("distance", 0),
-                "moving_time": activity_data.get("moving_time", 0),
-                "start_date_local": activity_data.get("start_date_local", ""),
-                "description": activity_data.get("description", ""),
-                
-                # Rich data (photos, comments, music, map)
-                "photos": photos_data,
-                "comments": comments_data,
-                "map": self._process_map_data(activity_data),
-                "music": self._detect_music(activity_data.get("description", ""))
-            }
-            
-            print(f"✅ Fetched complete data for activity {activity_id} (OPTIMIZED - essential fields only)")
-            return processed_activity
-            
-        except Exception as e:
-            print(f"❌ Error fetching complete data for activity {activity_id}: {e}")
-            # Return minimal data on error
-            return {
-                "id": activity_id,
-                "name": "Unknown Activity",
-                "type": "Unknown",
-                "distance": 0,
-                "moving_time": 0,
-                "start_date_local": "2025-01-01T00:00:00Z",
-                "description": "",
-                "photos": {},
-                "comments": [],
-                "map": {},
-                "music": {}
-            }
-
-    def _process_activity_data(self, activity_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Process basic activity data"""
-        return {
-            "id": activity_data.get("id"),
-            "name": activity_data.get("name", ""),
-            "type": activity_data.get("type", ""),
-            "distance": activity_data.get("distance", 0),
-            "moving_time": activity_data.get("moving_time", 0),
-            "elapsed_time": activity_data.get("elapsed_time", 0),
-            "total_elevation_gain": activity_data.get("total_elevation_gain", 0),
-            "start_date": activity_data.get("start_date", ""),
-            "start_date_local": activity_data.get("start_date_local", ""),
-            "timezone": activity_data.get("timezone", ""),
-            "description": activity_data.get("description", ""),
-            "kudos_count": activity_data.get("kudos_count", 0),
-            "comment_count": activity_data.get("comment_count", 0),
-            "achievement_count": activity_data.get("achievement_count", 0),
-            "photo_count": activity_data.get("photo_count", 0),
-            "trainer": activity_data.get("trainer", False),
-            "commute": activity_data.get("commute", False),
-            "manual": activity_data.get("manual", False),
-            "private": activity_data.get("private", False),
-            "flagged": activity_data.get("flagged", False),
-            "gear_id": activity_data.get("gear_id"),
-            "start_latlng": activity_data.get("start_latlng", []),
-            "end_latlng": activity_data.get("end_latlng", []),
-            "map": activity_data.get("map", {}),
-            "athlete": activity_data.get("athlete", {}),
-            "resource_state": activity_data.get("resource_state", 2)
-        }
-
-
-
-    def _decode_polyline(self, polyline_str: str) -> List[List[float]]:
-        """Decode Google polyline string to lat/lng coordinates - FIXED with corruption detection"""
-        if not polyline_str:
-            return []
-        
-        try:
-            # Use a more robust polyline decoder
-            import polyline
-            coordinates = polyline.decode(polyline_str)
-            
-            # Return raw coordinates from Strava API (trust the data)
-            return [[lat, lng] for lat, lng in coordinates]
-                
-        except ImportError:
-            # Fallback to manual decoder if polyline library not available
-            logger.warning("polyline library not available, using fallback decoder")
-            return self._decode_polyline_fallback(polyline_str)
-        except Exception as e:
-            logger.error(f"Error decoding polyline: {e}")
-            return []
-    
-    def _calculate_polyline_bounds(self, coordinates: List[List[float]]) -> Dict[str, float]:
-        """Calculate proper bounds for polyline coordinates (based on Towards Data Science article)"""
-        if not coordinates:
-            return {}
-        
-        try:
-            lats = [coord[0] for coord in coordinates]  # latitude
-            lngs = [coord[1] for coord in coordinates]  # longitude
-            
-            return {
-                "south": min(lats),
-                "west": min(lngs), 
-                "north": max(lats),
-                "east": max(lngs)
-            }
-        except Exception as e:
-            logger.error(f"Error calculating polyline bounds: {e}")
-            return {}
-    
-    def _calculate_polyline_centroid(self, coordinates: List[List[float]]) -> List[float]:
-        """Calculate centroid for polyline coordinates (based on Towards Data Science article)"""
-        if not coordinates:
-            return []
-        
-        try:
-            lats = [coord[0] for coord in coordinates]  # latitude
-            lngs = [coord[1] for coord in coordinates]  # longitude
-            
-            # Calculate centroid as mean of min/max (as shown in the article)
-            centroid_lat = (min(lats) + max(lats)) / 2
-            centroid_lng = (min(lngs) + max(lngs)) / 2
-            
-            return [centroid_lat, centroid_lng]
-        except Exception as e:
-            logger.error(f"Error calculating polyline centroid: {e}")
-            return []
-    
-    def _validate_coordinates(self, coordinates: List[tuple]) -> bool:
-        """Validate that coordinates are reasonable and not corrupted"""
-        if not coordinates:
-            return False
-        
-        try:
-            lats = [coord[0] for coord in coordinates]  # latitude
-            lngs = [coord[1] for coord in coordinates]  # longitude
-            
-            # Check for valid coordinate ranges
-            if (min(lats) < -90 or max(lats) > 90 or 
-                min(lngs) < -180 or max(lngs) > 180):
-                logger.warning(f"Invalid coordinate ranges detected: lat=[{min(lats):.6f}, {max(lats):.6f}], lng=[{min(lngs):.6f}, {max(lngs):.6f}]")
-                return False
-            
-            # Check for extreme jumps between coordinates (likely corruption)
-            # But be more lenient - allow up to 1 degree (111km) jumps for legitimate GPS issues
-            if len(coordinates) > 1:
-                max_lat_jump = max(abs(lats[i] - lats[i-1]) for i in range(1, len(lats)))
-                max_lng_jump = max(abs(lngs[i] - lngs[i-1]) for i in range(1, len(lngs)))
-                
-                # 1 degree ≈ 111km, so jumps > 1 degree (111km) are suspicious
-                if max_lat_jump > 1.0 or max_lng_jump > 1.0:
-                    logger.warning(f"Extreme coordinate jumps detected: lat={max_lat_jump:.6f}, lng={max_lng_jump:.6f}")
-                    return False
-            
-            return True
-            
-        except Exception as e:
-            logger.error(f"Error validating coordinates: {e}")
-            return False
-    
-    def _validate_polyline_string(self, polyline_str: str) -> bool:
-        """Validate polyline string to detect corruption"""
-        if not polyline_str or not isinstance(polyline_str, str):
-            return False
-        
-        # Check for invalid characters that indicate corruption
-        invalid_chars = ['^', '?', '[', '~', '}', '@', '`', '{', ']', '|']
-        for char in invalid_chars:
-            if char in polyline_str:
-                logger.warning(f"Invalid character '{char}' detected in polyline string")
-                return False
-        
-        # Check for reasonable length (polyline strings are typically 100-10000 chars)
-        if len(polyline_str) < 10 or len(polyline_str) > 50000:
-            logger.warning(f"Polyline string length {len(polyline_str)} is outside normal range")
-            return False
-        
-        # Try to decode a small portion to test validity
-        try:
-            test_coords = self._decode_polyline(polyline_str[:100])  # Test first 100 chars
-            if not test_coords or len(test_coords) == 0:
-                logger.warning("Polyline string failed decoding test")
-                return False
-        except Exception as e:
-            logger.warning(f"Polyline string validation failed: {e}")
-            return False
-        
-        return True
-
-    def _decode_polyline_fallback(self, polyline_str: str) -> List[List[float]]:
-        """Fallback polyline decoder with better error handling"""
-        if not polyline_str:
-            return []
-        
-        try:
-            index = 0
-            lat = 0
-            lng = 0
-            coordinates = []
-            
-            while index < len(polyline_str):
-                # Decode latitude
-                shift = 0
-                result = 0
-                while index < len(polyline_str):
-                    b = ord(polyline_str[index]) - 63
-                    index += 1
-                    result |= (b & 0x1f) << shift
-                    shift += 5
-                    if b < 0x20:
-                        break
-                lat += ~(result >> 1) if result & 1 else result >> 1
-                
-                # Decode longitude
-                shift = 0
-                result = 0
-                while index < len(polyline_str):
-                    b = ord(polyline_str[index]) - 63
-                    index += 1
-                    result |= (b & 0x1f) << shift
-                    shift += 5
-                    if b < 0x20:
-                        break
-                lng += ~(result >> 1) if result & 1 else result >> 1
-                
-                coordinates.append([lat / 1e5, lng / 1e5])
-            
-            return coordinates
-        except Exception as e:
-            logger.error(f"Error in fallback polyline decoder: {e}")
-            return []
-
-    def _process_map_data(self, activity_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Process map data - OPTIMIZED: Only essential fields for frontend"""
-        map_data = activity_data.get("map", {})
-        
-        # Extract only essential map data
-        polyline = map_data.get("polyline")
-        bounds = map_data.get("bounds", {})
-        
-        # Use raw polyline data from Strava API (trust the data)
-        # No validation needed - Strava API is reliable
-        
-        # Calculate bounds from polyline if not provided
-        if not bounds and polyline:
-            coordinates = self._decode_polyline(polyline)
-            if coordinates:
-                bounds = self._calculate_polyline_bounds(coordinates)
-        
-        # OPTIMIZED: Only return essential fields (frontend only needs polyline + bounds)
-        return {
-            "polyline": polyline,
-            "bounds": bounds
-        }
-
-    def _clean_invalid_activities(self, activities: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Remove invalid/unknown activities from the list"""
-        cleaned = []
-        removed_count = 0
-        
-        for activity in activities:
-            # Check for invalid activities
-            if (activity.get("name") == "Unknown Activity" or 
-                activity.get("type") == "Unknown" or
-                activity.get("distance", 0) == 0 and activity.get("moving_time", 0) == 0):
-                
-                logger.warning(f"Removing invalid activity: ID {activity.get('id')} - {activity.get('name')}")
-                removed_count += 1
-                continue
-            
-            cleaned.append(activity)
-        
-        if removed_count > 0:
-            logger.info(f"Cleaned {removed_count} invalid activities from cache")
-        
-        return cleaned
-
-    # COMMENTED OUT - REDUNDANT METHOD (Phase 3: Smart Merging)
-    def _check_and_update_all_activities_rich_data(self, activities: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Check ALL activities within last 3 weeks and update rich data if needed"""
-        updated_activities = []
-        activities_updated = 0
-        essential_map_updated = 0
-        
-        for activity in activities:
-            activity_id = activity.get("id")
-            
-            # Check if this activity needs rich data updates
-            if self._should_attempt_rich_data_update(activity):
-                missing_data = self._get_missing_rich_data(activity)
-                retry_count = self._get_rich_data_retry_count(activity)
-                
-                # Determine what type of data we're trying to fetch
-                if self._has_essential_map_data(activity):
-                    data_type = "optional rich data (description/photos/comments)"
-                    max_attempts = 5
-                else:
-                    data_type = "essential map data (polyline/bounds)"
-                    max_attempts = "unlimited"
-                
-                # Get last attempt info for logging
-                last_attempt = self._get_last_retry_attempt(activity)
-                if last_attempt:
-                    try:
-                        last_attempt_dt = datetime.fromisoformat(last_attempt)
-                        hours_since = (datetime.now() - last_attempt_dt).total_seconds() / 3600
-                        time_info = f" (last attempt: {hours_since:.1f}h ago)"
-                    except:
-                        time_info = ""
-                else:
-                    time_info = " (first attempt)"
-                
-                try:
-                    logger.info(f"🔄 Updating {data_type} for activity {activity_id} (attempt {retry_count + 1}/{max_attempts}){time_info}")
-                    
-                    complete_data = self._fetch_complete_activity_data(activity_id)
-                    activity = complete_data
-                    
-                    # Mark success (don't reset counter)
-                    activity = self._mark_rich_data_success(activity)
-                    activities_updated += 1
-                    logger.info(f"✅ Successfully updated {data_type} for activity {activity_id}")
-                    
-                except Exception as e:
-                    # Increment retry count on failure
-                    activity = self._increment_rich_data_retry_count(activity)
-                    retry_count = self._get_rich_data_retry_count(activity)
-                    
-                    if self._has_essential_map_data(activity) and retry_count >= 5:
-                        logger.warning(f"⚠️ Max retries reached for optional data on activity {activity_id} (5/5): {e}")
-                        logger.info(f"📋 Activity {activity_id} will preserve existing polyline/bounds data")
-                    elif not self._has_essential_map_data(activity):
-                        logger.warning(f"⚠️ Failed to fetch essential map data for activity {activity_id} (attempt {retry_count}): {e}")
-                        logger.info(f"🔄 Will continue trying essential map data for activity {activity_id}")
-                    else:
-                        logger.warning(f"⚠️ Failed to update {data_type} for activity {activity_id} (attempt {retry_count}/5): {e}")
-            
-            updated_activities.append(activity)
-        
-        if activities_updated > 0:
-            logger.info(f"📊 Updated rich data for {activities_updated} activities")
-        if essential_map_updated > 0:
-            logger.info(f"🗺️ Updated essential map data for {essential_map_updated} activities")
-        
-        return updated_activities
-
-    def _update_activity_in_cache(self, activity_id: int, complete_data: Dict[str, Any]):
-        """Update activity in cache with complete data and timestamp tracking"""
-        cache_data = self._load_cache()
-        current_time = datetime.now().isoformat()
-        
-        # Find and update the activity
-        for i, activity in enumerate(cache_data.get("activities", [])):
-            if activity.get("id") == activity_id:
-                # Preserve existing timestamps if they exist
-                existing_activity = cache_data["activities"][i]
-                
-                # Add timestamp tracking for data updates
-                complete_data["_metadata"] = {
-                    "basic_data_added": existing_activity.get("_metadata", {}).get("basic_data_added", current_time),
-                    "rich_data_added": current_time,
-                    "last_updated": current_time
-                }
-                
-                # Log what data is being updated
-                existing_polyline = existing_activity.get("map", {}).get("polyline")
-                new_polyline = complete_data.get("map", {}).get("polyline")
-                existing_bounds = existing_activity.get("map", {}).get("bounds")
-                new_bounds = complete_data.get("map", {}).get("bounds")
-                
-                if existing_polyline and not new_polyline:
-                    logger.warning(f"⚠️ Activity {activity_id}: LOST polyline data during update!")
-                elif not existing_polyline and new_polyline:
-                    logger.info(f"✅ Activity {activity_id}: GAINED polyline data")
-                
-                if existing_bounds and not new_bounds:
-                    logger.warning(f"⚠️ Activity {activity_id}: LOST bounds data during update!")
-                elif not existing_bounds and new_bounds:
-                    logger.info(f"✅ Activity {activity_id}: GAINED bounds data")
-                
-                cache_data["activities"][i] = complete_data
-                break
-        
-        # Save updated cache
-        self._save_cache(cache_data)
-    
-    def _detect_music(self, description: str) -> Dict[str, Any]:
-        """Detect music information from activity description"""
-        if not description:
-            return {}
-        
-        import re
-        
-        # Music detection patterns - fixed to properly capture full text
-        # Pattern: "Album: Gulag Orkestar by Beirut" -> Album: "Gulag Orkestar", Artist: "Beirut"
-        album_pattern = r"Album:\s*([^,\n]+?)\s+by\s+([^,\n]+)"
-        # Pattern: "Russell Radio: Allstar by smash mouth" -> Track: "Allstar", Artist: "smash mouth"  
-        russell_radio_pattern = r"Russell Radio:\s*([^,\n]+?)\s+by\s+([^,\n]+)"
-        # Legacy patterns for other formats
-        track_pattern = r"Track:\s*([^,\n]+?)(?:\s+by\s+([^,\n]+))?"
-        playlist_pattern = r"Playlist:\s*([^,\n]+)"
-        
-        music_data = {}
-        detected = {}
-        
-        # Check for track
-        track_match = re.search(track_pattern, description, re.IGNORECASE)
-        if track_match:
-            detected = {
-                "type": "track",
-                "title": track_match.group(1).strip(),
-                "artist": track_match.group(2).strip() if track_match.group(2) else None,
-                "source": "description"
-            }
-            music_data["track"] = {
-                "name": track_match.group(1).strip(),
-                "artist": track_match.group(2).strip() if track_match.group(2) else None
-            }
-        
-        # Check for album
-        album_match = re.search(album_pattern, description, re.IGNORECASE)
-        if album_match:
-            detected = {
-                "type": "album",
-                "title": album_match.group(1).strip(),
-                "artist": album_match.group(2).strip() if album_match.group(2) else None,
-                "source": "description"
-            }
-            music_data["album"] = {
-                "name": album_match.group(1).strip(),
-                "artist": album_match.group(2).strip() if album_match.group(2) else None
-            }
-        
-        # Check for playlist
-        playlist_match = re.search(playlist_pattern, description, re.IGNORECASE)
-        if playlist_match:
-            detected = {
-                "type": "playlist",
-                "title": playlist_match.group(1).strip(),
-                "artist": "Various Artists",
-                "source": "description"
-            }
-            music_data["playlist"] = {
-                "name": playlist_match.group(1).strip()
-            }
-        
-        # Check for Russell Radio format
-        russell_radio_match = re.search(russell_radio_pattern, description, re.IGNORECASE)
-        if russell_radio_match:
-            detected = {
-                "type": "track",
-                "title": russell_radio_match.group(1).strip(),
-                "artist": russell_radio_match.group(2).strip() if russell_radio_match.group(2) else None,
-                "source": "russell_radio"
-            }
-            music_data["track"] = {
-                "name": russell_radio_match.group(1).strip(),
-                "artist": russell_radio_match.group(2).strip() if russell_radio_match.group(2) else None
-            }
-        
-        # Add detected field for frontend compatibility
-        if detected:
-            music_data["detected"] = detected
-            
-            # Generate Deezer widget HTML
-            music_data["widget_html"] = self._generate_deezer_widget(detected)
-        
-        return music_data
-    
-    def _search_deezer_for_id(self, title: str, artist: str, music_type: str) -> tuple[str, str]:
-        """
-        Search Deezer API for specific album/track ID
-        Returns: (id_type, deezer_id) or (None, None) if not found
-        """
-        try:
-            # Search Deezer API for the specific type (album or track)
-            search_query = f"{title} {artist}".replace(" ", "%20")
-            
-            # Use different search endpoints based on type
-            if music_type == "album":
-                search_url = f"https://api.deezer.com/search/album?q={search_query}&limit=5"
-            elif music_type == "track":
-                search_url = f"https://api.deezer.com/search/track?q={search_query}&limit=5"
-            else:
-                # Default to general search
-                search_url = f"https://api.deezer.com/search?q={search_query}&limit=5"
-            
-            response = self._make_api_call_with_retry(search_url, {})
-            data = response.json()
-            
-            if not data.get("data"):
-                print(f"❌ No Deezer results for: {artist} - {title} ({music_type})")
-                return None, None
-            
-            # Look for the best match
-            for item in data["data"]:
-                item_title = item.get("title", "").lower()
-                item_artist = item.get("artist", {}).get("name", "").lower()
-                
-                # Check if this is a good match
-                if (title.lower() in item_title or item_title in title.lower()) and \
-                   (artist.lower() in item_artist or item_artist in artist.lower()):
-                    
-                    # Return the specific type we're looking for
-                    if music_type == "album" and item.get("type") == "album":
-                        return "album", str(item["id"])
-                    elif music_type == "track" and item.get("type") == "track":
-                        return "track", str(item["id"])
-                    elif music_type == "playlist" and item.get("type") == "playlist":
-                        return "playlist", str(item["id"])
-            
-            print(f"❌ No matching {music_type} found for: {artist} - {title}")
-            return None, None
-            
-        except Exception as e:
-            print(f"❌ Error searching Deezer for {artist} - {title}: {e}")
-            return None, None
-
-    def _generate_deezer_widget(self, detected: Dict[str, Any]) -> str:
-        """Generate Deezer widget HTML for detected music"""
-        if not detected:
-            return ""
-        
-        music_type = detected.get("type", "")
-        title = detected.get("title", "")
-        artist = detected.get("artist", "")
-        
-        if not title or not artist:
-            return ""
-        
-        # Search Deezer for the specific album/track ID
-        id_type, deezer_id = self._search_deezer_for_id(title, artist, music_type)
-        
-        if id_type and deezer_id:
-            # Use the specific album/track ID for better experience
-            print(f"✅ Found Deezer {id_type} ID {deezer_id} for: {artist} - {title}")
-            return f'<iframe title="deezer-widget" src="https://widget.deezer.com/widget/auto/{id_type}/{deezer_id}" width="100%" height="300" frameborder="0" allowtransparency="true" allow="encrypted-media; clipboard-write"></iframe>'
-        else:
-            # Fall back to search format if no specific ID found
-            print(f"⚠️ Falling back to search for: {artist} - {title}")
-            search_query = f"{title}%20by%20{artist}".replace(" ", "%20")
-            return f'<iframe title="deezer-widget" src="https://widget.deezer.com/widget/auto/search/{search_query}" width="100%" height="300" frameborder="0" allowtransparency="true" allow="encrypted-media; clipboard-write"></iframe>'
-    
-    def _fetch_activity_photos(self, activity_id: int, access_token: str = None) -> Dict[str, Any]:
-        """Fetch photos for a specific activity - OPTIMIZED: Only essential fields"""
-        try:
-            # Add size parameter to get actual photos instead of placeholders
-            photos_url = f"{self.base_url}/activities/{activity_id}/photos?size=5000"
-            
-            # Use provided token or get a new one
-            if access_token:
-                token = access_token
-            else:
-                token = self.token_manager.get_valid_access_token()
-            
-            headers = {"Authorization": f"Bearer {token}"}
-            
-            response = self._make_api_call_with_retry(photos_url, headers)
-            photos_data = response.json()
-            
-            # Process photos data - OPTIMIZED: Only essential fields for frontend
-            if photos_data and len(photos_data) > 0:
-                primary_photo = photos_data[0]  # First photo is usually primary
-                urls = primary_photo.get("urls", {})
-                placeholder = primary_photo.get("placeholder_image", {})
-                status = primary_photo.get("status", 0)
-                
-                # Handle different photo statuses and sizes
-                if status == 3 and not urls.get("5000"):  # Still processing, no real photo yet
-                    # Use placeholder image
-                    photo_url = placeholder.get("light_url", "")
-                    photo_urls = {
-                        "600": photo_url,
-                        "1000": photo_url
-                    }
-                else:
-                    # Photo is ready (even if status=3, we have the 5000px version)
-                    # Use 5000px as base and create smaller sizes
-                    base_url = urls.get("5000", urls.get("1800", urls.get("1000", urls.get("600", ""))))
-                    photo_url = base_url
-                    photo_urls = {
-                        "600": base_url,  # Use same URL for all sizes (5000px will scale down)
-                        "1000": base_url
-                    }
-                
-                return {
-                    "primary": {
-                        "unique_id": primary_photo.get("unique_id"),
-                        "type": primary_photo.get("type"),
-                        "url": photo_url,  # Single URL for compatibility
-                        "urls": photo_urls,  # Multiple sizes for frontend
-                        "status": status,
-                        "is_placeholder": status == 3 and not urls.get("5000")
-                    },
-                    "count": len(photos_data)
-                }
-            else:
-                return {}
-                
-        except Exception as e:
-            print(f"❌ Error fetching photos for activity {activity_id}: {e}")
-            return {}
-    
-    def _fetch_activity_comments(self, activity_id: int, access_token: str = None) -> List[Dict[str, Any]]:
-        """Fetch comments for a specific activity - OPTIMIZED: Only essential fields"""
-        try:
-            comments_url = f"{self.base_url}/activities/{activity_id}/comments"
-            
-            # Use provided token or get a new one
-            if access_token:
-                token = access_token
-            else:
-                token = self.token_manager.get_valid_access_token()
-            
-            headers = {"Authorization": f"Bearer {token}"}
-            
-            response = self._make_api_call_with_retry(comments_url, headers)
-            comments_data = response.json()
-            
-            # Process comments data - OPTIMIZED: Only essential fields for frontend
-            processed_comments = []
-            for comment in comments_data:
-                processed_comments.append({
-                    "id": comment.get("id"),
-                    "text": comment.get("text"),
-                    "created_at": comment.get("created_at"),
-                    "athlete": {
-                        "firstname": comment.get("athlete", {}).get("firstname"),
-                        "lastname": comment.get("athlete", {}).get("lastname")
-                    }
-                })
-            
-            return processed_comments
-                
-        except Exception as e:
-            print(f"❌ Error fetching comments for activity {activity_id}: {e}")
-            return []
-    
-    def _start_automated_refresh(self):
-        """Start the automated refresh system with 8-hour intervals"""
-        if self._refresh_thread and self._refresh_thread.is_alive():
-            return
-        
-        self._refresh_thread = threading.Thread(target=self._automated_refresh_loop, daemon=True)
-        self._refresh_thread.start()
-        logger.info("🔄 Automated refresh system started (8-hour intervals)")
-    
-    def _automated_refresh_loop(self):
-        """Main loop for automated refresh every 8 hours"""
-        while True:
-            try:
-                now = datetime.now()
-                
-                # Check if it's time for a refresh (00:00, 06:00, 12:00, 18:00)
-                current_hour = now.hour
-                if current_hour in [0, 6, 12, 18] and (self._last_refresh is None or 
-                    (now - self._last_refresh).total_seconds() > 3600):  # At least 1 hour since last refresh
-                    
-                    logger.info(f"🔄 Starting scheduled refresh at {now.strftime('%H:%M')}")
-                    self._perform_scheduled_refresh()
-                    self._last_refresh = now
-                
-                # Sleep for 1 hour and check again
-                time.sleep(3600)
-                
-            except Exception as e:
-                logger.error(f"❌ Error in automated refresh loop: {e}")
-                time.sleep(300)  # Wait 5 minutes before retrying
-    
-    def _start_scheduled_refresh(self):
-        """Start a normal scheduled refresh (not emergency)"""
-        try:
-            logger.info("🔄 Starting normal scheduled refresh...")
-            # Run scheduled refresh in background thread to avoid blocking startup
-            import threading
-            refresh_thread = threading.Thread(target=self._perform_scheduled_refresh, daemon=True)
-            refresh_thread.start()
-            logger.info("🔄 Normal refresh started in background thread")
-        except Exception as e:
-            logger.error(f"❌ Failed to start scheduled refresh: {e}")
-    
-    def _perform_scheduled_refresh(self):
-        """Perform a scheduled refresh using streamlined logic"""
-        try:
-            logger.info("🔄 Normal scheduled refresh...")
-            self._start_batch_processing()
-            
-        except Exception as e:
-            logger.error(f"❌ Scheduled refresh failed: {e}")
-    
-    # Backup operations removed - using Supabase-only storage
-    
-    def _start_batch_processing(self):
-        """Start batch processing of activities (20 every 15 minutes) using new streamlined architecture"""
-        logger.info("🔄 _start_batch_processing() called")
-        try:
-            with self._batch_lock:  # Thread-safe batch thread creation
-                logger.info("🔄 Acquired batch lock")
-                if self._batch_thread and self._batch_thread.is_alive():
-                    logger.info("🏃‍♂️ Batch processing already running, skipping...")
-                    return
-                
-                logger.info("🔄 Marking batching as in progress...")
-                # Mark batching as in progress
-                self._mark_batching_in_progress(True)
-                
-                logger.info("🔄 Creating batch processing thread...")
-                # Start batch processing with additional safety measures
-                self._batch_thread = threading.Thread(
-                    target=self._batch_processing_loop, 
-                    daemon=True,
-                    name="BatchProcessingThread"
-                )
-                logger.info("🔄 Starting batch processing thread...")
-                self._batch_thread.start()
-                logger.info("🏃‍♂️ Batch processing started (20 activities every 15 minutes)")
-                
-                # Add a safety check - if batch processing doesn't start within 60 seconds, mark it as failed
-                def safety_check():
-                    time.sleep(60)  # Wait 60 seconds
-                    if self._batch_thread and self._batch_thread.is_alive():
-                        # Check if batch processing is actually making progress
+            for activity in raw_data:
+                activity_type = activity.get('type', '').lower()
+                if activity_type in ['run', 'ride']:
+                    start_date_str = activity.get('start_date_local', '')
+                    if start_date_str:
                         try:
-                            cache_data = self._load_cache(trigger_emergency_refresh=False)
-                            if cache_data and cache_data.get("batching_in_progress"):
-                                # Batch processing is running, check if it's stuck
-                                status_time = cache_data.get("batching_status_updated")
-                                if status_time:
-                                    status_dt = datetime.fromisoformat(status_time)
-                                    if (datetime.now() - status_dt).total_seconds() > 300:  # 5 minutes
-                                        logger.warning("⚠️ Batch processing appears stuck - marking as failed")
-                                        self._mark_batching_in_progress(False)
+                            # Parse the date and ensure it's timezone-aware
+                            start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
+                            if start_date.tzinfo is None:
+                                start_date = start_date.replace(tzinfo=timezone.utc)
+                            
+                            if start_date >= cutoff_date:
+                                filtered_activities.append(activity)
                         except Exception as e:
-                            logger.error(f"❌ Safety check failed: {e}")
-                
-                # Start safety check in background
-                safety_thread = threading.Thread(target=safety_check, daemon=True)
-                safety_thread.start()
-                
-        except Exception as e:
-            logger.error(f"❌ Error in _start_batch_processing: {e}")
-            import traceback
-            logger.error(f"❌ Full traceback: {traceback.format_exc()}")
-            raise
-    
-    def _batch_processing_loop(self):
-        """Process activities in batches of 20 every 15 minutes using new streamlined architecture"""
-        try:
-            logger.info("🏃‍♂️ Starting batch processing with new streamlined architecture...")
+                            logger.warning(f"Error parsing activity date {start_date_str}: {e}")
+                            continue
             
-            # Import required modules at the start
-            import threading
-            import time
-            
-            # Wait a bit to ensure main application has fully started
-            logger.info("🔄 Waiting for main application to fully start...")
-            time.sleep(20)  # Give main app more time to start
-            
-            # Step 1: Get a single access token for the entire batch processing session
-            try:
-                logger.info(f"🔄 Getting access token for entire batch processing session...")
-                
-                # Add timeout to token acquisition to prevent hanging
-                
-                access_token = None
-                token_error = None
-                
-                def get_token():
-                    nonlocal access_token, token_error
-                    try:
-                        access_token = self.token_manager.get_valid_access_token()
-                        logger.info(f"✅ Token acquired successfully in background thread")
-                    except Exception as e:
-                        token_error = e
-                        logger.error(f"❌ Token acquisition failed in background thread: {e}")
-                
-                # Run token acquisition in thread with timeout
-                token_thread = threading.Thread(target=get_token, daemon=True)
-                token_thread.start()
-                token_thread.join(timeout=30)  # 30 second timeout
-                
-                # Check if we got the token successfully
-                if access_token:
-                    logger.info(f"✅ Got access token for entire batch processing session")
-                elif token_error:
-                    logger.error(f"❌ Failed to get access token for batch processing: {token_error}")
-                    logger.error(f"❌ Batch processing aborted - cannot proceed without valid token")
-                    return
-                else:
-                    # Token acquisition timed out - check if thread is still alive
-                    if token_thread.is_alive():
-                        logger.warning("⚠️ Token thread still alive after timeout - but token may have been acquired")
-                        # Give it a bit more time to complete
-                        token_thread.join(timeout=5)
-                        if access_token:
-                            logger.info(f"✅ Got access token after extended timeout")
-                        else:
-                            logger.warning("⚠️ Token acquisition timed out after 35 seconds - but token refresh may have succeeded")
-                            logger.info("🔄 Continuing batch processing - will acquire token when needed")
-                            # Don't abort - let the batch processing continue and acquire tokens as needed
-                    else:
-                        logger.warning("⚠️ Token acquisition timed out after 30 seconds - but token refresh may have succeeded")
-                        logger.info("🔄 Continuing batch processing - will acquire token when needed")
-                        # Don't abort - let the batch processing continue and acquire tokens as needed
-                    
-            except Exception as e:
-                logger.error(f"❌ Failed to get access token for batch processing: {e}")
-                logger.error(f"❌ Batch processing aborted - cannot proceed without valid token")
-                return
-            
-            # Step 2: Fetch fresh basic data from Strava (following our new flow)
-            raw_data = self._fetch_from_strava(200)
-            logger.info(f"🔄 Fetched {len(raw_data)} raw activities from Strava")
-            
-            # Step 2b: Filter for runs/rides from May 22nd, 2025 onwards
-            basic_data = self._filter_activities(raw_data)
-            logger.info(f"🔄 Filtered to {len(basic_data)} runs/rides from May 22nd, 2025 onwards")
-            
-            # Step 3: Identify new activities (following our new flow)
-            new_activities = self._identify_new_activities(basic_data)
-            logger.info(f"🆕 Found {len(new_activities)} new activities")
-            
-            # Step 4: Process new activities in batches of 20 every 15 minutes
-            if new_activities:
-                batch_size = 20
-                for i in range(0, len(new_activities), batch_size):
-                    batch = new_activities[i:i + batch_size]
-                    
-                    logger.info(f"🏃‍♂️ Processing batch {i//batch_size + 1}: {len(batch)} new activities")
-                    
-                    # Process the batch (fetch rich data for new activities) with the pre-obtained token
-                    self._process_activity_batch(batch, access_token=access_token)
-                    
-                    # Wait 15 minutes between batches (except for the last batch)
-                    if i + batch_size < len(new_activities):
-                        logger.info("⏰ Waiting 15 minutes before next batch...")
-                        time.sleep(900)  # 15 minutes
-            else:
-                logger.info("✅ No new activities to process")
-            
-            # Step 4: Update cache with all data
-            self._update_cache_with_batch_results(basic_data, new_activities)
-            
-            # Step 5: Mark batching as complete
-            self._mark_batching_in_progress(False)
-            
-            logger.info("✅ Batch processing completed successfully")
+            logger.info(f"🔄 Filtered to {len(filtered_activities)} runs/rides from May 22nd, 2025 onwards")
+            return filtered_activities
             
         except Exception as e:
-            logger.error(f"❌ Batch processing failed: {e}")
-            self._mark_batching_in_progress(False)
-    #             
-    #             # Wait 15 minutes before next batch (except for last batch)
-    #                 time.sleep(900)  # 15 minutes
-    #         
-    #         
-    #         # Mark batching as complete and validate results
-    #         
-    #         # Clear emergency refresh flags
-    #         
-    #         # Clear emergency refresh flag from cache data for future batch processing
-    #         
-    #         # Mark batching as complete even on failure
-    #         # Clear emergency refresh flags
-    #         # Clear emergency refresh flag from cache data
-    
-    def _mark_batching_in_progress(self, in_progress: bool):
-        """Mark batching as in progress or complete in cache (thread-safe)"""
-        try:
-            logger.info("🔄 _mark_batching_in_progress: Starting...")
-            # Note: This method is called from within _start_batch_processing() which already holds _batch_lock
-            # So we don't need to acquire the lock again to avoid deadlock
-            
-            # Use existing cache data or create minimal cache structure
-            if self._cache_data is not None:
-                cache_data = self._cache_data.copy()
-                logger.info("🔄 _mark_batching_in_progress: Using existing cache data")
-            else:
-                # Create minimal cache structure for startup
-                cache_data = {
-                    "timestamp": None,
-                    "activities": [],
-                    "batching_in_progress": False,
-                    "batching_status_updated": None
-                }
-                logger.info("🔄 _mark_batching_in_progress: Created minimal cache structure")
-            
-            cache_data["batching_in_progress"] = in_progress
-            cache_data["batching_status_updated"] = datetime.now().isoformat()
-            logger.info("🔄 _mark_batching_in_progress: Updated cache data with batching status")
-            
-            # Update in-memory cache immediately (don't wait for Supabase save)
-            self._cache_data = cache_data
-            self._cache_loaded_at = datetime.now()
-            logger.info("🔄 _mark_batching_in_progress: Updated in-memory cache")
-            
-            # Skip Supabase operations during startup to avoid hanging
-            logger.info("🔄 Skipping Supabase operations during batching startup to avoid hanging")
-            
-            status = "started" if in_progress else "completed"
-            logger.info(f"🔄 Batching process {status}")
-            
-        except Exception as e:
-            logger.error(f"❌ Failed to update batching status: {e}")
-            import traceback
-            logger.error(f"❌ Full traceback: {traceback.format_exc()}")
-    
-    def _validate_post_batch_results(self):
-        """Validate results after batch processing completes"""
-        try:
-            cache_data = self._load_cache(trigger_emergency_refresh=False)
-            activities = cache_data.get("activities", [])
-            
-            if not activities:
-                logger.warning("No activities to validate after batch processing")
-                return
-            
-            total_activities = len(activities)
-            polyline_count = sum(1 for activity in activities if activity.get("map", {}).get("polyline"))
-            bounds_count = sum(1 for activity in activities if activity.get("map", {}).get("bounds"))
-            
-            polyline_percentage = (polyline_count / total_activities) * 100
-            bounds_percentage = (bounds_count / total_activities) * 100
-            
-            logger.info(f"📊 Post-batch validation: {polyline_count}/{total_activities} activities have polyline data ({polyline_percentage:.1f}%)")
-            logger.info(f"📊 Post-batch validation: {bounds_count}/{total_activities} activities have bounds data ({bounds_percentage:.1f}%)")
-            
-            # If polyline data is still below 30%, trigger another batch process
-            if polyline_percentage < 30.0:
-                logger.warning(f"🏃‍♂️ Polyline data coverage is only {polyline_percentage:.1f}%, triggering retry")
-                logger.info("🏃‍♂️ Starting batch processing retry to collect missing data")
-                
-                # Reset batching status and start again
-                self._mark_batching_in_progress(True)
-                self._start_batch_processing()
-            else:
-                logger.info(f"🏃‍♂️ Polyline data coverage is {polyline_percentage:.1f}%, batch processing successful")
-                
-        except Exception as e:
-            logger.error(f"❌ Post-batch validation failed: {e}")
-    
-    # _get_activities_needing_update removed - redundant in streamlined logic
-    
-    # COMMENTED OUT - OLD BATCH PROCESSING LOGIC (Replaced with new simplified system)
-    def _process_activity_batch(self, batch: List[Dict[str, Any]], access_token: str = None):
-        """Process a batch of new activities using new streamlined architecture"""
-        try:
-            logger.info(f"🏃‍♂️ Processing batch of {len(batch)} new activities...")
-            
-            # Fetch rich data for all activities in this batch using the pre-obtained token
-            rich_data = self._fetch_rich_data_for_new_activities(batch, access_token=access_token)
-            
-            # Update each activity with rich data
-            for activity in batch:
-                activity_id = activity.get('id')
-                if activity_id and activity_id in rich_data:
-                    # Update activity with rich data
-                    activity.update(rich_data[activity_id])
-                    
-                    # Update expiration flags
-                    activity = self._update_activity_expiration_flags(activity)
-                    
-                    logger.info(f"✅ Updated activity {activity_id} with rich data")
-                else:
-                    logger.warning(f"⚠️ No rich data found for activity {activity_id}")
-                
-                time.sleep(1)  # Small delay to respect API limits
-                
-        except Exception as e:
-            logger.error(f"❌ Error processing activity batch: {e}")
-    
+            logger.error(f"Error filtering activities: {e}")
+            return raw_data
+
     def _update_cache_with_batch_results(self, basic_data: List[Dict[str, Any]], new_activities: List[Dict[str, Any]]):
         """Update cache with batch processing results"""
         try:
-            cache_data = self._load_cache(trigger_emergency_refresh=False)
-            if not cache_data:
-                cache_data = {"activities": [], "metadata": {}}
+            logger.info(f"🔄 Updating cache with {len(basic_data)} activities ({len(new_activities)} new)")
             
-            existing_activities = cache_data.get("activities", [])
-            existing_by_id = {activity.get("id"): activity for activity in existing_activities}
+            # Create cache data structure
+            cache_data = {
+                "timestamp": datetime.now().isoformat(),
+                "activities": basic_data,
+                "batching_in_progress": False,
+                "batching_status_updated": datetime.now().isoformat()
+            }
             
-            # Update existing activities with fresh basic data
-            for activity in basic_data:
-                activity_id = activity.get("id")
-                if activity_id in existing_by_id:
-                    # Update existing activity with fresh basic data
-                    existing_by_id[activity_id].update(activity)
-                else:
-                    # Add new activity
-                    existing_activities.append(activity)
+            # Update in-memory cache
+            self._cache_data = cache_data
+            self._cache_loaded_at = datetime.now()
             
-            # Save updated cache
-            cache_data["activities"] = existing_activities
-            
-            # Update metadata
-            current_time = datetime.now().isoformat()
-            cache_data['last_fetch'] = current_time
-            cache_data['last_basic_data_updated'] = current_time
-            if new_activities:
-                cache_data['last_rich_data_updated'] = current_time
-            
+            # Save to Supabase
             self._save_cache(cache_data)
             
             logger.info(f"✅ Updated cache with {len(basic_data)} activities ({len(new_activities)} new)")
             
         except Exception as e:
             logger.error(f"❌ Failed to update cache with batch results: {e}")
-    
-    # COMMENTED OUT - REDUNDANT METHOD (Phase 5: Diagnostic Methods)
-    def _validate_cache_integrity(self, cache_data: Dict[str, Any]) -> bool:
-        """Validate cache integrity - check for data loss indicators with proper batching support"""
+
+    def _validate_cache_data(self, cache_data: Dict[str, Any]) -> bool:
+        """Validate cache data integrity"""
         try:
             activities = cache_data.get("activities", [])
             if not activities:
@@ -2269,8 +1207,6 @@ class SmartStravaCache:
                 return False
             
             total_activities = len(activities)
-            
-            # Check for basic data integrity (all activities should have basic fields)
             basic_data_count = 0
             for activity in activities:
                 if (activity.get("id") and 
@@ -2306,25 +1242,9 @@ class SmartStravaCache:
                 logger.warning("This indicates batching may not have completed successfully or needs to be re-run")
                 return False
             
-            # Check for recent activities (should have complete GPS data)
-            recent_activities = [a for a in activities if a.get("start_date_local", "").startswith("2025-09")]
-            if recent_activities:
-                recent_polyline_count = sum(1 for activity in recent_activities if activity.get("map", {}).get("polyline"))
-                recent_bounds_count = sum(1 for activity in recent_activities if activity.get("map", {}).get("bounds"))
-                # Recent Run/Ride activities should have both polyline and bounds
-                if recent_polyline_count < len(recent_activities) * 0.9:
-                    logger.warning(f"Cache integrity check failed: Recent activities missing polyline data ({recent_polyline_count}/{len(recent_activities)})")
-                    return False
-                if recent_bounds_count < len(recent_activities) * 0.9:
-                    logger.warning(f"Cache integrity check failed: Recent activities missing bounds data ({recent_bounds_count}/{len(recent_activities)})")
-                    return False
-            
             logger.info(f"Cache integrity check passed: {basic_data_count}/{total_activities} activities have basic data, {polyline_count}/{total_activities} have polyline data, {bounds_count}/{total_activities} have bounds data")
             return True
             
         except Exception as e:
             logger.error(f"Cache integrity check error: {e}")
             return False
-    
-    
-    # COMMENTED OUT - OLD EMERGENCY REFRESH LOGIC (Replaced with new simplified system)
