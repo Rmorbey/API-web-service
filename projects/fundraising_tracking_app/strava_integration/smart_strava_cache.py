@@ -2109,37 +2109,37 @@ class SmartStravaCache:
         """Mark batching as in progress or complete in cache (thread-safe)"""
         try:
             logger.info("🔄 _mark_batching_in_progress: Starting...")
-            with self._batch_lock:  # Thread-safe cache modification
-                logger.info("🔄 _mark_batching_in_progress: Acquired batch lock")
-                
-                # Use existing cache data or create minimal cache structure
-                if self._cache_data is not None:
-                    cache_data = self._cache_data.copy()
-                    logger.info("🔄 _mark_batching_in_progress: Using existing cache data")
-                else:
-                    # Create minimal cache structure for startup
-                    cache_data = {
-                        "timestamp": None,
-                        "activities": [],
-                        "batching_in_progress": False,
-                        "batching_status_updated": None
-                    }
-                    logger.info("🔄 _mark_batching_in_progress: Created minimal cache structure")
-                
-                cache_data["batching_in_progress"] = in_progress
-                cache_data["batching_status_updated"] = datetime.now().isoformat()
-                logger.info("🔄 _mark_batching_in_progress: Updated cache data with batching status")
-                
-                # Update in-memory cache immediately (don't wait for Supabase save)
-                self._cache_data = cache_data
-                self._cache_loaded_at = datetime.now()
-                logger.info("🔄 _mark_batching_in_progress: Updated in-memory cache")
-                
-                # Skip Supabase operations during startup to avoid hanging
-                logger.info("🔄 Skipping Supabase operations during batching startup to avoid hanging")
-                
-                status = "started" if in_progress else "completed"
-                logger.info(f"🔄 Batching process {status}")
+            # Note: This method is called from within _start_batch_processing() which already holds _batch_lock
+            # So we don't need to acquire the lock again to avoid deadlock
+            
+            # Use existing cache data or create minimal cache structure
+            if self._cache_data is not None:
+                cache_data = self._cache_data.copy()
+                logger.info("🔄 _mark_batching_in_progress: Using existing cache data")
+            else:
+                # Create minimal cache structure for startup
+                cache_data = {
+                    "timestamp": None,
+                    "activities": [],
+                    "batching_in_progress": False,
+                    "batching_status_updated": None
+                }
+                logger.info("🔄 _mark_batching_in_progress: Created minimal cache structure")
+            
+            cache_data["batching_in_progress"] = in_progress
+            cache_data["batching_status_updated"] = datetime.now().isoformat()
+            logger.info("🔄 _mark_batching_in_progress: Updated cache data with batching status")
+            
+            # Update in-memory cache immediately (don't wait for Supabase save)
+            self._cache_data = cache_data
+            self._cache_loaded_at = datetime.now()
+            logger.info("🔄 _mark_batching_in_progress: Updated in-memory cache")
+            
+            # Skip Supabase operations during startup to avoid hanging
+            logger.info("🔄 Skipping Supabase operations during batching startup to avoid hanging")
+            
+            status = "started" if in_progress else "completed"
+            logger.info(f"🔄 Batching process {status}")
             
         except Exception as e:
             logger.error(f"❌ Failed to update batching status: {e}")
