@@ -2001,6 +2001,10 @@ class SmartStravaCache:
         try:
             logger.info("🏃‍♂️ Starting batch processing with new streamlined architecture...")
             
+            # Import required modules at the start
+            import threading
+            import time
+            
             # Wait a bit to ensure main application has fully started
             logger.info("🔄 Waiting for main application to fully start...")
             time.sleep(20)  # Give main app more time to start
@@ -2010,8 +2014,6 @@ class SmartStravaCache:
                 logger.info(f"🔄 Getting access token for entire batch processing session...")
                 
                 # Add timeout to token acquisition to prevent hanging
-                import threading
-                import time
                 
                 access_token = None
                 token_error = None
