@@ -2111,8 +2111,19 @@ class SmartStravaCache:
                 cache_data["batching_in_progress"] = in_progress
                 cache_data["batching_status_updated"] = datetime.now().isoformat()
                 
-                # Save to file and Supabase
-                self._save_cache(cache_data)
+                # Update in-memory cache immediately (don't wait for Supabase save)
+                self._cache_data = cache_data
+                self._cache_loaded_at = datetime.now()
+                
+                # Try to save to Supabase in background (non-blocking)
+                try:
+                    # Only save if we have activities (to avoid validation failures)
+                    if cache_data.get("activities"):
+                        self._save_cache(cache_data)
+                    else:
+                        logger.info("🔄 Skipping Supabase save for empty cache during batching startup")
+                except Exception as save_error:
+                    logger.warning(f"⚠️ Failed to save batching status to Supabase: {save_error}")
                 
                 status = "started" if in_progress else "completed"
                 logger.info(f"🔄 Batching process {status}")
