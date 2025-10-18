@@ -64,8 +64,22 @@ class SmartFundraisingCache:
             
             # Check if we need to trigger emergency refresh (no cache data found during sync init)
             if not self._cache_data:
-                logger.info("🔄 No fundraising cache data found during sync init - triggering emergency refresh in background")
-                self.initialize_cache_system()  # This will trigger emergency refresh
+                logger.info("🔄 No fundraising cache data found during sync init - scheduling emergency refresh for after startup")
+                # Defer emergency refresh to avoid blocking startup
+                def deferred_emergency_refresh():
+                    time.sleep(15)  # Wait 15 seconds for main app to fully start
+                    logger.info("🔄 Starting deferred fundraising emergency refresh...")
+                    try:
+                        self.initialize_cache_system()  # This will trigger emergency refresh
+                        logger.info("✅ Fundraising emergency refresh completed successfully")
+                    except Exception as e:
+                        logger.error(f"❌ Deferred fundraising emergency refresh failed: {e}")
+                        import traceback
+                        logger.error(f"❌ Full traceback: {traceback.format_exc()}")
+                
+                emergency_thread = threading.Thread(target=deferred_emergency_refresh, daemon=True)
+                emergency_thread.start()
+                logger.info("🔄 Fundraising emergency refresh scheduled for 15 seconds after startup")
             
             # Start the scraper
             self._start_scraper()
