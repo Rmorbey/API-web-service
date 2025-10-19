@@ -261,9 +261,9 @@ class StravaTokenManager:
             self.tokens = new_tokens
             
             # Update cached token to prevent using old token
-            with self._token_lock:
-                self._cached_token = token_data["access_token"]
-                self._cached_token_expires_at = expires_at
+            # Don't acquire lock again - we're already inside get_valid_access_token() which holds the lock
+            self._cached_token = token_data["access_token"]
+            self._cached_token_expires_at = expires_at
             
             expires_datetime = datetime.fromtimestamp(expires_at)
             print(f"✅ Token refreshed successfully, expires at: {expires_datetime}")
