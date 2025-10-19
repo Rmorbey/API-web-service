@@ -31,7 +31,7 @@ class AsyncProcessor:
         
         Args:
             activities: List of activity dictionaries
-            operations: List of operations to perform ['music_detection', 'photo_processing', 'formatting']
+            operations: List of operations to perform ['photo_processing', 'formatting'] (music_detection is now done during batch processing)
         
         Returns:
             List of processed activities
@@ -40,7 +40,7 @@ class AsyncProcessor:
             return []
         
         if operations is None:
-            operations = ['music_detection', 'formatting']
+            operations = ['photo_processing', 'formatting']
         
         # Create tasks for parallel processing
         tasks = []

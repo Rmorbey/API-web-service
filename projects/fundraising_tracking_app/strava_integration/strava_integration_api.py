@@ -384,7 +384,12 @@ async def get_activity_feed_demo(request: FeedRequest = Depends()):
         raw_activities = cache_instance.get_activities_smart(request.limit)
         
         # Process activities in parallel for better performance
-        processed_activities = await async_processor.process_activities_parallel(raw_activities)
+        # Note: Music detection is now done during batch processing and saved to database
+        # Only run photo processing and formatting on-demand
+        processed_activities = await async_processor.process_activities_parallel(
+            raw_activities, 
+            operations=['photo_processing', 'formatting']
+        )
         
         # Build feed items from processed activities (same as main feed endpoint)
         feed_activities = []
@@ -651,9 +656,11 @@ async def get_activity_feed(request: FeedRequest = Depends(), api_key: str = Dep
             }
         
         # Process activities in parallel for better performance
+        # Note: Music detection is now done during batch processing and saved to database
+        # Only run photo processing and formatting on-demand
         processed_activities = await async_processor.process_activities_parallel(
             filtered_activities, 
-            operations=['music_detection', 'photo_processing', 'formatting']
+            operations=['photo_processing', 'formatting']
         )
         
         # Build feed items from processed activities
