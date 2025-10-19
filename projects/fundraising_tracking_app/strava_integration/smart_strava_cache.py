@@ -11,6 +11,8 @@ import time
 import logging
 import shutil
 import threading
+import re
+import requests
 from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Any, Optional, Tuple
 from dotenv import load_dotenv
@@ -515,7 +517,7 @@ class SmartStravaCache:
             return True  # If error, consider expired
 
     def _fetch_activity_photos(self, activity_id: int, access_token: str = None) -> Dict[str, Any]:
-        """Fetch photos for a specific activity"""
+        """Fetch photos for a specific activity and transform to frontend format"""
         try:
             if not access_token:
                 import os
@@ -523,25 +525,67 @@ class SmartStravaCache:
             
             if not access_token:
                 logger.warning(f"⚠️ No access token available for fetching photos for activity {activity_id}")
-                return {}
+                return {"photos": []}
             
             headers = {"Authorization": f"Bearer {access_token}"}
-            url = f"https://www.strava.com/api/v3/activities/{activity_id}/photos"
+            url = f"https://www.strava.com/api/v3/activities/{activity_id}/photos?size=5000"
             
             http_client = get_http_client()
             response = http_client.get(url, headers=headers, timeout=30.0)
             
             if response.status_code == 200:
-                photos_data = response.json()
-                logger.debug(f"📸 Fetched {len(photos_data)} photos for activity {activity_id}")
-                return photos_data
+                raw_photos = response.json()
+                logger.debug(f"📸 Fetched {len(raw_photos)} photos for activity {activity_id}")
+                
+                # Transform to frontend format
+                transformed_photos = self._transform_photos_to_frontend_format(raw_photos)
+                return {"photos": transformed_photos}
             else:
                 logger.warning(f"⚠️ Failed to fetch photos for activity {activity_id}: {response.status_code}")
-                return {}
+                return {"photos": []}
                 
         except Exception as e:
             logger.warning(f"⚠️ Error fetching photos for activity {activity_id}: {e}")
-            return {}
+            return {"photos": []}
+
+    def _transform_photos_to_frontend_format(self, raw_photos: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Transform Strava photo data to frontend-expected format"""
+        try:
+            transformed_photos = []
+            
+            for photo in raw_photos:
+                # Extract the high-quality URL from Strava photo data (size=5000)
+                # Strava returns the photo URL in the 'urls' field or directly as 'url'
+                photo_url = ""
+                
+                # Try different possible URL fields from Strava API
+                if photo.get("urls"):
+                    # If urls is a dict, get the largest size available
+                    urls = photo.get("urls", {})
+                    photo_url = urls.get("1200px") or urls.get("600px") or urls.get("100px") or ""
+                elif photo.get("url"):
+                    # Direct URL field
+                    photo_url = photo.get("url", "")
+                
+                # Create frontend-compatible photo object with high-quality URL for all sizes
+                # Frontend can handle resizing or use the same URL for all sizes
+                if photo_url:
+                    frontend_photo = {
+                        "urls": {
+                            "300": photo_url,   # High-quality URL for thumbnail (frontend can resize)
+                            "600": photo_url,   # High-quality URL for medium (frontend can resize)
+                            "1200": photo_url   # High-quality URL for large (original size)
+                        }
+                    }
+                    transformed_photos.append(frontend_photo)
+                    logger.debug(f"📸 Transformed photo with high-quality URL: {photo_url}")
+            
+            logger.debug(f"📸 Transformed {len(transformed_photos)} photos to frontend format")
+            return transformed_photos
+            
+        except Exception as e:
+            logger.warning(f"⚠️ Error transforming photos: {e}")
+            return []
 
     def _fetch_activity_comments(self, activity_id: int, access_token: str = None) -> List[Dict[str, Any]]:
         """Fetch comments for a specific activity"""
@@ -1654,6 +1698,14 @@ class SmartStravaCache:
                     # Update activity with rich data
                     activity.update(rich_data[activity_id])
                     
+                    # Add music detection to the activity
+                    description = activity.get('description', '')
+                    if description:
+                        music_data = self._detect_music_sync(description)
+                        if music_data:
+                            activity['music'] = music_data
+                            logger.info(f"🎵 Added music data to activity {activity_id}: {music_data.get('detected', {}).get('type', 'unknown')}")
+                    
                     # Update expiration flags
                     activity = self._update_activity_expiration_flags(activity)
                     
@@ -1743,4 +1795,139 @@ class SmartStravaCache:
         except Exception as e:
             logger.warning(f"Error updating expiration flags: {e}")
             return activity
+
+    def _detect_music_sync(self, description: str) -> Dict[str, Any]:
+        """Synchronous music detection (CPU-bound) - returns original format"""
+        if not description:
+            return {}
+        
+        # Music detection patterns - optimized for performance
+        album_pattern = r"Album:\s*([^,\n]+?)\s+by\s+([^,\n]+)"
+        russell_radio_pattern = r"Russell Radio:\s*([^,\n]+?)\s+by\s+([^,\n]+)"
+        track_pattern = r"Track:\s*([^,\n]+?)\s+by\s+([^,\n]+)"
+        playlist_pattern = r"Playlist:\s*([^,\n]+)"
+        
+        music_data = {}
+        detected = {}
+        
+        # Check for album
+        album_match = re.search(album_pattern, description, re.IGNORECASE)
+        if album_match:
+            detected = {
+                "type": "album",
+                "title": album_match.group(1).strip(),
+                "artist": album_match.group(2).strip(),
+                "source": "description"
+            }
+            music_data["album"] = {
+                "name": album_match.group(1).strip(),
+                "artist": album_match.group(2).strip()
+            }
+        
+        # Check for Russell Radio
+        russell_match = re.search(russell_radio_pattern, description, re.IGNORECASE)
+        if russell_match:
+            detected = {
+                "type": "track",
+                "title": russell_match.group(1).strip(),
+                "artist": russell_match.group(2).strip(),
+                "source": "russell_radio"
+            }
+            music_data["track"] = {
+                "name": russell_match.group(1).strip(),
+                "artist": russell_match.group(2).strip()
+            }
+        
+        # Check for track
+        track_match = re.search(track_pattern, description, re.IGNORECASE)
+        if track_match:
+            detected = {
+                "type": "track",
+                "title": track_match.group(1).strip(),
+                "artist": track_match.group(2).strip() if track_match.group(2) else None,
+                "source": "description"
+            }
+            music_data["track"] = {
+                "name": track_match.group(1).strip(),
+                "artist": track_match.group(2).strip() if track_match.group(2) else None
+            }
+        
+        # Check for playlist
+        playlist_match = re.search(playlist_pattern, description, re.IGNORECASE)
+        if playlist_match:
+            detected = {
+                "type": "playlist",
+                "title": playlist_match.group(1).strip(),
+                "artist": "Various Artists",
+                "source": "description"
+            }
+            music_data["playlist"] = {
+                "name": playlist_match.group(1).strip()
+            }
+        
+        # Add detected field for frontend compatibility
+        if detected:
+            music_data["detected"] = detected
+            
+            # Generate Deezer widget HTML
+            music_data["widget_html"] = self._generate_deezer_widget(detected)
+        
+        return music_data
+    
+    def _generate_deezer_widget(self, detected: Dict[str, Any]) -> str:
+        """Generate Deezer widget HTML for the detected music"""
+        try:
+            # Search for the track/album on Deezer
+            deezer_id, id_type = self._search_deezer_for_id(
+                detected["title"], 
+                detected["artist"], 
+                detected["type"]
+            )
+            
+            if deezer_id and id_type:
+                # Generate Deezer widget HTML
+                if id_type == "track":
+                    return f'<iframe scrolling="no" frameborder="0" allowTransparency="true" src="https://widget.deezer.com/widget/dark/{id_type}/{deezer_id}" width="100%" height="200"></iframe>'
+                elif id_type == "album":
+                    return f'<iframe scrolling="no" frameborder="0" allowTransparency="true" src="https://widget.deezer.com/widget/dark/{id_type}/{deezer_id}" width="100%" height="300"></iframe>'
+            
+            # Fallback: return a simple text representation
+            return f'<div class="music-fallback"><p><strong>{detected["title"]}</strong> by {detected["artist"]}</p></div>'
+            
+        except Exception as e:
+            logger.warning(f"Failed to generate Deezer widget: {e}")
+            return f'<div class="music-fallback"><p><strong>{detected["title"]}</strong> by {detected["artist"]}</p></div>'
+    
+    def _search_deezer_for_id(self, title: str, artist: str, music_type: str) -> tuple[str, str]:
+        """
+        Search Deezer API for specific album/track ID
+        Returns: (id_type, deezer_id) or (None, None) if not found
+        """
+        try:
+            # Search Deezer API for the specific type (album or track)
+            search_query = f"{title} {artist}".replace(" ", "%20")
+            
+            # Use different search endpoints based on type
+            if music_type == "album":
+                search_url = f"https://api.deezer.com/search/album?q={search_query}&limit=5"
+            elif music_type == "track":
+                search_url = f"https://api.deezer.com/search/track?q={search_query}&limit=5"
+            else:
+                return None, None
+            
+            # Make request to Deezer API
+            response = requests.get(search_url, timeout=5)
+            if response.status_code == 200:
+                data = response.json()
+                
+                if data.get("data") and len(data["data"]) > 0:
+                    # Return the first result
+                    result = data["data"][0]
+                    return result["id"], music_type
+            
+            return None, None
+            
+        except Exception as e:
+            logger.warning(f"Failed to search Deezer API: {e}")
+            return None, None
 
