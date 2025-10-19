@@ -1373,14 +1373,90 @@ class SmartStravaCache:
             return raw_data
 
     def _update_cache_with_batch_results(self, basic_data: List[Dict[str, Any]], new_activities: List[Dict[str, Any]]):
-        """Update cache with batch processing results"""
+        """Update cache with batch processing results, preserving existing rich data"""
         try:
             logger.info(f"🔄 Updating cache with {len(basic_data)} activities ({len(new_activities)} new)")
             
-            # Create cache data structure
+            # Get existing cache data to preserve rich data
+            existing_cache = self._load_cache(trigger_emergency_refresh=False)
+            existing_activities = existing_cache.get("activities", []) if existing_cache else []
+            
+            # Create a lookup map of existing activities by ID to preserve rich data
+            existing_by_id = {activity.get("id"): activity for activity in existing_activities}
+            
+            # Merge fresh basic data with existing rich data
+            merged_activities = []
+            for fresh_activity in basic_data:
+                activity_id = fresh_activity.get("id")
+                existing_activity = existing_by_id.get(activity_id, {})
+                
+                # Merge: use fresh basic data but preserve existing rich data
+                merged_activity = fresh_activity.copy()  # Start with fresh basic data
+                
+                # Define basic Strava API fields that should be overwritten with fresh data
+                basic_strava_fields = {
+                    "id", "name", "distance", "moving_time", "elapsed_time", "total_elevation_gain",
+                    "type", "sport_type", "start_date", "start_date_local", "timezone", "utc_offset",
+                    "achievement_count", "kudos_count", "comment_count", "athlete_count", "pr_count",
+                    "average_speed", "max_speed", "average_cadence", "average_watts", "weighted_average_watts",
+                    "kilojoules", "has_heartrate", "average_heartrate", "max_heartrate", "heartrate_opt_out",
+                    "display_hide_heartrate_option", "elev_high", "elev_low", "has_kudoed", "suffer_score",
+                    "calories", "gear_id", "trainer", "commute", "manual", "private", "flagged", "workout_type",
+                    "external_id", "upload_id", "start_latlng", "end_latlng", "device_name", "embed_token",
+                    "from_accepted_tag", "segment_efforts", "splits_metric", "splits_standard", "laps",
+                    "best_efforts", "photos", "stats_visibility", "hide_from_home", "map", "device_watts",
+                    "perceived_exertion", "prefer_perceived_exertion", "segment_leaderboard_opt_out",
+                    "leaderboard_opt_out", "resource_state", "athlete", "visibility"
+                }
+                
+                # Preserve ALL fields from existing activity that are NOT basic Strava fields
+                # This ensures we keep all rich data, metadata, and custom fields
+                for field, value in existing_activity.items():
+                    if field not in basic_strava_fields and value is not None:
+                        merged_activity[field] = value
+                        logger.debug(f"🔄 Preserved {field} for activity {activity_id}")
+                
+                # Also preserve specific rich data fields even if they're in basic fields
+                # (in case they were modified or enhanced)
+                critical_rich_fields = [
+                    # Rich data from API calls
+                    "photos", "comments", "polyline", "bounds", "description",
+                    "music", "deezer", "widget_html",
+                    
+                    # Expiration flags
+                    "photos_fetch_expired", "comments_fetch_expired", 
+                    "polyline_fetch_expired", "description_fetch_expired",
+                    
+                    # Timestamps
+                    "last_photos_fetch", "last_comments_fetch",
+                    "last_polyline_fetch", "last_bounds_fetch", 
+                    "last_music_fetch", "last_deezer_fetch",
+                    
+                    # Formatted data from async processor
+                    "distance_formatted", "formatted_duration", "duration_formatted",
+                    "pace_per_km", "date_formatted",
+                    
+                    # Photo processing fields
+                    "optimized_url", "has_photo",
+                    
+                    # Music detection fields
+                    "detected", "album", "track", "playlist",
+                    
+                    # Metadata
+                    "rich_data_fetched", "metadata_updated", "has_media", "media_type", "photo_url"
+                ]
+                
+                for field in critical_rich_fields:
+                    if field in existing_activity and existing_activity[field] is not None:
+                        merged_activity[field] = existing_activity[field]
+                        logger.debug(f"🔄 Preserved critical {field} for activity {activity_id}")
+                
+                merged_activities.append(merged_activity)
+            
+            # Create cache data structure with merged activities
             cache_data = {
                 "timestamp": datetime.now().isoformat(),
-                "activities": basic_data,
+                "activities": merged_activities,
                 "batching_in_progress": False,
                 "batching_status_updated": datetime.now().isoformat()
             }
@@ -1392,7 +1468,7 @@ class SmartStravaCache:
             # Save to Supabase
             self._save_cache(cache_data)
             
-            logger.info(f"✅ Updated cache with {len(basic_data)} activities ({len(new_activities)} new)")
+            logger.info(f"✅ Updated cache with {len(merged_activities)} activities ({len(new_activities)} new) - preserved existing rich data")
             
         except Exception as e:
             logger.error(f"❌ Failed to update cache with batch results: {e}")
