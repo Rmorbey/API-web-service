@@ -421,7 +421,7 @@ class SmartStravaCache:
         logger.info(f"🆕 Found {len(new_activities)} new activities out of {len(basic_data)} total")
         return new_activities
     
-    def _fetch_rich_data_for_new_activities(self, new_activities: List[Dict[str, Any]], access_token: str = None) -> Dict[int, Dict[str, Any]]:
+    def _fetch_rich_data_for_new_activities(self, new_activities: List[Dict[str, Any]], access_token: str = None, apply_expiration_checks: bool = True) -> Dict[int, Dict[str, Any]]:
         """Fetch rich data (photos + comments) only for new activities"""
         rich_data = {}
         
@@ -450,9 +450,27 @@ class SmartStravaCache:
             try:
                 logger.info(f"🔄 Fetching rich data for new activity {activity_id}")
                 
-                # Fetch photos and comments using the pre-obtained token
-                photos_data = self._fetch_activity_photos(activity_id, access_token=access_token)
-                comments_data = self._fetch_activity_comments(activity_id, access_token=access_token)
+                # Fetch photos (with or without expiration checks)
+                photos_data = {}
+                if apply_expiration_checks and self._check_photos_fetch_expired(activity):
+                    logger.info(f"⏰ Photos fetch expired for activity {activity_id}, skipping photos...")
+                else:
+                    if apply_expiration_checks:
+                        logger.info(f"📸 Photos fetch not expired for activity {activity_id}, fetching photos...")
+                    else:
+                        logger.info(f"📸 Fetching photos for activity {activity_id} (no expiration checks)...")
+                    photos_data = self._fetch_activity_photos(activity_id, access_token=access_token)
+                
+                # Fetch comments (with or without expiration checks)
+                comments_data = []
+                if apply_expiration_checks and self._check_comments_fetch_expired(activity):
+                    logger.info(f"⏰ Comments fetch expired for activity {activity_id}, skipping comments...")
+                else:
+                    if apply_expiration_checks:
+                        logger.info(f"💬 Comments fetch not expired for activity {activity_id}, fetching comments...")
+                    else:
+                        logger.info(f"💬 Fetching comments for activity {activity_id} (no expiration checks)...")
+                    comments_data = self._fetch_activity_comments(activity_id, access_token=access_token)
                 
                 rich_data[activity_id] = {
                     "photos": photos_data,
@@ -469,8 +487,98 @@ class SmartStravaCache:
                 }
         
         return rich_data
-    
-    def _fetch_rich_data_for_all_activities(self) -> Dict[int, Dict[str, Any]]:
+
+    def _check_photos_fetch_expired(self, activity: Dict[str, Any]) -> bool:
+        """Check if photos fetch has expired (1 day after activity date)"""
+        try:
+            activity_date_str = activity.get('start_date_local')
+            if not activity_date_str:
+                return True  # If no date, consider expired
+            
+            from datetime import datetime, timedelta
+            activity_date = datetime.fromisoformat(activity_date_str.replace('Z', '+00:00'))
+            photos_expiry = activity_date + timedelta(days=1)
+            
+            return datetime.now() > photos_expiry
+        except Exception as e:
+            logger.warning(f"⚠️ Error checking photos expiry for activity: {e}")
+            return True  # If error, consider expired
+
+    def _check_comments_fetch_expired(self, activity: Dict[str, Any]) -> bool:
+        """Check if comments fetch has expired (1 week after activity date)"""
+        try:
+            activity_date_str = activity.get('start_date_local')
+            if not activity_date_str:
+                return True  # If no date, consider expired
+            
+            from datetime import datetime, timedelta
+            activity_date = datetime.fromisoformat(activity_date_str.replace('Z', '+00:00'))
+            comments_expiry = activity_date + timedelta(weeks=1)
+            
+            return datetime.now() > comments_expiry
+        except Exception as e:
+            logger.warning(f"⚠️ Error checking comments expiry for activity: {e}")
+            return True  # If error, consider expired
+
+    def _fetch_activity_photos(self, activity_id: int, access_token: str = None) -> Dict[str, Any]:
+        """Fetch photos for a specific activity"""
+        try:
+            if not access_token:
+                import os
+                access_token = os.getenv("STRAVA_ACCESS_TOKEN")
+            
+            if not access_token:
+                logger.warning(f"⚠️ No access token available for fetching photos for activity {activity_id}")
+                return {}
+            
+            headers = {"Authorization": f"Bearer {access_token}"}
+            url = f"https://www.strava.com/api/v3/activities/{activity_id}/photos"
+            
+            http_client = get_http_client()
+            response = http_client.get(url, headers=headers, timeout=30.0)
+            
+            if response.status_code == 200:
+                photos_data = response.json()
+                logger.debug(f"📸 Fetched {len(photos_data)} photos for activity {activity_id}")
+                return photos_data
+            else:
+                logger.warning(f"⚠️ Failed to fetch photos for activity {activity_id}: {response.status_code}")
+                return {}
+                
+        except Exception as e:
+            logger.warning(f"⚠️ Error fetching photos for activity {activity_id}: {e}")
+            return {}
+
+    def _fetch_activity_comments(self, activity_id: int, access_token: str = None) -> List[Dict[str, Any]]:
+        """Fetch comments for a specific activity"""
+        try:
+            if not access_token:
+                import os
+                access_token = os.getenv("STRAVA_ACCESS_TOKEN")
+            
+            if not access_token:
+                logger.warning(f"⚠️ No access token available for fetching comments for activity {activity_id}")
+                return []
+            
+            headers = {"Authorization": f"Bearer {access_token}"}
+            url = f"https://www.strava.com/api/v3/activities/{activity_id}/comments"
+            
+            http_client = get_http_client()
+            response = http_client.get(url, headers=headers, timeout=30.0)
+            
+            if response.status_code == 200:
+                comments_data = response.json()
+                logger.debug(f"💬 Fetched {len(comments_data)} comments for activity {activity_id}")
+                return comments_data
+            else:
+                logger.warning(f"⚠️ Failed to fetch comments for activity {activity_id}: {response.status_code}")
+                return []
+                
+        except Exception as e:
+            logger.warning(f"⚠️ Error fetching comments for activity {activity_id}: {e}")
+            return []
+
+    def _fetch_rich_data_for_all_activities(self, apply_expiration_checks: bool = True) -> Dict[int, Dict[str, Any]]:
         """Fetch rich data for ALL activities (used in daily corruption check)"""
         cache_data = self._load_cache(trigger_emergency_refresh=False)
         if not cache_data:
@@ -502,9 +610,27 @@ class SmartStravaCache:
             try:
                 logger.info(f"🔄 Fetching rich data for activity {activity_id} (corruption check)")
                 
-                # Fetch photos and comments using the pre-obtained token
-                photos_data = self._fetch_activity_photos(activity_id, access_token=access_token)
-                comments_data = self._fetch_activity_comments(activity_id, access_token=access_token)
+                # Fetch photos (with or without expiration checks)
+                photos_data = {}
+                if apply_expiration_checks and self._check_photos_fetch_expired(activity):
+                    logger.info(f"⏰ Photos fetch expired for activity {activity_id}, skipping photos...")
+                else:
+                    if apply_expiration_checks:
+                        logger.info(f"📸 Photos fetch not expired for activity {activity_id}, fetching photos...")
+                    else:
+                        logger.info(f"📸 Fetching photos for activity {activity_id} (corruption check - no expiration checks)...")
+                    photos_data = self._fetch_activity_photos(activity_id, access_token=access_token)
+                
+                # Fetch comments (with or without expiration checks)
+                comments_data = []
+                if apply_expiration_checks and self._check_comments_fetch_expired(activity):
+                    logger.info(f"⏰ Comments fetch expired for activity {activity_id}, skipping comments...")
+                else:
+                    if apply_expiration_checks:
+                        logger.info(f"💬 Comments fetch not expired for activity {activity_id}, fetching comments...")
+                    else:
+                        logger.info(f"💬 Fetching comments for activity {activity_id} (corruption check - no expiration checks)...")
+                    comments_data = self._fetch_activity_comments(activity_id, access_token=access_token)
                 
                 rich_data[activity_id] = {
                     "photos": photos_data,
@@ -520,7 +646,7 @@ class SmartStravaCache:
         
         return rich_data
     
-    def _fetch_rich_data_for_all_activities_with_batching(self, basic_data: List[Dict[str, Any]], access_token: str = None) -> Dict[int, Dict[str, Any]]:
+    def _fetch_rich_data_for_all_activities_with_batching(self, basic_data: List[Dict[str, Any]], access_token: str = None, apply_expiration_checks: bool = True) -> Dict[int, Dict[str, Any]]:
         """Fetch rich data for ALL activities using batch processing (20 activities every 15 minutes)"""
         rich_data = {}
         
@@ -540,7 +666,7 @@ class SmartStravaCache:
             logger.info(f"🏃‍♂️ Processing batch {batch_num}/{total_batches}: {len(batch)} activities")
             
             # Fetch rich data for this batch
-            batch_rich_data = self._fetch_rich_data_for_new_activities(batch)
+            batch_rich_data = self._fetch_rich_data_for_new_activities(batch, access_token=access_token, apply_expiration_checks=apply_expiration_checks)
             rich_data.update(batch_rich_data)
             
             logger.info(f"✅ Completed batch {batch_num}/{total_batches}: {len(batch_rich_data)} activities with rich data")
@@ -713,7 +839,8 @@ class SmartStravaCache:
             
             # Step 4: Fetch fresh rich data for ALL activities (not just new ones)
             logger.info("🔄 Fetching fresh rich data for ALL activities...")
-            rich_data = self._fetch_rich_data_for_all_activities_with_batching(basic_data, access_token=access_token)
+            # No expiration checks for corruption check - we need to compare ALL data
+            rich_data = self._fetch_rich_data_for_all_activities_with_batching(basic_data, access_token=access_token, apply_expiration_checks=False)
             logger.info(f"🔄 Fetched rich data for {len(rich_data)} activities")
             
             # Step 5: Compare fresh data vs existing database data
@@ -1360,6 +1487,17 @@ class SmartStravaCache:
             import threading
             import time
             
+            # Determine if this is emergency refresh or 8-hour refresh
+            cache_data = self._load_cache(trigger_emergency_refresh=False)
+            is_emergency_refresh = not cache_data or not cache_data.get("activities")
+            
+            if is_emergency_refresh:
+                logger.info("🚨 Emergency refresh detected - will fetch ALL rich data (no expiration checks)")
+                apply_expiration_checks = False
+            else:
+                logger.info("🕐 8-hour refresh detected - will apply expiration checks for rich data")
+                apply_expiration_checks = True
+            
             # Wait a bit to ensure main application has fully started
             logger.info("🔄 Waiting for main application to fully start...")
             time.sleep(20)  # Give main app more time to start
@@ -1414,7 +1552,7 @@ class SmartStravaCache:
                     logger.info(f"🏃‍♂️ Processing batch {i//batch_size + 1}: {len(batch)} new activities")
                     
                     # Process the batch (fetch rich data for new activities) with the pre-obtained token
-                    self._process_activity_batch(batch, access_token=access_token)
+                    self._process_activity_batch(batch, access_token=access_token, apply_expiration_checks=apply_expiration_checks)
                     
                     # Wait 15 minutes between batches (except for the last batch)
                     if i + batch_size < len(new_activities):
@@ -1435,13 +1573,14 @@ class SmartStravaCache:
             logger.error(f"❌ Batch processing failed: {e}")
             self._mark_batching_in_progress(False)
 
-    def _process_activity_batch(self, batch: List[Dict[str, Any]], access_token: str = None):
+    def _process_activity_batch(self, batch: List[Dict[str, Any]], access_token: str = None, apply_expiration_checks: bool = True):
         """Process a batch of new activities using new streamlined architecture"""
         try:
             logger.info(f"🏃‍♂️ Processing batch of {len(batch)} new activities...")
             
             # Fetch rich data for all activities in this batch using the pre-obtained token
-            rich_data = self._fetch_rich_data_for_new_activities(batch, access_token=access_token)
+            # Apply expiration checks based on refresh type (emergency vs 8-hour)
+            rich_data = self._fetch_rich_data_for_new_activities(batch, access_token=access_token, apply_expiration_checks=apply_expiration_checks)
             
             # Update each activity with rich data
             for activity in batch:
