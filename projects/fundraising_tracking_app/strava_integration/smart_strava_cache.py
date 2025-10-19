@@ -491,11 +491,13 @@ class SmartStravaCache:
             if not activity_date_str:
                 return True  # If no date, consider expired
             
-            from datetime import datetime, timedelta
+            from datetime import datetime, timedelta, timezone
             activity_date = datetime.fromisoformat(activity_date_str.replace('Z', '+00:00'))
             photos_expiry = activity_date + timedelta(days=1)
             
-            return datetime.now() > photos_expiry
+            # Use timezone-aware current time for comparison
+            current_time = datetime.now(timezone.utc)
+            return current_time > photos_expiry
         except Exception as e:
             logger.warning(f"⚠️ Error checking photos expiry for activity: {e}")
             return True  # If error, consider expired
@@ -507,11 +509,13 @@ class SmartStravaCache:
             if not activity_date_str:
                 return True  # If no date, consider expired
             
-            from datetime import datetime, timedelta
+            from datetime import datetime, timedelta, timezone
             activity_date = datetime.fromisoformat(activity_date_str.replace('Z', '+00:00'))
             comments_expiry = activity_date + timedelta(weeks=1)
             
-            return datetime.now() > comments_expiry
+            # Use timezone-aware current time for comparison
+            current_time = datetime.now(timezone.utc)
+            return current_time > comments_expiry
         except Exception as e:
             logger.warning(f"⚠️ Error checking comments expiry for activity: {e}")
             return True  # If error, consider expired
@@ -1877,6 +1881,8 @@ class SmartStravaCache:
     def _generate_deezer_widget(self, detected: Dict[str, Any]) -> str:
         """Generate Deezer widget HTML for the detected music"""
         try:
+            logger.info(f"🎵 Generating Deezer widget for: {detected['title']} by {detected['artist']} (type: {detected['type']})")
+            
             # Search for the track/album on Deezer
             deezer_id, id_type = self._search_deezer_for_id(
                 detected["title"], 
@@ -1887,15 +1893,20 @@ class SmartStravaCache:
             if deezer_id and id_type:
                 # Generate Deezer widget HTML
                 if id_type == "track":
-                    return f'<iframe scrolling="no" frameborder="0" allowTransparency="true" src="https://widget.deezer.com/widget/dark/{id_type}/{deezer_id}" width="100%" height="200"></iframe>'
+                    widget_html = f'<iframe scrolling="no" frameborder="0" allowTransparency="true" src="https://widget.deezer.com/widget/dark/{id_type}/{deezer_id}" width="100%" height="200"></iframe>'
+                    logger.info(f"🎵 Generated Deezer track widget: {deezer_id}")
+                    return widget_html
                 elif id_type == "album":
-                    return f'<iframe scrolling="no" frameborder="0" allowTransparency="true" src="https://widget.deezer.com/widget/dark/{id_type}/{deezer_id}" width="100%" height="300"></iframe>'
+                    widget_html = f'<iframe scrolling="no" frameborder="0" allowTransparency="true" src="https://widget.deezer.com/widget/dark/{id_type}/{deezer_id}" width="100%" height="300"></iframe>'
+                    logger.info(f"🎵 Generated Deezer album widget: {deezer_id}")
+                    return widget_html
             
             # Fallback: return a simple text representation
+            logger.warning(f"🎵 No Deezer ID found, using fallback for: {detected['title']} by {detected['artist']}")
             return f'<div class="music-fallback"><p><strong>{detected["title"]}</strong> by {detected["artist"]}</p></div>'
             
         except Exception as e:
-            logger.warning(f"Failed to generate Deezer widget: {e}")
+            logger.warning(f"🎵 Failed to generate Deezer widget: {e}")
             return f'<div class="music-fallback"><p><strong>{detected["title"]}</strong> by {detected["artist"]}</p></div>'
     
     def _search_deezer_for_id(self, title: str, artist: str, music_type: str) -> tuple[str, str]:
@@ -1904,30 +1915,101 @@ class SmartStravaCache:
         Returns: (id_type, deezer_id) or (None, None) if not found
         """
         try:
-            # Search Deezer API for the specific type (album or track)
-            search_query = f"{title} {artist}".replace(" ", "%20")
+            # Clean and prepare search query
+            clean_title = title.strip().replace('"', '').replace("'", "")
+            clean_artist = artist.strip().replace('"', '').replace("'", "")
+            
+            # Try multiple search strategies
+            search_queries = [
+                f'"{clean_title}" "{clean_artist}"',  # Exact match with quotes
+                f"{clean_title} {clean_artist}",      # Simple concatenation
+                f"{clean_artist} {clean_title}",      # Artist first
+                clean_title,                          # Title only
+                clean_artist                          # Artist only
+            ]
             
             # Use different search endpoints based on type
             if music_type == "album":
-                search_url = f"https://api.deezer.com/search/album?q={search_query}&limit=5"
+                search_endpoint = "https://api.deezer.com/search/album"
             elif music_type == "track":
-                search_url = f"https://api.deezer.com/search/track?q={search_query}&limit=5"
+                search_endpoint = "https://api.deezer.com/search/track"
             else:
                 return None, None
             
-            # Make request to Deezer API
-            response = requests.get(search_url, timeout=5)
-            if response.status_code == 200:
-                data = response.json()
-                
-                if data.get("data") and len(data["data"]) > 0:
-                    # Return the first result
-                    result = data["data"][0]
-                    return result["id"], music_type
+            # Try each search query
+            for search_query in search_queries:
+                try:
+                    encoded_query = search_query.replace(" ", "%20")
+                    search_url = f"{search_endpoint}?q={encoded_query}&limit=10"
+                    
+                    logger.debug(f"🎵 Searching Deezer for: {search_query} (URL: {search_url})")
+                    
+                    # Make request to Deezer API
+                    response = requests.get(search_url, timeout=10)
+                    if response.status_code == 200:
+                        data = response.json()
+                        
+                        if data.get("data") and len(data["data"]) > 0:
+                            # Look for exact matches first
+                            for result in data["data"]:
+                                result_title = result.get("title", "").lower()
+                                result_artist = result.get("artist", {}).get("name", "").lower()
+                                
+                                # Check for exact match
+                                if (clean_title.lower() in result_title and clean_artist.lower() in result_artist) or \
+                                   (clean_artist.lower() in result_title and clean_title.lower() in result_artist):
+                                    logger.info(f"🎵 Found exact Deezer match: {result_title} by {result_artist} (ID: {result['id']})")
+                                    return result["id"], music_type
+                            
+                            # If no exact match, return first result
+                            result = data["data"][0]
+                            logger.info(f"🎵 Found Deezer match: {result.get('title', 'Unknown')} by {result.get('artist', {}).get('name', 'Unknown')} (ID: {result['id']})")
+                            return result["id"], music_type
+                        else:
+                            logger.debug(f"🎵 No results for search: {search_query}")
+                    else:
+                        logger.warning(f"🎵 Deezer API returned status {response.status_code} for: {search_query}")
+                        
+                except Exception as search_error:
+                    logger.warning(f"🎵 Search error for '{search_query}': {search_error}")
+                    continue
             
+            # Special fallback: Search by artist and look through their albums
+            if music_type == "album":
+                logger.info(f"🎵 Trying artist-based search for: {clean_artist}")
+                try:
+                    # Search for artist first
+                    artist_search_url = f"https://api.deezer.com/search/artist?q={clean_artist.replace(' ', '%20')}&limit=5"
+                    artist_response = requests.get(artist_search_url, timeout=10)
+                    
+                    if artist_response.status_code == 200:
+                        artist_data = artist_response.json()
+                        if artist_data.get("data") and len(artist_data["data"]) > 0:
+                            # Get the first artist (most likely match)
+                            artist_result = artist_data["data"][0]
+                            artist_id = artist_result["id"]
+                            
+                            # Now search for albums by this artist
+                            album_search_url = f"https://api.deezer.com/artist/{artist_id}/albums?limit=50"
+                            album_response = requests.get(album_search_url, timeout=10)
+                            
+                            if album_response.status_code == 200:
+                                album_data = album_response.json()
+                                if album_data.get("data") and len(album_data["data"]) > 0:
+                                    # Look through all albums for a title match
+                                    for album in album_data["data"]:
+                                        album_title = album.get("title", "").lower()
+                                        if clean_title.lower() in album_title:
+                                            logger.info(f"🎵 Found album via artist search: {album_title} (ID: {album['id']})")
+                                            return album["id"], music_type
+                                            
+                except Exception as artist_search_error:
+                    logger.warning(f"🎵 Artist-based search failed: {artist_search_error}")
+            
+            logger.warning(f"🎵 No Deezer results found for: {clean_title} by {clean_artist}")
             return None, None
             
         except Exception as e:
-            logger.warning(f"Failed to search Deezer API: {e}")
+            logger.warning(f"🎵 Failed to search Deezer API: {e}")
             return None, None
 
