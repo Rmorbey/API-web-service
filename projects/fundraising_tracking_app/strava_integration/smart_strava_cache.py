@@ -425,39 +425,22 @@ class SmartStravaCache:
         """Fetch rich data (photos + comments) only for new activities"""
         rich_data = {}
         
-        # Use provided token or get a new one (fallback for backward compatibility)
+        # Use provided token or fallback to environment - NO token refresh here
         if not access_token:
-            try:
-                logger.info(f"🔄 Getting access token for batch of {len(new_activities)} activities...")
-                # Use a more reliable token acquisition approach
-                access_token = self.token_manager.get_valid_access_token()
-                logger.info(f"✅ Got access token for batch processing")
-            except Exception as e:
-                logger.error(f"❌ Failed to get access token for batch: {e}")
-                logger.warning("⚠️ Continuing without rich data - will use fallback token from environment")
-                # Try to use fallback token from environment
-                try:
-                    import os
-                    fallback_token = os.getenv("STRAVA_ACCESS_TOKEN")
-                    if fallback_token:
-                        access_token = fallback_token
-                        logger.info("🔄 Using fallback token from environment variables")
-                    else:
-                        logger.error("❌ No fallback token available")
-                        # Return empty rich data for all activities
-                        for activity in new_activities:
-                            activity_id = activity.get("id")
-                            if activity_id:
-                                rich_data[activity_id] = {"photos": {}, "comments": []}
-                        return rich_data
-                except Exception as fallback_error:
-                    logger.error(f"❌ Fallback token acquisition failed: {fallback_error}")
-                    # Return empty rich data for all activities
-                    for activity in new_activities:
-                        activity_id = activity.get("id")
-                        if activity_id:
-                            rich_data[activity_id] = {"photos": {}, "comments": []}
-                    return rich_data
+            logger.info(f"🔄 No token provided for batch of {len(new_activities)} activities, using environment fallback...")
+            import os
+            fallback_token = os.getenv("STRAVA_ACCESS_TOKEN")
+            if fallback_token:
+                access_token = fallback_token
+                logger.info("✅ Using fallback token from environment variables")
+            else:
+                logger.error("❌ No access token available - returning empty rich data")
+                # Return empty rich data for all activities
+                for activity in new_activities:
+                    activity_id = activity.get("id")
+                    if activity_id:
+                        rich_data[activity_id] = {"photos": {}, "comments": []}
+                return rich_data
         
         for activity in new_activities:
             activity_id = activity.get("id")
@@ -496,13 +479,14 @@ class SmartStravaCache:
         activities = cache_data.get("activities", [])
         rich_data = {}
         
-        # Get a single token for the entire batch to avoid deadlocks
-        try:
-            logger.info(f"🔄 Getting access token for corruption check of {len(activities)} activities...")
-            access_token = self.token_manager.get_valid_access_token()
-            logger.info(f"✅ Got access token for corruption check")
-        except Exception as e:
-            logger.error(f"❌ Failed to get access token for corruption check: {e}")
+        # Use environment token for corruption check - NO token refresh here
+        logger.info(f"🔄 Getting access token for corruption check of {len(activities)} activities...")
+        import os
+        access_token = os.getenv("STRAVA_ACCESS_TOKEN")
+        if access_token:
+            logger.info("✅ Using access token from environment variables for corruption check")
+        else:
+            logger.error("❌ No access token available for corruption check - returning empty rich data")
             # Return empty rich data for all activities
             for activity in activities:
                 activity_id = activity.get("id")
@@ -536,7 +520,7 @@ class SmartStravaCache:
         
         return rich_data
     
-    def _fetch_rich_data_for_all_activities_with_batching(self, basic_data: List[Dict[str, Any]]) -> Dict[int, Dict[str, Any]]:
+    def _fetch_rich_data_for_all_activities_with_batching(self, basic_data: List[Dict[str, Any]], access_token: str = None) -> Dict[int, Dict[str, Any]]:
         """Fetch rich data for ALL activities using batch processing (20 activities every 15 minutes)"""
         rich_data = {}
         
@@ -655,6 +639,37 @@ class SmartStravaCache:
             "total_checked": len(basic_data),
             "corrupted_count": len(corrupted_activities)
         }
+
+    def _repair_corrupted_data(self, basic_data: List[Dict[str, Any]], rich_data: Dict[int, Dict[str, Any]]):
+        """Repair corrupted data by updating cache with fresh data"""
+        try:
+            logger.info("🔄 Starting data repair process...")
+            
+            # Update activities with fresh data
+            for activity in basic_data:
+                activity_id = activity.get("id")
+                if activity_id and activity_id in rich_data:
+                    # Merge fresh basic data with fresh rich data
+                    activity.update(rich_data[activity_id])
+                    logger.info(f"✅ Repaired activity {activity_id}: {activity.get('name', 'Unknown')}")
+            
+            # Save repaired data to cache
+            current_time = datetime.now().isoformat()
+            repaired_cache = {
+                "activities": basic_data,
+                "timestamp": current_time,
+                "last_fetch": current_time,
+                "last_rich_fetch": current_time,
+                "last_repair": current_time,
+                "repair_reason": "corruption_detected"
+            }
+            
+            self._save_cache(repaired_cache)
+            logger.info(f"✅ Repaired {len(basic_data)} activities and saved to cache")
+            
+        except Exception as e:
+            logger.error(f"❌ Data repair failed: {e}")
+            raise
     
     def _schedule_daily_corruption_check(self):
         """Schedule daily corruption check at 2am using internal scheduler"""
@@ -678,47 +693,66 @@ class SmartStravaCache:
             logger.info("💡 To enable daily corruption check, install: pip install schedule")
     
     def _daily_corruption_check(self):
-        """Execute daily corruption check at 2am using batch processing"""
+        """Execute daily corruption check at 2am - fetch fresh data and detect corruption"""
         logger.info("🕐 Starting daily corruption check...")
         
         try:
-            # Ensure fresh tokens
-            self.token_manager.get_valid_access_token()
+            # Step 1: Get access token for corruption check (single token acquisition)
+            logger.info("🔄 Getting access token for corruption check...")
+            access_token = self.token_manager.get_valid_access_token()
+            logger.info("✅ Got access token for corruption check")
             
-            # Step 1: Fetch fresh basic data (1 API call - fine to do all at once)
-            raw_data = self._fetch_from_strava(200)
+            # Step 2: Fetch fresh basic data from Strava
+            logger.info("🔄 Fetching fresh basic data for corruption check...")
+            raw_data = self._fetch_from_strava(200, access_token=access_token)
             logger.info(f"🔄 Fetched {len(raw_data)} raw activities for corruption check")
             
-            # Step 1b: Filter for runs/rides from May 22nd, 2025 onwards
+            # Step 3: Filter for runs/rides from May 22nd, 2025 onwards
             basic_data = self._filter_activities(raw_data)
-            logger.info(f"🔄 Filtered to {len(basic_data)} runs/rides from May 22nd, 2025 onwards")
+            logger.info(f"🔄 Filtered to {len(basic_data)} runs/rides for corruption check")
             
-            # Step 2: Fetch rich data for ALL activities using batch processing
-            rich_data = self._fetch_rich_data_for_all_activities_with_batching(basic_data)
-            logger.info(f"🔄 Fetched rich data for {len(rich_data)} activities using batch processing")
+            # Step 4: Fetch fresh rich data for ALL activities (not just new ones)
+            logger.info("🔄 Fetching fresh rich data for ALL activities...")
+            rich_data = self._fetch_rich_data_for_all_activities_with_batching(basic_data, access_token=access_token)
+            logger.info(f"🔄 Fetched rich data for {len(rich_data)} activities")
             
-            # Step 3: Compare fresh vs database data
+            # Step 5: Compare fresh data vs existing database data
+            logger.info("🔄 Comparing fresh data vs database to detect corruption...")
             corruption_analysis = self._compare_fresh_vs_database_data(basic_data, rich_data)
             
+            # Step 6: Handle corruption if detected
             if corruption_analysis["corruption_detected"]:
-                logger.warning(f"🚨 Corruption detected in {corruption_analysis['corrupted_count']} activities")
-                # TODO: Implement data overwrite with fresh data
+                corrupted_count = len(corruption_analysis["corrupted_activities"])
+                logger.warning(f"🚨 Corruption detected in {corrupted_count} activities!")
+                
+                # Log details of corrupted activities
+                for corrupted in corruption_analysis["corrupted_activities"]:
+                    logger.warning(f"🚨 Activity {corrupted['id']} ({corrupted['name']}): {corrupted['reasons']}")
+                
+                # Step 7: Repair corrupted data by updating cache with fresh data
+                logger.info("🔄 Repairing corrupted data with fresh information...")
+                self._repair_corrupted_data(basic_data, rich_data)
+                logger.info("✅ Corrupted data repaired successfully")
             else:
-                logger.info("✅ No corruption detected in daily check")
+                logger.info("✅ No corruption detected - database is clean")
             
-            # Step 4: Update metadata
+            # Step 8: Update corruption check metadata
             current_time = datetime.now().isoformat()
             cache_data = self._load_cache(trigger_emergency_refresh=False)
             if cache_data:
-                cache_data['last_fetch'] = current_time
-                cache_data['last_basic_data_updated'] = current_time
-                cache_data['last_rich_data_updated'] = current_time
+                cache_data['last_corruption_check'] = current_time
+                cache_data['corruption_check_status'] = 'completed'
+                if corruption_analysis["corruption_detected"]:
+                    cache_data['last_corruption_detected'] = current_time
+                    cache_data['corrupted_activities_count'] = len(corruption_analysis["corrupted_activities"])
                 self._save_cache(cache_data)
             
-            logger.info("✅ Daily corruption check completed")
+            logger.info("✅ Daily corruption check completed successfully")
             
         except Exception as e:
             logger.error(f"❌ Daily corruption check failed: {e}")
+            import traceback
+            logger.error(f"❌ Full traceback: {traceback.format_exc()}")
     
     def check_and_refresh(self):
         """Main entry point - single condition check for all refresh scenarios"""
@@ -772,33 +806,6 @@ class SmartStravaCache:
                 "refresh_reason": f"Error loading cache: {e}"
             }
     
-    def _filter_activities(self, activities: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Filter activities based on type and date"""
-        filtered = []
-        
-        for activity in activities:
-            # Filter by activity type
-            if activity.get("type") not in self.allowed_activity_types:
-                continue
-            
-            # Filter out invalid/unknown activities
-            if activity.get("name") == "Unknown Activity" or activity.get("type") == "Unknown":
-                logger.warning(f"Filtering out invalid activity: {activity.get('id')} - {activity.get('name')}")
-                continue
-            
-            # Filter by date (May 22nd, 2025 onwards)
-            try:
-                activity_date = datetime.fromisoformat(activity["start_date"].replace('Z', '+00:00'))
-                # Convert to naive datetime for comparison
-                activity_date_naive = activity_date.replace(tzinfo=None)
-                if activity_date_naive < self.start_date:
-                    continue
-            except (ValueError, KeyError):
-                continue
-            
-            filtered.append(activity)
-        
-        return filtered
     
     def _validate_user_input(self, data):
         """Only sanitize user input fields - PROTECT API DATA"""
@@ -860,7 +867,7 @@ class SmartStravaCache:
         self.api_calls_made += 1
         logger.info(f"API call made. Total: {self.api_calls_made}")
     
-    def _make_api_call_with_retry(self, url: str, headers: Dict[str, str], max_retries: int = 3) -> httpx.Response:
+    def _make_api_call_with_retry(self, url: str, headers: Dict[str, str], max_retries: int = 3, http_client=None) -> httpx.Response:
         """Make an API call with retry logic and error handling using optimized HTTP client"""
         for attempt in range(max_retries):
             try:
@@ -871,9 +878,12 @@ class SmartStravaCache:
                 
                 # Make the API call using shared HTTP client with connection pooling
                 # CRITICAL: Add timeout to prevent hanging
-                logger.info(f"🔄 Step 3a1: Getting HTTP client...")
-                http_client = get_http_client()
-                logger.info(f"🔄 Step 3a2: HTTP client obtained, making API call to: {url}")
+                if http_client is None:
+                    logger.info(f"🔄 Step 3a1: Getting HTTP client...")
+                    http_client = get_http_client()
+                    logger.info(f"🔄 Step 3a2: HTTP client obtained, making API call to: {url}")
+                else:
+                    logger.info(f"🔄 Step 3a2: Using provided HTTP client, making API call to: {url}")
                 logger.info(f"🔄 Step 3a3: Headers: Authorization: Bearer {headers.get('Authorization', 'MISSING')[:20]}...")
                 response = http_client.get(url, headers=headers, timeout=30.0)
                 logger.info(f"🔄 Step 3a4: API call completed: {response.status_code}")
@@ -910,7 +920,11 @@ class SmartStravaCache:
                             def get_new_token():
                                 nonlocal new_token, token_error
                                 try:
-                                    new_token = self.token_manager.get_valid_access_token()
+                                    # Use environment token - NO token refresh in retry mechanism
+                                    import os
+                                    new_token = os.getenv("STRAVA_ACCESS_TOKEN")
+                                    if not new_token:
+                                        token_error = Exception("No access token available in environment")
                                 except Exception as e:
                                     token_error = e
                             
@@ -1054,26 +1068,25 @@ class SmartStravaCache:
                 logger.error("No cached data available, returning empty list")
                 return []
     
-    def _fetch_from_strava(self, limit: int) -> List[Dict[str, Any]]:
+    def _fetch_from_strava(self, limit: int, access_token: str = None) -> List[Dict[str, Any]]:
         """Fetch activities from Strava API with pagination to get ALL activities"""
         try:
             logger.info(f"🔄 Starting Strava API fetch for {limit} activities...")
             
-            # Step 1: Get access token
+            # Step 1: Get access token (use provided token or fallback to environment)
             logger.info("🔄 Step 1: Getting access token...")
-            try:
-                access_token = self.token_manager.get_valid_access_token()
-                logger.info("✅ Got access token for Strava API fetch")
-            except Exception as e:
-                logger.error(f"❌ Failed to get access token: {e}")
-                logger.warning("🔄 Using fallback token from environment variables")
+            if access_token:
+                logger.info("✅ Using provided access token for Strava API fetch")
+            else:
+                # Fallback to environment variables - NO token refresh here
+                logger.info("🔄 No token provided, using environment variable fallback")
                 import os
                 fallback_token = os.getenv("STRAVA_ACCESS_TOKEN")
                 if fallback_token:
                     access_token = fallback_token
-                    logger.info("🔄 Using fallback token from environment variables")
+                    logger.info("✅ Using fallback token from environment variables")
                 else:
-                    logger.error("❌ No fallback token available")
+                    logger.error("❌ No access token available - cannot make API call")
                     return []
             
             # Step 2: Create headers
@@ -1089,12 +1102,14 @@ class SmartStravaCache:
             logger.info("🔄 Step 3a2: HTTP client obtained, making API call to: https://www.strava.com/api/v3/athlete/activities?per_page=200&page=1")
             logger.info(f"🔄 Step 3a3: Headers: Authorization: Bearer {access_token[:20]}...")
             
+            logger.info("🔄 Step 3a4: About to call _make_api_call_with_retry...")
             response = self._make_api_call_with_retry(
                 "https://www.strava.com/api/v3/athlete/activities?per_page=200&page=1", 
-                headers
+                headers,
+                http_client=http_client
             )
             
-            logger.info(f"🔄 Step 3a4: API call completed: {response.status_code}")
+            logger.info(f"🔄 Step 3a5: API call completed: {response.status_code}")
             self._record_api_call()
             logger.info(f"🔄 Step 3b: API call completed, status: {response.status_code}")
             
@@ -1338,19 +1353,20 @@ class SmartStravaCache:
             # Step 1: Get a single access token for the entire batch processing session
             logger.info(f"🔄 Getting access token for entire batch processing session...")
             
-            # Use a simpler, more reliable token acquisition approach
+            # This is the ONLY place that should acquire/refresh tokens
             access_token = None
             try:
-                # Try to get token directly with a shorter timeout
+                # Get token and handle refresh if needed - this is the single source of truth
                 access_token = self.token_manager.get_valid_access_token()
                 logger.info(f"✅ Got access token for entire batch processing session")
             except Exception as e:
-                logger.warning(f"⚠️ Failed to get access token initially: {e}")
-                logger.info("🔄 Will acquire tokens individually for each batch")
-                access_token = None
+                logger.error(f"❌ Failed to get access token for batch processing: {e}")
+                logger.error("❌ Cannot proceed without valid token - aborting batch processing")
+                return
             
             # Step 2: Fetch fresh basic data from Strava (following our new flow)
-            raw_data = self._fetch_from_strava(200)
+            logger.info("🔄 About to call _fetch_from_strava with access token...")
+            raw_data = self._fetch_from_strava(200, access_token=access_token)
             logger.info(f"🔄 Fetched {len(raw_data)} raw activities from Strava")
             
             # Step 2b: Filter for runs/rides from May 22nd, 2025 onwards
