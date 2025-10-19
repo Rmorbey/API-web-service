@@ -402,24 +402,6 @@ class SmartStravaCache:
             logger.warning(f"Error parsing last_fetch timestamp: {e}")
             return False  # If parsing fails, let emergency refresh handle it
     
-    def _identify_new_activities(self, basic_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Compare fresh basic data with database to identify new activities"""
-        cache_data = self._load_cache(trigger_emergency_refresh=False)
-        if not cache_data:
-            return basic_data  # No existing data, all activities are new
-        
-        existing_activities = cache_data.get("activities", [])
-        existing_ids = {activity.get("id") for activity in existing_activities}
-        
-        new_activities = []
-        for activity in basic_data:
-            activity_id = activity.get("id")
-            if activity_id not in existing_ids:
-                new_activities.append(activity)
-                logger.info(f"🆕 New activity identified: {activity_id} - {activity.get('name', 'Unknown')}")
-        
-        logger.info(f"🆕 Found {len(new_activities)} new activities out of {len(basic_data)} total")
-        return new_activities
     
     def _fetch_rich_data_for_new_activities(self, new_activities: List[Dict[str, Any]], access_token: str = None, apply_expiration_checks: bool = True) -> Dict[int, Dict[str, Any]]:
         """Fetch rich data (photos + comments) only for new activities"""
@@ -472,9 +454,21 @@ class SmartStravaCache:
                         logger.info(f"💬 Fetching comments for activity {activity_id} (no expiration checks)...")
                     comments_data = self._fetch_activity_comments(activity_id, access_token=access_token)
                 
+                # Fetch detailed activity data (polyline and description)
+                details_data = {}
+                if apply_expiration_checks and (self._check_polyline_fetch_expired(activity) or self._check_description_fetch_expired(activity)):
+                    logger.info(f"⏰ Polyline/description fetch expired for activity {activity_id}, skipping details...")
+                else:
+                    if apply_expiration_checks:
+                        logger.info(f"🗺️ Polyline/description fetch not expired for activity {activity_id}, fetching details...")
+                    else:
+                        logger.info(f"🗺️ Fetching details for activity {activity_id} (no expiration checks)...")
+                    details_data = self._fetch_activity_details(activity_id, access_token=access_token)
+                
                 rich_data[activity_id] = {
                     "photos": photos_data,
-                    "comments": comments_data
+                    "comments": comments_data,
+                    **details_data  # Merge in description and map data
                 }
                 
                 logger.info(f"✅ Successfully fetched rich data for activity {activity_id}")
@@ -578,73 +572,125 @@ class SmartStravaCache:
             logger.warning(f"⚠️ Error fetching comments for activity {activity_id}: {e}")
             return []
 
-    def _fetch_rich_data_for_all_activities(self, apply_expiration_checks: bool = True) -> Dict[int, Dict[str, Any]]:
-        """Fetch rich data for ALL activities (used in daily corruption check)"""
-        cache_data = self._load_cache(trigger_emergency_refresh=False)
-        if not cache_data:
-            return {}
-        
-        activities = cache_data.get("activities", [])
-        rich_data = {}
-        
-        # Use environment token for corruption check - NO token refresh here
-        logger.info(f"🔄 Getting access token for corruption check of {len(activities)} activities...")
-        import os
-        access_token = os.getenv("STRAVA_ACCESS_TOKEN")
-        if access_token:
-            logger.info("✅ Using access token from environment variables for corruption check")
-        else:
-            logger.error("❌ No access token available for corruption check - returning empty rich data")
-            # Return empty rich data for all activities
-            for activity in activities:
-                activity_id = activity.get("id")
-                if activity_id:
-                    rich_data[activity_id] = {"photos": {}, "comments": []}
-            return rich_data
-        
-        for activity in activities:
-            activity_id = activity.get("id")
-            if not activity_id:
-                continue
+    def _fetch_activity_details(self, activity_id: int, access_token: str = None) -> Dict[str, Any]:
+        """Fetch detailed activity data including polyline and description"""
+        try:
+            if not access_token:
+                import os
+                access_token = os.getenv("STRAVA_ACCESS_TOKEN")
             
-            try:
-                logger.info(f"🔄 Fetching rich data for activity {activity_id} (corruption check)")
+            if not access_token:
+                logger.warning(f"⚠️ No access token available for fetching details for activity {activity_id}")
+                return {}
+            
+            headers = {"Authorization": f"Bearer {access_token}"}
+            url = f"https://www.strava.com/api/v3/activities/{activity_id}"
+            
+            http_client = get_http_client()
+            response = http_client.get(url, headers=headers, timeout=30.0)
+            
+            if response.status_code == 200:
+                activity_data = response.json()
+                logger.debug(f"🗺️ Fetched detailed data for activity {activity_id}")
                 
-                # Fetch photos (with or without expiration checks)
-                photos_data = {}
-                if apply_expiration_checks and self._check_photos_fetch_expired(activity):
-                    logger.info(f"⏰ Photos fetch expired for activity {activity_id}, skipping photos...")
-                else:
-                    if apply_expiration_checks:
-                        logger.info(f"📸 Photos fetch not expired for activity {activity_id}, fetching photos...")
-                    else:
-                        logger.info(f"📸 Fetching photos for activity {activity_id} (corruption check - no expiration checks)...")
-                    photos_data = self._fetch_activity_photos(activity_id, access_token=access_token)
+                # Extract the fields we need
+                details = {}
                 
-                # Fetch comments (with or without expiration checks)
-                comments_data = []
-                if apply_expiration_checks and self._check_comments_fetch_expired(activity):
-                    logger.info(f"⏰ Comments fetch expired for activity {activity_id}, skipping comments...")
-                else:
-                    if apply_expiration_checks:
-                        logger.info(f"💬 Comments fetch not expired for activity {activity_id}, fetching comments...")
-                    else:
-                        logger.info(f"💬 Fetching comments for activity {activity_id} (corruption check - no expiration checks)...")
-                    comments_data = self._fetch_activity_comments(activity_id, access_token=access_token)
+                # Get description
+                if activity_data.get("description"):
+                    details["description"] = activity_data["description"]
                 
-                rich_data[activity_id] = {
-                    "photos": photos_data,
-                    "comments": comments_data
-                }
+                # Get detailed polyline and calculate bounds
+                map_data = activity_data.get("map", {})
+                if map_data.get("polyline"):
+                    details["map"] = {
+                        "polyline": map_data["polyline"],
+                        "bounds": self._calculate_bounds_from_polyline(map_data["polyline"])
+                    }
                 
-            except Exception as e:
-                logger.warning(f"⚠️ Failed to fetch rich data for activity {activity_id}: {e}")
-                rich_data[activity_id] = {
-                    "photos": {},
-                    "comments": []
-                }
-        
-        return rich_data
+                return details
+            else:
+                logger.warning(f"⚠️ Failed to fetch details for activity {activity_id}: {response.status_code}")
+                return {}
+                
+        except Exception as e:
+            logger.warning(f"⚠️ Error fetching details for activity {activity_id}: {e}")
+            return {}
+
+    def _calculate_bounds_from_polyline(self, polyline_string: str) -> Dict[str, float]:
+        """Calculate bounds from polyline string using polyline library"""
+        try:
+            import polyline
+            
+            # Decode polyline to get coordinates
+            coordinates = polyline.decode(polyline_string)
+            
+            if not coordinates:
+                return {}
+            
+            # Extract latitudes and longitudes
+            lats = [coord[0] for coord in coordinates]
+            lngs = [coord[1] for coord in coordinates]
+            
+            # Calculate bounds
+            bounds = {
+                "south": min(lats),
+                "north": max(lats),
+                "west": min(lngs),
+                "east": max(lngs)
+            }
+            
+            logger.debug(f"🗺️ Calculated bounds: {bounds}")
+            return bounds
+            
+        except Exception as e:
+            logger.warning(f"⚠️ Error calculating bounds from polyline: {e}")
+            return {}
+
+    def _check_polyline_fetch_expired(self, activity: Dict[str, Any]) -> bool:
+        """Check if polyline fetch has expired (1 day after activity)"""
+        try:
+            activity_date = activity.get('start_date_local', '')
+            if not activity_date:
+                return True
+            
+            # Parse the date and ensure it's timezone-aware
+            start_date = datetime.fromisoformat(activity_date.replace('Z', '+00:00'))
+            one_day_ago = datetime.now(timezone.utc) - timedelta(days=1)
+            
+            # Ensure both datetimes are timezone-aware for comparison
+            if start_date.tzinfo is None:
+                start_date = start_date.replace(tzinfo=timezone.utc)
+            if one_day_ago.tzinfo is None:
+                one_day_ago = one_day_ago.replace(tzinfo=timezone.utc)
+            
+            return start_date < one_day_ago
+        except Exception as e:
+            logger.warning(f"Error checking polyline fetch expiration: {e}")
+            return True
+
+    def _check_description_fetch_expired(self, activity: Dict[str, Any]) -> bool:
+        """Check if description fetch has expired (1 day after activity)"""
+        try:
+            activity_date = activity.get('start_date_local', '')
+            if not activity_date:
+                return True
+            
+            # Parse the date and ensure it's timezone-aware
+            start_date = datetime.fromisoformat(activity_date.replace('Z', '+00:00'))
+            one_day_ago = datetime.now(timezone.utc) - timedelta(days=1)
+            
+            # Ensure both datetimes are timezone-aware for comparison
+            if start_date.tzinfo is None:
+                start_date = start_date.replace(tzinfo=timezone.utc)
+            if one_day_ago.tzinfo is None:
+                one_day_ago = one_day_ago.replace(tzinfo=timezone.utc)
+            
+            return start_date < one_day_ago
+        except Exception as e:
+            logger.warning(f"Error checking description fetch expiration: {e}")
+            return True
+
     
     def _fetch_rich_data_for_all_activities_with_batching(self, basic_data: List[Dict[str, Any]], access_token: str = None, apply_expiration_checks: bool = True) -> Dict[int, Dict[str, Any]]:
         """Fetch rich data for ALL activities using batch processing (20 activities every 15 minutes)"""
@@ -680,17 +726,6 @@ class SmartStravaCache:
         return rich_data
     
     
-    def _update_activity_expiration_flags(self, activity: Dict[str, Any]) -> Dict[str, Any]:
-        """Update photos_fetch_expired and comments_fetch_expired flags for an activity"""
-        activity_date = activity.get('start_date', '')
-        if not activity_date:
-            return activity
-        
-        activity['photos_fetch_expired'] = self._check_photos_fetch_expired(activity)
-        activity['comments_fetch_expired'] = self._check_comments_fetch_expired(activity)
-        activity['strava_activity_date'] = activity_date
-        
-        return activity
     
     def _compare_fresh_vs_database_data(self, basic_data: List[Dict[str, Any]], rich_data: Dict[int, Dict[str, Any]]) -> Dict[str, Any]:
         """Compare fresh Strava data with database data to detect corruption"""
@@ -1696,12 +1731,14 @@ class SmartStravaCache:
             return basic_data  # Return all activities as new if comparison fails
 
     def _update_activity_expiration_flags(self, activity: Dict[str, Any]) -> Dict[str, Any]:
-        """Update photos_fetch_expired and comments_fetch_expired flags for an activity"""
+        """Update photos_fetch_expired, comments_fetch_expired, polyline_fetch_expired, and description_fetch_expired flags for an activity"""
         try:
             activity_date = activity.get('start_date_local', '')
             if activity_date:
                 activity['photos_fetch_expired'] = self._check_photos_fetch_expired(activity)
                 activity['comments_fetch_expired'] = self._check_comments_fetch_expired(activity)
+                activity['polyline_fetch_expired'] = self._check_polyline_fetch_expired(activity)
+                activity['description_fetch_expired'] = self._check_description_fetch_expired(activity)
             return activity
         except Exception as e:
             logger.warning(f"Error updating expiration flags: {e}")
