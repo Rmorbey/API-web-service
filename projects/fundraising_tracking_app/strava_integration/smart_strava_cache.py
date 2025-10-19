@@ -566,7 +566,8 @@ class SmartStravaCache:
                 if photo.get("urls"):
                     # If urls is a dict, get the largest size available
                     urls = photo.get("urls", {})
-                    photo_url = urls.get("1200px") or urls.get("600px") or urls.get("100px") or ""
+                    # Strava API returns "5000" as the high-quality size key
+                    photo_url = urls.get("5000") or urls.get("1200px") or urls.get("600px") or urls.get("100px") or ""
                 elif photo.get("url"):
                     # Direct URL field
                     photo_url = photo.get("url", "")
