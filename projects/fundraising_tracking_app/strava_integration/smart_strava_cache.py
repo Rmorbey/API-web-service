@@ -872,7 +872,9 @@ class SmartStravaCache:
         for attempt in range(max_retries):
             try:
                 # Check rate limits before making call
+                logger.info(f"🔄 Step 3a4d: Checking API limits...")
                 can_call, message = self._check_api_limits()
+                logger.info(f"🔄 Step 3a4e: API limits check result: {can_call}, message: {message}")
                 if not can_call:
                     raise Exception(f"Rate limit exceeded: {message}")
                 
@@ -1103,6 +1105,10 @@ class SmartStravaCache:
             logger.info(f"🔄 Step 3a3: Headers: Authorization: Bearer {access_token[:20]}...")
             
             logger.info("🔄 Step 3a4: About to call _make_api_call_with_retry...")
+            logger.info(f"🔄 Step 3a4a: URL: https://www.strava.com/api/v3/athlete/activities?per_page=200&page=1")
+            logger.info(f"🔄 Step 3a4b: Headers: {headers}")
+            logger.info(f"🔄 Step 3a4c: HTTP client: {http_client}")
+            
             response = self._make_api_call_with_retry(
                 "https://www.strava.com/api/v3/athlete/activities?per_page=200&page=1", 
                 headers,
@@ -1366,6 +1372,9 @@ class SmartStravaCache:
             
             # Step 2: Fetch fresh basic data from Strava (following our new flow)
             logger.info("🔄 About to call _fetch_from_strava with access token...")
+            logger.info(f"🔄 Access token available: {access_token is not None}")
+            if access_token:
+                logger.info(f"🔄 Access token preview: {access_token[:20]}...")
             raw_data = self._fetch_from_strava(200, access_token=access_token)
             logger.info(f"🔄 Fetched {len(raw_data)} raw activities from Strava")
             
