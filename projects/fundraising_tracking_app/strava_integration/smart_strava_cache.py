@@ -388,11 +388,11 @@ class SmartStravaCache:
         """Check if 8-hour refresh should be triggered based on last_fetch timestamp"""
         cache_data = self._load_cache()
         if not cache_data:
-            return True  # No cache data, trigger refresh
+            return False  # No cache data = emergency refresh, not 8-hour refresh
         
         last_fetch = cache_data.get('last_fetch')
         if not last_fetch:
-            return True  # No last_fetch timestamp, trigger refresh
+            return False  # No last_fetch timestamp = emergency refresh, not 8-hour refresh
         
         try:
             last_fetch_time = datetime.fromisoformat(last_fetch)
@@ -400,7 +400,7 @@ class SmartStravaCache:
             return time_since_fetch >= timedelta(hours=8)
         except Exception as e:
             logger.warning(f"Error parsing last_fetch timestamp: {e}")
-            return True  # If parsing fails, trigger refresh
+            return False  # If parsing fails, let emergency refresh handle it
     
     def _identify_new_activities(self, basic_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Compare fresh basic data with database to identify new activities"""
@@ -758,16 +758,19 @@ class SmartStravaCache:
         """Main entry point - single condition check for all refresh scenarios"""
         cache_data = self._load_cache()
         
-        # SINGLE CONDITION: Empty database OR 8+ hours old
-        if (not cache_data or 
-            not cache_data.get("activities") or 
-            self._should_trigger_8hour_refresh()):
-            
-            logger.info("🏃‍♂️ Starting batch processing")
+        # Check for emergency refresh (no data)
+        if not cache_data or not cache_data.get("activities"):
+            logger.info("🚨 Emergency refresh needed - no cache data found")
             self._start_batch_processing()
             return
         
-        logger.info("🏃‍♂️ Cache is valid - no refresh needed")
+        # Check for 8-hour refresh (data exists but is old)
+        if self._should_trigger_8hour_refresh():
+            logger.info("🕐 8-hour refresh needed - cache is older than 8 hours")
+            self._start_batch_processing()
+            return
+        
+        logger.info("✅ Cache is valid - no refresh needed")
     
     
     def get_cache_status(self) -> Dict[str, Any]:
@@ -1322,6 +1325,11 @@ class SmartStravaCache:
                     logger.info("🏃‍♂️ Batch processing already running, skipping...")
                     return
                 
+                # Check if we're already in the middle of token acquisition
+                if hasattr(self, '_token_acquisition_in_progress') and self._token_acquisition_in_progress:
+                    logger.info("🔄 Token acquisition already in progress, skipping batch processing...")
+                    return
+                
                 logger.info("🔄 Marking batching as in progress...")
                 # Mark batching as in progress
                 self._mark_batching_in_progress(True)
@@ -1362,10 +1370,21 @@ class SmartStravaCache:
             # This is the ONLY place that should acquire/refresh tokens
             access_token = None
             try:
+                # Mark token acquisition as in progress to prevent conflicts
+                self._token_acquisition_in_progress = True
+                logger.info("🔄 Token acquisition marked as in progress")
+                
                 # Get token and handle refresh if needed - this is the single source of truth
                 access_token = self.token_manager.get_valid_access_token()
                 logger.info(f"✅ Got access token for entire batch processing session")
+                
+                # Clear the flag
+                self._token_acquisition_in_progress = False
+                logger.info("🔄 Token acquisition completed, flag cleared")
+                
             except Exception as e:
+                # Clear the flag on error
+                self._token_acquisition_in_progress = False
                 logger.error(f"❌ Failed to get access token for batch processing: {e}")
                 logger.error("❌ Cannot proceed without valid token - aborting batch processing")
                 return
