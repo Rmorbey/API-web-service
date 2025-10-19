@@ -679,25 +679,6 @@ class SmartStravaCache:
         logger.info(f"✅ Batch processing completed: {len(rich_data)} activities with rich data")
         return rich_data
     
-    def _check_photo_fetch_expired(self, activity_date: str) -> bool:
-        """Check if photo fetching should be skipped (24+ hours after activity date)"""
-        try:
-            activity_dt = datetime.fromisoformat(activity_date.replace('Z', '+00:00'))
-            time_since_activity = datetime.now(timezone.utc) - activity_dt
-            return time_since_activity >= timedelta(hours=24)
-        except Exception as e:
-            logger.warning(f"Error parsing activity date {activity_date}: {e}")
-            return False  # If parsing fails, don't skip
-    
-    def _check_comments_fetch_expired(self, activity_date: str) -> bool:
-        """Check if comments fetching should be skipped (168+ hours after activity date)"""
-        try:
-            activity_dt = datetime.fromisoformat(activity_date.replace('Z', '+00:00'))
-            time_since_activity = datetime.now(timezone.utc) - activity_dt
-            return time_since_activity >= timedelta(hours=168)  # 1 week
-        except Exception as e:
-            logger.warning(f"Error parsing activity date {activity_date}: {e}")
-            return False  # If parsing fails, don't skip
     
     def _update_activity_expiration_flags(self, activity: Dict[str, Any]) -> Dict[str, Any]:
         """Update photos_fetch_expired and comments_fetch_expired flags for an activity"""
@@ -705,8 +686,8 @@ class SmartStravaCache:
         if not activity_date:
             return activity
         
-        activity['photos_fetch_expired'] = self._check_photo_fetch_expired(activity_date)
-        activity['comments_fetch_expired'] = self._check_comments_fetch_expired(activity_date)
+        activity['photos_fetch_expired'] = self._check_photos_fetch_expired(activity)
+        activity['comments_fetch_expired'] = self._check_comments_fetch_expired(activity)
         activity['strava_activity_date'] = activity_date
         
         return activity
@@ -1152,40 +1133,23 @@ class SmartStravaCache:
             logger.info(f"Cache hit - {time.time() - start_time:.3f}s")
             return cache_data["activities"][:limit]
         
-        # Cache is invalid or force refresh - SMART MERGE with existing data
-        logger.info("Cache expired or invalid, performing smart refresh...")
+        # Cache is invalid or force refresh - trigger batch processing
+        logger.info("Cache expired or invalid, triggering batch processing...")
         
         try:
-            # Fetch fresh basic data from Strava
-            fresh_activities = self._fetch_from_strava(limit * 2)  # Fetch more to account for filtering
+            # Use the new streamlined architecture - trigger batch processing
+            self._start_batch_processing()
             
-            # Filter activities
-            filtered_activities = self._filter_activities(fresh_activities)
+            # Wait a moment for batch processing to start
+            time.sleep(2)
             
-            # SMART MERGE: Preserve existing rich data, update only basic fields
-            existing_activities = cache_data.get("activities", [])
-            merged_activities = self._smart_merge_activities(existing_activities, filtered_activities)
-            
-            # Check and update rich data for ALL activities within last 3 weeks
-            logger.info("🔍 Checking all activities for missing rich data...")
-            updated_activities = self._check_and_update_all_activities_rich_data(merged_activities)
-            
-            # Update cache with merged and updated data
-            cache_data = {
-                "timestamp": datetime.now().isoformat(),
-                "activities": updated_activities,
-                "total_fetched": len(fresh_activities),
-                "total_filtered": len(filtered_activities),
-                "smart_merge": True,  # Flag to indicate smart merge was used
-                "rich_data_updated": True  # Flag to indicate rich data was checked
-            }
-            
-            self._save_cache(cache_data)
-            
-            execution_time = time.time() - start_time
-            logger.info(f"Smart merged {len(merged_activities)} activities and updated rich data")
-            logger.info(f"Smart merge complete - {execution_time:.3f}s")
-            return updated_activities[:limit]
+            # Return cached data (even if stale) while batch processing runs in background
+            if cache_data.get("activities"):
+                logger.info("Returning cached data while batch processing runs in background")
+                return cache_data["activities"][:limit]
+            else:
+                logger.info("No cached data available, returning empty list")
+                return []
             
         except Exception as e:
             execution_time = time.time() - start_time
@@ -1392,6 +1356,72 @@ class SmartStravaCache:
                 logger.warning(f"Cache integrity check failed: Only {polyline_count}/{total_activities} activities have polyline data ({polyline_percentage:.1%} - below 30% threshold)")
                 logger.warning("This indicates batching may not have completed successfully or needs to be re-run")
                 return False
+            
+            logger.info(f"Cache integrity check passed: {basic_data_count}/{total_activities} activities have basic data, {polyline_count}/{total_activities} have polyline data, {bounds_count}/{total_activities} have bounds data")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Cache integrity check error: {e}")
+            return False
+
+    def _validate_cache_integrity(self, cache_data: Dict[str, Any]) -> bool:
+        """Validate cache integrity - check for data loss indicators with proper batching support"""
+        try:
+            activities = cache_data.get("activities", [])
+            if not activities:
+                logger.warning("Cache has no activities")
+                return False
+            
+            total_activities = len(activities)
+            
+            # Check for basic data integrity (all activities should have basic fields)
+            basic_data_count = 0
+            for activity in activities:
+                if (activity.get("id") and 
+                    activity.get("name") and 
+                    activity.get("type") and 
+                    activity.get("start_date_local")):
+                    basic_data_count += 1
+            
+            # If less than 90% of activities have basic data, consider it corrupted
+            if basic_data_count < total_activities * 0.9:
+                logger.warning(f"Cache integrity check failed: Only {basic_data_count}/{total_activities} activities have basic data")
+                return False
+            
+            # Check for polyline and bounds data (Run/Ride activities should have both)
+            polyline_count = sum(1 for activity in activities if activity.get("map", {}).get("polyline"))
+            bounds_count = sum(1 for activity in activities if activity.get("map", {}).get("bounds"))
+            
+            # Determine if we're in the middle of batching process
+            is_emergency_refresh = cache_data.get("emergency_refresh", False)
+            is_fresh_cache = cache_data.get("timestamp") and (datetime.now() - datetime.fromisoformat(cache_data["timestamp"])).total_seconds() < 3600  # Less than 1 hour old
+            is_batching_in_progress = cache_data.get("batching_in_progress", False)
+            
+            # During emergency refresh or fresh cache, allow batching to complete
+            if is_emergency_refresh or is_fresh_cache or is_batching_in_progress:
+                logger.info(f"Cache validation: Allowing batching process to complete (emergency: {is_emergency_refresh}, fresh: {is_fresh_cache}, batching: {is_batching_in_progress})")
+                logger.info(f"Cache integrity check passed: {basic_data_count}/{total_activities} activities have basic data, {polyline_count}/{total_activities} have polyline data, {bounds_count}/{total_activities} have bounds data")
+                return True
+            
+            # After batching should be complete, enforce the 30% polyline threshold
+            polyline_percentage = polyline_count / total_activities if total_activities > 0 else 0
+            if polyline_percentage < 0.3:
+                logger.warning(f"Cache integrity check failed: Only {polyline_count}/{total_activities} activities have polyline data ({polyline_percentage:.1%} - below 30% threshold)")
+                logger.warning("This indicates batching may not have completed successfully or needs to be re-run")
+                return False
+            
+            # Check for recent activities (should have complete GPS data)
+            recent_activities = [a for a in activities if a.get("start_date_local", "").startswith("2025-09")]
+            if recent_activities:
+                recent_polyline_count = sum(1 for activity in recent_activities if activity.get("map", {}).get("polyline"))
+                recent_bounds_count = sum(1 for activity in recent_activities if activity.get("map", {}).get("bounds"))
+                # Recent Run/Ride activities should have both polyline and bounds
+                if recent_polyline_count < len(recent_activities) * 0.9:
+                    logger.warning(f"Cache integrity check failed: Recent activities missing polyline data ({recent_polyline_count}/{len(recent_activities)})")
+                    return False
+                if recent_bounds_count < len(recent_activities) * 0.9:
+                    logger.warning(f"Cache integrity check failed: Recent activities missing bounds data ({recent_bounds_count}/{len(recent_activities)})")
+                    return False
             
             logger.info(f"Cache integrity check passed: {basic_data_count}/{total_activities} activities have basic data, {polyline_count}/{total_activities} have polyline data, {bounds_count}/{total_activities} have bounds data")
             return True
@@ -1670,33 +1700,10 @@ class SmartStravaCache:
         try:
             activity_date = activity.get('start_date_local', '')
             if activity_date:
-                activity['photos_fetch_expired'] = self._check_photos_fetch_expired(activity_date)
-                activity['comments_fetch_expired'] = self._check_comments_fetch_expired(activity_date)
+                activity['photos_fetch_expired'] = self._check_photos_fetch_expired(activity)
+                activity['comments_fetch_expired'] = self._check_comments_fetch_expired(activity)
             return activity
         except Exception as e:
             logger.warning(f"Error updating expiration flags: {e}")
             return activity
 
-    def _check_photos_fetch_expired(self, activity_date: str) -> bool:
-        """Check if photos fetching should be skipped (24+ hours after activity date)"""
-        try:
-            activity_dt = datetime.fromisoformat(activity_date.replace('Z', '+00:00'))
-            if activity_dt.tzinfo is None:
-                activity_dt = activity_dt.replace(tzinfo=timezone.utc)
-            time_since_activity = datetime.now(timezone.utc) - activity_dt
-            return time_since_activity >= timedelta(hours=24)
-        except Exception as e:
-            logger.warning(f"Error parsing activity date {activity_date}: {e}")
-            return False  # If parsing fails, don't skip
-
-    def _check_comments_fetch_expired(self, activity_date: str) -> bool:
-        """Check if comments fetching should be skipped (168+ hours after activity date)"""
-        try:
-            activity_dt = datetime.fromisoformat(activity_date.replace('Z', '+00:00'))
-            if activity_dt.tzinfo is None:
-                activity_dt = activity_dt.replace(tzinfo=timezone.utc)
-            time_since_activity = datetime.now(timezone.utc) - activity_dt
-            return time_since_activity >= timedelta(hours=168)  # 1 week
-        except Exception as e:
-            logger.warning(f"Error parsing activity date {activity_date}: {e}")
-            return False  # If parsing fails, don't skip
