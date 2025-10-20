@@ -1750,8 +1750,64 @@ class SmartStravaCache:
                         time.sleep(900)  # 15 minutes
             else:
                 logger.info("✅ No new activities to process")
+                
+                # Even when there are no new activities, during the 8-hour refresh we
+                # should check whether any existing activities still fall within the
+                # expiration windows for rich data (photos, comments, description, polyline)
+                # and top them up. We will only persist if any rich updates were applied.
+                performed_rich_updates = False
+                try:
+                    existing_cache = self._load_cache(trigger_emergency_refresh=False) or {}
+                    existing_activities = existing_cache.get("activities", [])
+                    existing_by_id = {a.get("id"): a for a in existing_activities}
+                    
+                    # Build a list of existing activities eligible for rich-data refresh
+                    eligible_existing: List[Dict[str, Any]] = []
+                    for fresh in basic_data:
+                        aid = fresh.get("id")
+                        prev = existing_by_id.get(aid)
+                        if not aid or not prev:
+                            continue
+                        
+                        wants_photos = (not prev.get("photos_fetch_expired", False)) and not prev.get("photos")
+                        wants_comments = (not prev.get("comments_fetch_expired", False)) and not prev.get("comments")
+                        wants_description = (not prev.get("description_fetch_expired", False)) and not prev.get("description")
+                        wants_polyline = (not prev.get("polyline_fetch_expired", False)) and (not prev.get("polyline") or not prev.get("bounds"))
+                        
+                        if wants_photos or wants_comments or wants_description or wants_polyline:
+                            eligible_existing.append(fresh)
+                    
+                    if eligible_existing:
+                        logger.info(f"🔎 Found {len(eligible_existing)} existing activities eligible for rich-data refresh within expiration windows")
+                        batch_size = 20
+                        for i in range(0, len(eligible_existing), batch_size):
+                            batch = eligible_existing[i:i + batch_size]
+                            logger.info(f"🏃‍♂️ Processing existing batch {i//batch_size + 1}: {len(batch)} activities (expiration checks ON)")
+                            self._process_activity_batch(batch, access_token=access_token, apply_expiration_checks=True)
+                            performed_rich_updates = True
+                            if i + batch_size < len(eligible_existing):
+                                logger.info("⏰ Waiting 15 minutes before next existing batch...")
+                                time.sleep(900)
+                    else:
+                        logger.info("🔎 No existing activities require rich-data refresh within expiration windows")
+                except Exception as enrich_err:
+                    logger.warning(f"⚠️ Skipped existing-activity rich-data refresh due to error: {enrich_err}")
+                
+                if not performed_rich_updates:
+                    # Preserve existing rich data exactly as-is – do not write basic-only dataset
+                    logger.info("🛑 No rich updates performed – skipping cache save to preserve existing rich data")
+                    self._mark_batching_in_progress(False)
+                    logger.info("✅ Batch processing completed with no changes")
+                    return
+                
+                # Persist merged results (basic_data + enriched existing); new_activities is empty
+                logger.info("💾 Persisting cache after enriching existing activities within expiration windows")
+                self._update_cache_with_batch_results(basic_data, [])
+                self._mark_batching_in_progress(False)
+                logger.info("✅ Batch processing completed with enriched updates")
+                return
             
-            # Step 4: Update cache with all data
+            # Step 4: Update cache with all data (only when there are new activities)
             self._update_cache_with_batch_results(basic_data, new_activities)
             
             # Step 5: Mark batching as complete
