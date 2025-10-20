@@ -1988,7 +1988,7 @@ class SmartStravaCache:
     
     def _search_deezer_for_id(self, title: str, artist: str, music_type: str) -> tuple[str, str]:
         """
-        Search Deezer API for specific album/track ID
+        Search Deezer API for specific album/track ID with sophisticated matching
         Returns: (id_type, deezer_id) or (None, None) if not found
         """
         try:
@@ -1996,94 +1996,117 @@ class SmartStravaCache:
             clean_title = title.strip().replace('"', '').replace("'", "")
             clean_artist = artist.strip().replace('"', '').replace("'", "")
             
-            # Try multiple search strategies
+            # Try multiple search strategies with more flexible terms
             search_queries = [
-                f'"{clean_title}" "{clean_artist}"',  # Exact match with quotes
-                f"{clean_title} {clean_artist}",      # Simple concatenation
+                f"{clean_title} {clean_artist}",      # Simple concatenation (most effective)
                 f"{clean_artist} {clean_title}",      # Artist first
+                f'"{clean_title}" "{clean_artist}"',  # Exact match with quotes
                 clean_title,                          # Title only
                 clean_artist                          # Artist only
             ]
             
-            # Use different search endpoints based on type
+            # Prioritize the correct search type, but try both for better coverage
+            search_endpoints = []
             if music_type == "album":
-                search_endpoint = "https://api.deezer.com/search/album"
+                # For albums, try album search first, then track search to find the album
+                search_endpoints = [
+                    ("https://api.deezer.com/search/album", "album"),
+                    ("https://api.deezer.com/search/track", "album_from_track")  # Extract album from track
+                ]
             elif music_type == "track":
-                search_endpoint = "https://api.deezer.com/search/track"
+                search_endpoints = [
+                    ("https://api.deezer.com/search/track", "track"),
+                    ("https://api.deezer.com/search/album", "track")  # Fallback to album search
+                ]
             else:
                 return None, None
             
-            # Try each search query
+            # Try each search query with each endpoint
             for search_query in search_queries:
-                try:
-                    encoded_query = search_query.replace(" ", "%20")
-                    search_url = f"{search_endpoint}?q={encoded_query}&limit=10"
-                    
-                    logger.debug(f"🎵 Searching Deezer for: {search_query} (URL: {search_url})")
-                    
-                    # Make request to Deezer API
-                    response = requests.get(search_url, timeout=10)
-                    if response.status_code == 200:
-                        data = response.json()
+                for search_endpoint, endpoint_type in search_endpoints:
+                    try:
+                        encoded_query = search_query.replace(" ", "%20")
+                        search_url = f"{search_endpoint}?q={encoded_query}&limit=10"
                         
-                        if data.get("data") and len(data["data"]) > 0:
-                            # Look for exact matches first
-                            for result in data["data"]:
-                                result_title = result.get("title", "").lower()
-                                result_artist = result.get("artist", {}).get("name", "").lower()
+                        logger.debug(f"🎵 Searching Deezer for: {search_query} ({endpoint_type}) (URL: {search_url})")
+                        
+                        # Make request to Deezer API
+                        response = requests.get(search_url, timeout=10)
+                        if response.status_code == 200:
+                            data = response.json()
+                            
+                            if data.get("data") and len(data["data"]) > 0:
+                                # Look for exact matches first
+                                for result in data["data"]:
+                                    result_title = result.get("title", "").lower()
+                                    result_artist = result.get("artist", {}).get("name", "").lower()
+                                    
+                                    # Check for exact match
+                                    if (clean_title.lower() in result_title and clean_artist.lower() in result_artist) or \
+                                       (clean_artist.lower() in result_title and clean_title.lower() in result_artist):
+                                        
+                                        # If we found a track but need an album, get the album ID
+                                        if endpoint_type == "album_from_track" and music_type == "album":
+                                            album_id = result.get("album", {}).get("id")
+                                            if album_id:
+                                                logger.info(f"🎵 Found exact Deezer match: {result_title} by {result_artist} (track) - using album ID: {album_id}")
+                                                return album_id, "album"
+                                            else:
+                                                logger.warning(f"🎵 Found track match but no album ID available")
+                                                continue
+                                        else:
+                                            logger.info(f"🎵 Found exact Deezer match: {result_title} by {result_artist} ({endpoint_type}) (ID: {result['id']})")
+                                            return result["id"], endpoint_type
                                 
-                                # Check for exact match
-                                if (clean_title.lower() in result_title and clean_artist.lower() in result_artist) or \
-                                   (clean_artist.lower() in result_title and clean_title.lower() in result_artist):
-                                    logger.info(f"🎵 Found exact Deezer match: {result_title} by {result_artist} (ID: {result['id']})")
-                                    return result["id"], music_type
-                            
-                            # If no exact match, return first result
-                            result = data["data"][0]
-                            logger.info(f"🎵 Found Deezer match: {result.get('title', 'Unknown')} by {result.get('artist', {}).get('name', 'Unknown')} (ID: {result['id']})")
-                            return result["id"], music_type
-                        else:
-                            logger.debug(f"🎵 No results for search: {search_query}")
-                    else:
-                        logger.warning(f"🎵 Deezer API returned status {response.status_code} for: {search_query}")
-                        
-                except Exception as search_error:
-                    logger.warning(f"🎵 Search error for '{search_query}': {search_error}")
-                    continue
-            
-            # Special fallback: Search by artist and look through their albums
-            if music_type == "album":
-                logger.info(f"🎵 Trying artist-based search for: {clean_artist}")
-                try:
-                    # Search for artist first
-                    artist_search_url = f"https://api.deezer.com/search/artist?q={clean_artist.replace(' ', '%20')}&limit=5"
-                    artist_response = requests.get(artist_search_url, timeout=10)
+                                # If no exact match found, try partial matches
+                                for result in data["data"]:
+                                    result_title = result.get("title", "").lower()
+                                    result_artist = result.get("artist", {}).get("name", "").lower()
+                                    
+                                    # Check for partial match (at least 80% of words match)
+                                    title_words = set(clean_title.lower().split())
+                                    artist_words = set(clean_artist.lower().split())
+                                    result_title_words = set(result_title.split())
+                                    result_artist_words = set(result_artist.split())
+                                    
+                                    title_match_ratio = len(title_words.intersection(result_title_words)) / len(title_words) if title_words else 0
+                                    artist_match_ratio = len(artist_words.intersection(result_artist_words)) / len(artist_words) if artist_words else 0
+                                    
+                                    if title_match_ratio >= 0.8 and artist_match_ratio >= 0.8:
+                                        # If we found a track but need an album, get the album ID
+                                        if endpoint_type == "album_from_track" and music_type == "album":
+                                            album_id = result.get("album", {}).get("id")
+                                            if album_id:
+                                                logger.info(f"🎵 Found partial Deezer match: {result_title} by {result_artist} (track) - using album ID: {album_id}")
+                                                return album_id, "album"
+                                            else:
+                                                logger.warning(f"🎵 Found track match but no album ID available")
+                                                continue
+                                        else:
+                                            logger.info(f"🎵 Found partial Deezer match: {result_title} by {result_artist} ({endpoint_type}) (ID: {result['id']})")
+                                            return result["id"], endpoint_type
+                                
+                                # If still no match, return the first result as fallback
+                                result = data["data"][0]
+                                
+                                # If we found a track but need an album, get the album ID
+                                if endpoint_type == "album_from_track" and music_type == "album":
+                                    album_id = result.get("album", {}).get("id")
+                                    if album_id:
+                                        logger.warning(f"🎵 No exact match found, using first result album: {result.get('title')} by {result.get('artist', {}).get('name')} (track) - using album ID: {album_id}")
+                                        return album_id, "album"
+                                    else:
+                                        logger.warning(f"🎵 Found track but no album ID available, skipping")
+                                        continue
+                                else:
+                                    logger.warning(f"🎵 No exact match found, using first result: {result.get('title')} by {result.get('artist', {}).get('name')} ({endpoint_type}) (ID: {result['id']})")
+                                    return result["id"], endpoint_type
                     
-                    if artist_response.status_code == 200:
-                        artist_data = artist_response.json()
-                        if artist_data.get("data") and len(artist_data["data"]) > 0:
-                            # Get the first artist (most likely match)
-                            artist_result = artist_data["data"][0]
-                            artist_id = artist_result["id"]
-                            
-                            # Now search for albums by this artist
-                            album_search_url = f"https://api.deezer.com/artist/{artist_id}/albums?limit=50"
-                            album_response = requests.get(album_search_url, timeout=10)
-                            
-                            if album_response.status_code == 200:
-                                album_data = album_response.json()
-                                if album_data.get("data") and len(album_data["data"]) > 0:
-                                    # Look through all albums for a title match
-                                    for album in album_data["data"]:
-                                        album_title = album.get("title", "").lower()
-                                        if clean_title.lower() in album_title:
-                                            logger.info(f"🎵 Found album via artist search: {album_title} (ID: {album['id']})")
-                                            return album["id"], music_type
-                                            
-                except Exception as artist_search_error:
-                    logger.warning(f"🎵 Artist-based search failed: {artist_search_error}")
+                    except Exception as e:
+                        logger.debug(f"🎵 Search query failed: {search_query} ({endpoint_type}) - {e}")
+                        continue
             
-            logger.warning(f"🎵 No Deezer results found for: {clean_title} by {clean_artist}")
+            logger.warning(f"🎵 No Deezer results found for: {title} by {artist}")
             return None, None
             
         except Exception as e:
