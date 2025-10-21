@@ -1390,66 +1390,22 @@ class SmartStravaCache:
                 activity_id = fresh_activity.get("id")
                 existing_activity = existing_by_id.get(activity_id, {})
                 
-                # Merge: use fresh basic data but preserve existing rich data
-                merged_activity = fresh_activity.copy()  # Start with fresh basic data
+                # For 8-hour refresh: Start with existing data and only add/update what's needed
+                # This preserves ALL existing data and only adds new data
+                merged_activity = existing_activity.copy() if existing_activity else {}
                 
-                # Define basic Strava API fields that should be overwritten with fresh data
-                basic_strava_fields = {
-                    "id", "name", "distance", "moving_time", "elapsed_time", "total_elevation_gain",
-                    "type", "sport_type", "start_date", "start_date_local", "timezone", "utc_offset",
-                    "achievement_count", "kudos_count", "comment_count", "athlete_count", "pr_count",
-                    "average_speed", "max_speed", "average_cadence", "average_watts", "weighted_average_watts",
-                    "kilojoules", "has_heartrate", "average_heartrate", "max_heartrate", "heartrate_opt_out",
-                    "display_hide_heartrate_option", "elev_high", "elev_low", "has_kudoed", "suffer_score",
-                    "calories", "gear_id", "trainer", "commute", "manual", "private", "flagged", "workout_type",
-                    "external_id", "upload_id", "start_latlng", "end_latlng", "device_name", "embed_token",
-                    "from_accepted_tag", "segment_efforts", "splits_metric", "splits_standard", "laps",
-                    "best_efforts", "photos", "stats_visibility", "hide_from_home", "map", "device_watts",
-                    "perceived_exertion", "prefer_perceived_exertion", "segment_leaderboard_opt_out",
-                    "leaderboard_opt_out", "resource_state", "athlete", "visibility"
-                }
-                
-                # Preserve ALL fields from existing activity that are NOT basic Strava fields
-                # This ensures we keep all rich data, metadata, and custom fields
-                for field, value in existing_activity.items():
-                    if field not in basic_strava_fields and value is not None:
-                        merged_activity[field] = value
-                        logger.debug(f"🔄 Preserved {field} for activity {activity_id}")
-                
-                # Also preserve specific rich data fields even if they're in basic fields
-                # (in case they were modified or enhanced)
-                critical_rich_fields = [
-                    # Rich data from API calls
-                    "photos", "comments", "polyline", "bounds", "description",
-                    "music", "deezer", "widget_html",
-                    
-                    # Expiration flags
-                    "photos_fetch_expired", "comments_fetch_expired", 
-                    "polyline_fetch_expired", "description_fetch_expired",
-                    
-                    # Timestamps
-                    "last_photos_fetch", "last_comments_fetch",
-                    "last_polyline_fetch", "last_bounds_fetch", 
-                    "last_music_fetch", "last_deezer_fetch",
-                    
-                    # Formatted data from async processor
-                    "distance_formatted", "formatted_duration", "duration_formatted",
-                    "pace_per_km", "date_formatted",
-                    
-                    # Photo processing fields
-                    "optimized_url", "has_photo",
-                    
-                    # Music detection fields
-                    "detected", "album", "track", "playlist",
-                    
-                    # Metadata
-                    "rich_data_fetched", "metadata_updated", "has_media", "media_type", "photo_url"
-                ]
-                
-                for field in critical_rich_fields:
-                    if field in existing_activity and existing_activity[field] is not None:
-                        merged_activity[field] = existing_activity[field]
-                        logger.debug(f"🔄 Preserved critical {field} for activity {activity_id}")
+                # For 8-hour refresh: Only add/update fields that are missing or have changed
+                # This preserves ALL existing data and only adds new data
+                if existing_activity:
+                    # Existing activity: Only add fields that don't exist or have changed
+                    for field, value in fresh_activity.items():
+                        if field not in existing_activity or existing_activity[field] != value:
+                            merged_activity[field] = value
+                            logger.debug(f"🔄 Updated {field} for existing activity {activity_id}")
+                else:
+                    # New activity: Add all fresh data
+                    merged_activity.update(fresh_activity)
+                    logger.debug(f"🔄 Added new activity {activity_id} with all fresh data")
                 
                 merged_activities.append(merged_activity)
             
