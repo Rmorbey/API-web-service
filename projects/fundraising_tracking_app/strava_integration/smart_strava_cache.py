@@ -1394,14 +1394,12 @@ class SmartStravaCache:
                 # This preserves ALL existing data and only adds new data
                 merged_activity = existing_activity.copy() if existing_activity else {}
                 
-                # For 8-hour refresh: Only add/update fields that are missing or have changed
-                # This preserves ALL existing data and only adds new data
+                # For 8-hour refresh: ONLY add new activities, NEVER update existing basic data
+                # The 8-hour refresh should only check for new activities and rich data within expiration windows
                 if existing_activity:
-                    # Existing activity: Only add fields that don't exist or have changed
-                    for field, value in fresh_activity.items():
-                        if field not in existing_activity or existing_activity[field] != value:
-                            merged_activity[field] = value
-                            logger.debug(f"🔄 Updated {field} for existing activity {activity_id}")
+                    # Existing activity: Keep ALL existing data, don't update anything
+                    # The 8-hour refresh should never modify existing activities
+                    logger.debug(f"🔄 Preserving ALL existing data for activity {activity_id} (8-hour refresh)")
                 else:
                     # New activity: Add all fresh data
                     merged_activity.update(fresh_activity)
