@@ -171,16 +171,49 @@ async def get_fundraising_data(api_key: str = Depends(verify_api_key)) -> Fundra
         # Sort donations by date (oldest first - first donor should be first)
         def parse_donation_date(donation):
             date_str = donation.get("date", "")
+            if not date_str:
+                return 0
+            
+            # Handle different date formats more robustly
             if "months ago" in date_str:
-                months = int(date_str.split()[0])
-                return -months  # Negative so older donations come first
+                try:
+                    months = int(date_str.split()[0])
+                    return -months  # Negative so older donations come first
+                except (ValueError, IndexError):
+                    return 0
             elif "weeks ago" in date_str:
-                weeks = int(date_str.split()[0])
-                return -weeks * 4
+                try:
+                    weeks = int(date_str.split()[0])
+                    return -weeks * 4  # Convert weeks to approximate months
+                except (ValueError, IndexError):
+                    return 0
             elif "days ago" in date_str:
-                days = int(date_str.split()[0])
-                return -days / 30
+                try:
+                    days = int(date_str.split()[0])
+                    return -days / 30  # Convert days to approximate months
+                except (ValueError, IndexError):
+                    return 0
+            elif "hours ago" in date_str:
+                try:
+                    hours = int(date_str.split()[0])
+                    return -hours / (30 * 24)  # Convert hours to approximate months
+                except (ValueError, IndexError):
+                    return 0
+            elif "minutes ago" in date_str:
+                try:
+                    minutes = int(date_str.split()[0])
+                    return -minutes / (30 * 24 * 60)  # Convert minutes to approximate months
+                except (ValueError, IndexError):
+                    return 0
             else:
+                # For unknown formats, try to extract any number
+                try:
+                    import re
+                    numbers = re.findall(r'\d+', date_str)
+                    if numbers:
+                        return -int(numbers[0])  # Use first number found
+                except:
+                    pass
                 return 0
         
         raw_donations.sort(key=parse_donation_date)
@@ -287,19 +320,50 @@ async def get_donations(request: DonationsFilterRequest = Depends(), api_key: st
         # Parse dates and sort chronologically
         def parse_donation_date(donation):
             date_str = donation.get("date", "")
+            if not date_str:
+                return 0
+            
+            # Handle different date formats more robustly
             if "months ago" in date_str:
-                # Extract number of months
-                months = int(date_str.split()[0])
-                # Convert to approximate timestamp (older = smaller timestamp)
-                return -months  # Negative so older donations come first
+                try:
+                    months = int(date_str.split()[0])
+                    return -months  # Negative so older donations come first
+                except (ValueError, IndexError):
+                    return 0
             elif "weeks ago" in date_str:
-                weeks = int(date_str.split()[0])
-                return -weeks * 4  # Convert weeks to approximate months
+                try:
+                    weeks = int(date_str.split()[0])
+                    return -weeks * 4  # Convert weeks to approximate months
+                except (ValueError, IndexError):
+                    return 0
             elif "days ago" in date_str:
-                days = int(date_str.split()[0])
-                return -days / 30  # Convert days to approximate months
+                try:
+                    days = int(date_str.split()[0])
+                    return -days / 30  # Convert days to approximate months
+                except (ValueError, IndexError):
+                    return 0
+            elif "hours ago" in date_str:
+                try:
+                    hours = int(date_str.split()[0])
+                    return -hours / (30 * 24)  # Convert hours to approximate months
+                except (ValueError, IndexError):
+                    return 0
+            elif "minutes ago" in date_str:
+                try:
+                    minutes = int(date_str.split()[0])
+                    return -minutes / (30 * 24 * 60)  # Convert minutes to approximate months
+                except (ValueError, IndexError):
+                    return 0
             else:
-                return 0  # Default for unknown formats
+                # For unknown formats, try to extract any number
+                try:
+                    import re
+                    numbers = re.findall(r'\d+', date_str)
+                    if numbers:
+                        return -int(numbers[0])  # Use first number found
+                except:
+                    pass
+                return 0
         
         filtered_donations.sort(key=parse_donation_date)
         
