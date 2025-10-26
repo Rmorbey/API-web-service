@@ -718,6 +718,22 @@ class SmartStravaCache:
             logger.warning(f"Error checking polyline fetch expiration: {e}")
             return True
 
+    def _has_music_patterns(self, description: str) -> bool:
+        """Check if description contains music detection patterns"""
+        if not description:
+            return False
+        
+        # Music detection patterns
+        album_pattern = r"Album:\s*([^,\n]+?)\s+by\s+([^,\n]+)"
+        russell_radio_pattern = r"Russell Radio:\s*([^,\n]+?)\s+by\s+([^,\n]+)"
+        track_pattern = r"Track:\s*([^,\n]+?)\s+by\s+([^,\n]+)"
+        playlist_pattern = r"Playlist:\s*([^,\n]+)"
+        
+        return (bool(re.search(album_pattern, description, re.IGNORECASE)) or
+                bool(re.search(russell_radio_pattern, description, re.IGNORECASE)) or
+                bool(re.search(track_pattern, description, re.IGNORECASE)) or
+                bool(re.search(playlist_pattern, description, re.IGNORECASE)))
+
     def _check_description_fetch_expired(self, activity: Dict[str, Any]) -> bool:
         """Check if description fetch has expired (1 day after activity)"""
         try:
@@ -842,6 +858,15 @@ class SmartStravaCache:
                 if activity_id and activity_id in rich_data:
                     # Merge fresh basic data with fresh rich data
                     activity.update(rich_data[activity_id])
+                    
+                    # Add music detection if description has music patterns but no music data
+                    description = activity.get('description', '')
+                    if description and not activity.get('music') and self._has_music_patterns(description):
+                        music_data = self._detect_music_sync(description)
+                        if music_data:
+                            activity['music'] = music_data
+                            logger.info(f"🎵 Added music data to repaired activity {activity_id}: {music_data.get('detected', {}).get('type', 'unknown')}")
+                    
                     logger.info(f"✅ Repaired activity {activity_id}: {activity.get('name', 'Unknown')}")
             
             # Save repaired data to cache
@@ -1727,8 +1752,9 @@ class SmartStravaCache:
                         wants_comments = (not prev.get("comments_fetch_expired", False)) and not prev.get("comments")
                         wants_description = (not prev.get("description_fetch_expired", False)) and not prev.get("description")
                         wants_polyline = (not prev.get("polyline_fetch_expired", False)) and (not prev.get("polyline") or not prev.get("bounds"))
+                        wants_music = not prev.get("music") and prev.get("description") and self._has_music_patterns(prev.get("description", ""))
                         
-                        if wants_photos or wants_comments or wants_description or wants_polyline:
+                        if wants_photos or wants_comments or wants_description or wants_polyline or wants_music:
                             eligible_existing.append(fresh)
                     
                     if eligible_existing:
@@ -1789,13 +1815,21 @@ class SmartStravaCache:
                     # Update activity with rich data
                     activity.update(rich_data[activity_id])
                     
-                    # Add music detection to the activity
+                    # Add music detection to the activity (if description has music patterns but no music data)
                     description = activity.get('description', '')
-                    if description:
+                    if description and not activity.get('music') and self._has_music_patterns(description):
                         music_data = self._detect_music_sync(description)
                         if music_data:
                             activity['music'] = music_data
                             logger.info(f"🎵 Added music data to activity {activity_id}: {music_data.get('detected', {}).get('type', 'unknown')}")
+                        else:
+                            logger.debug(f"🎵 No music detected in description for activity {activity_id}")
+                    elif activity.get('music'):
+                        logger.debug(f"🎵 Music data already exists for activity {activity_id}")
+                    elif not description:
+                        logger.debug(f"🎵 No description for activity {activity_id}")
+                    else:
+                        logger.debug(f"🎵 No music patterns found in description for activity {activity_id}")
                     
                     # Update expiration flags
                     activity = self._update_activity_expiration_flags(activity)
