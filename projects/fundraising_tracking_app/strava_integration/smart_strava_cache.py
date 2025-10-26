@@ -45,8 +45,8 @@ class SmartStravaCache:
         # Initialize Supabase cache manager for persistence
         self.supabase_cache = SecureSupabaseCacheManager()
         
-        # Allow custom cache duration, default to 6 hours
-        self.cache_duration_hours = cache_duration_hours or int(os.getenv("STRAVA_CACHE_HOURS", "6"))
+        # Allow custom cache duration, default to 8 hours
+        self.cache_duration_hours = cache_duration_hours or int(os.getenv("STRAVA_CACHE_HOURS", "8"))
         
         # Filtering criteria
         self.allowed_activity_types = ["Run", "Ride"]  # Only runs and bike rides
@@ -374,12 +374,12 @@ class SmartStravaCache:
         return True
     
     def _should_refresh_cache(self, cache_data: Dict[str, Any]) -> Tuple[bool, str]:
-        """Simplified 6-hour refresh logic"""
+        """Simplified 8-hour refresh logic"""
         if not cache_data.get("timestamp"):
             return True, "No timestamp in cache"
         
         cache_time = datetime.fromisoformat(cache_data["timestamp"])
-        expiry_time = cache_time + timedelta(hours=6)  # 6-hour refresh
+        expiry_time = cache_time + timedelta(hours=8)  # 8-hour refresh
         
         if datetime.now() >= expiry_time:
             return True, f"Cache expired {datetime.now() - expiry_time} ago"
@@ -1586,9 +1586,9 @@ class SmartStravaCache:
             try:
                 now = datetime.now()
                 
-                # Check if it's time for a refresh (00:00, 06:00, 12:00, 18:00)
+                # Check if it's time for a refresh (00:00, 08:00, 16:00)
                 current_hour = now.hour
-                if current_hour in [0, 6, 12, 18] and (self._last_refresh is None or 
+                if current_hour in [0, 8, 16] and (self._last_refresh is None or 
                     (now - self._last_refresh).total_seconds() > 3600):  # At least 1 hour since last refresh
                     
                     logger.info(f"🔄 Starting scheduled refresh at {now.strftime('%H:%M')}")
