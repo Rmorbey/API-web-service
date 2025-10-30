@@ -281,7 +281,7 @@ class ActivityCache:
                 # Format activity to match expected structure (activity format)
                 formatted_activity = {
                     "id": gpx_activity.get("id"),
-                    "name": gpx_activity.get("name"),
+                    "name": gpx_activity.get("name", "").replace('_', ' '),
                     "type": gpx_activity.get("type"),
                     "distance": gpx_activity.get("distance", 0),
                     "moving_time": gpx_activity.get("moving_time", 0),
@@ -631,17 +631,39 @@ class ActivityCache:
             logger.warning("No cached data available. Import activities via GPX import endpoint.")
             return []
         
+        # Get activities from cache
+        activities = cache_data.get("activities", [])
+        
+        # Sort activities by start_date in descending order (newest first)
+        def sort_key(activity):
+            try:
+                # Try to parse start_date_local first, fallback to start_date
+                date_str = activity.get("start_date_local") or activity.get("start_date", "")
+                if date_str:
+                    # Handle both ISO format and other formats
+                    if 'T' in date_str:
+                        from datetime import datetime
+                        return datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+                    else:
+                        from datetime import datetime
+                        return datetime.fromisoformat(date_str)
+                return datetime.min
+            except (ValueError, TypeError):
+                return datetime.min
+        
+        activities = sorted(activities, key=sort_key, reverse=True)
+        
         # Use cache if valid and not forcing refresh
         if not force_refresh and self._is_cache_valid(cache_data):
-            logger.info(f"Using cached data ({len(cache_data.get('activities', []))} activities)")
+            logger.info(f"Using cached data ({len(activities)} activities)")
             logger.info(f"Cache hit - {time.time() - start_time:.3f}s")
-            return cache_data.get("activities", [])[:limit]
+            return activities[:limit]
         
         # Cache is invalid - return what we have or empty list
         # Activities are now imported via GPX, not fetched from API
-        if cache_data.get("activities"):
+        if activities:
             logger.warning("Cache expired, returning cached data. Refresh via GPX import if needed.")
-            return cache_data["activities"][:limit]
+            return activities[:limit]
         else:
             logger.warning("No cached data available. Import activities via GPX import endpoint.")
             return []

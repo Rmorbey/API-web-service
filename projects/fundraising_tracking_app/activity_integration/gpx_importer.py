@@ -307,7 +307,7 @@ class GPXImporter:
             # Build activity object
             activity = {
                 'id': int(sheet_activity.get('id', 0)) if sheet_activity.get('id') else None,
-                'name': sheet_activity.get('name', 'Activity'),
+                'name': sheet_activity.get('name', 'Activity').replace('_', ' '),
                 'type': sheet_activity.get('type', 'Run'),
                 'distance': gpx_data.get('distance', 0),
                 'moving_time': gpx_data.get('moving_time', 0),
