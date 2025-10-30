@@ -1,24 +1,24 @@
 #!/usr/bin/env python3
 """
 Fixed Data Processing Tests
-Tests the actual data processing methods in SmartStravaCache and SmartFundraisingCache
+Tests the actual data processing methods in ActivityCache and SmartFundraisingCache
 """
 
 import pytest
 from datetime import datetime, timedelta
 from unittest.mock import Mock, patch
 
-from projects.fundraising_tracking_app.strava_integration.smart_strava_cache import SmartStravaCache
+from projects.fundraising_tracking_app.activity_integration.activity_cache import ActivityCache
 from projects.fundraising_tracking_app.fundraising_scraper.fundraising_scraper import SmartFundraisingCache
 
 
-class TestStravaDataProcessing:
-    """Test Strava data processing methods"""
+class TestActivityDataProcessing:
+    """Test activity data processing methods"""
     
-    @patch('projects.fundraising_tracking_app.strava_integration.smart_strava_cache.StravaTokenManager')
-    def test_filter_activities_by_type_and_date(self, mock_token_manager):
+    def test_filter_activities_by_type_and_date(self):
         """Test the _filter_activities method with type and date filtering."""
-        cache = SmartStravaCache()
+        with patch('projects.fundraising_tracking_app.activity_integration.activity_cache.threading.Thread'):
+            cache = ActivityCache()
         
         # Test data with mixed activity types and dates
         mixed_activities = [
@@ -67,10 +67,10 @@ class TestStravaDataProcessing:
         assert filtered[1]["type"] == "Ride"
         assert all(activity["type"] in ["Run", "Ride"] for activity in filtered)
     
-    @patch('projects.fundraising_tracking_app.strava_integration.smart_strava_cache.StravaTokenManager')
-    def test_detect_music_in_description(self, mock_token_manager):
-        """Test the _detect_music method for extracting music information."""
-        cache = SmartStravaCache()
+    def test_detect_music_in_description(self):
+        """Test the _detect_music_sync method for extracting music information."""
+        with patch('projects.fundraising_tracking_app.activity_integration.activity_cache.threading.Thread'):
+            cache = ActivityCache()
         
         test_cases = [
             {
@@ -105,7 +105,7 @@ class TestStravaDataProcessing:
             else:
                 assert result == {}
     
-    @patch('projects.fundraising_tracking_app.strava_integration.smart_strava_cache.StravaTokenManager')
+    @patch('projects.fundraising_tracking_app.activity_integration.activity_cache.StravaTokenManager')
     def test_has_complete_data(self, mock_token_manager):
         """Test the _has_complete_data method for activity validation."""
         cache = SmartStravaCache()
@@ -141,7 +141,7 @@ class TestStravaDataProcessing:
         assert cache._has_complete_data(complete_activity) is True
         assert cache._has_complete_data(incomplete_activity) is False
     
-    @patch('projects.fundraising_tracking_app.strava_integration.smart_strava_cache.StravaTokenManager')
+    @patch('projects.fundraising_tracking_app.activity_integration.activity_cache.StravaTokenManager')
     def test_validate_cache_integrity(self, mock_token_manager):
         """Test the _validate_cache_integrity method."""
         cache = SmartStravaCache()
@@ -180,7 +180,7 @@ class TestStravaDataProcessing:
         assert cache._validate_cache_integrity(valid_cache) is True
         assert cache._validate_cache_integrity(invalid_cache) is False
     
-    @patch('projects.fundraising_tracking_app.strava_integration.smart_strava_cache.StravaTokenManager')
+    @patch('projects.fundraising_tracking_app.activity_integration.activity_cache.StravaTokenManager')
     def test_clean_invalid_activities(self, mock_token_manager):
         """Test the _clean_invalid_activities method."""
         cache = SmartStravaCache()
@@ -343,7 +343,7 @@ class TestFundraisingDataProcessing:
 class TestDataProcessingIntegration:
     """Test data processing integration and edge cases"""
     
-    @patch('projects.fundraising_tracking_app.strava_integration.smart_strava_cache.StravaTokenManager')
+    @patch('projects.fundraising_tracking_app.activity_integration.activity_cache.StravaTokenManager')
     def test_activity_processing_pipeline(self, mock_token_manager):
         """Test the complete activity processing pipeline."""
         cache = SmartStravaCache()

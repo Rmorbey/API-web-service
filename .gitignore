@@ -52,8 +52,7 @@ logs/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-strava_token_refresh.log
-strava_integration*.log
+activity_integration*.log
 
 # Runtime data
 pids
@@ -129,7 +128,6 @@ Thumbs.db
 
 # Project specific
 # Cache files (no longer needed in git)
-projects/fundraising_tracking_app/strava_integration/strava_cache.json
 projects/fundraising_tracking_app/fundraising_scraper/fundraising_cache.json
 *.cache
 cache/
@@ -142,6 +140,15 @@ caches/
 *.pfx
 secrets/
 credentials/
+# Google OAuth credentials (contains sensitive client secrets)
+credentials.json
+token.json
+google-credentials.json
+google_token.json
+# Base64 encoded credential files (DO NOT COMMIT)
+*_base64.txt
+credentials_base64.txt
+token_base64.txt
 
 # Database files
 *.db
@@ -212,5 +219,5 @@ supabase_security_setup.sql
 **/backups/*.json
 
 # Demo pages (development only - contain configuration details)
-projects/fundraising_tracking_app/examples/strava-react-demo-clean.html
 projects/fundraising_tracking_app/examples/fundraising-demo.html
+.env

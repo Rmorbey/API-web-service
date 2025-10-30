@@ -197,7 +197,7 @@ class TestMetricsCollector:
     
     def test_metrics_collector_initialization(self):
         """Test MetricsCollector initialization."""
-        from projects.fundraising_tracking_app.strava_integration.metrics import MetricsCollector
+        from projects.fundraising_tracking_app.activity_integration.metrics import MetricsCollector
         
         collector = MetricsCollector()
         
@@ -213,7 +213,7 @@ class TestMetricsCollector:
     
     def test_metrics_collector_record_request(self):
         """Test recording request metrics."""
-        from projects.fundraising_tracking_app.strava_integration.metrics import MetricsCollector, RequestMetric
+        from projects.fundraising_tracking_app.activity_integration.metrics import MetricsCollector, RequestMetric
         
         collector = MetricsCollector()
         
@@ -247,7 +247,7 @@ class TestMetricsCollector:
     
     def test_metrics_collector_get_summary(self):
         """Test getting metrics summary."""
-        from projects.fundraising_tracking_app.strava_integration.metrics import MetricsCollector, RequestMetric
+        from projects.fundraising_tracking_app.activity_integration.metrics import MetricsCollector, RequestMetric
         
         collector = MetricsCollector()
         
@@ -291,7 +291,7 @@ class TestSystemMetrics:
     
     def test_system_metric_creation(self):
         """Test SystemMetric creation."""
-        from projects.fundraising_tracking_app.strava_integration.metrics import SystemMetric
+        from projects.fundraising_tracking_app.activity_integration.metrics import SystemMetric
         
         metric = SystemMetric(
             timestamp=time.time(),
@@ -316,10 +316,10 @@ class TestSystemMetrics:
     
     def test_system_metrics_collection(self):
         """Test collecting system metrics."""
-        from projects.fundraising_tracking_app.strava_integration.metrics import MetricsCollector
+        from projects.fundraising_tracking_app.activity_integration.metrics import MetricsCollector
         
         # Mock psutil to avoid system metric collection issues
-        with patch('projects.fundraising_tracking_app.strava_integration.metrics.psutil') as mock_psutil:
+        with patch('projects.fundraising_tracking_app.activity_integration.metrics.psutil') as mock_psutil:
             mock_psutil.cpu_percent.return_value = 25.0
             mock_psutil.virtual_memory.return_value = type('obj', (object,), {
                 'percent': 50.0,
@@ -353,7 +353,7 @@ class TestPerformanceIntegration:
     
     def test_full_performance_monitoring_cycle(self):
         """Test a complete performance monitoring cycle."""
-        from projects.fundraising_tracking_app.strava_integration.metrics import MetricsCollector, RequestMetric
+        from projects.fundraising_tracking_app.activity_integration.metrics import MetricsCollector, RequestMetric
         
         collector = MetricsCollector()
         
@@ -413,7 +413,7 @@ class TestPerformanceIntegration:
     
     def test_performance_metrics_persistence(self):
         """Test that performance metrics can be serialized."""
-        from projects.fundraising_tracking_app.strava_integration.metrics import MetricsCollector, RequestMetric
+        from projects.fundraising_tracking_app.activity_integration.metrics import MetricsCollector, RequestMetric
         
         collector = MetricsCollector()
         

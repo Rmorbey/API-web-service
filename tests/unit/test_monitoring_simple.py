@@ -311,7 +311,7 @@ class TestMetricsCollectorIntegration:
     
     def test_metrics_collector_basic_functionality(self):
         """Test basic metrics collector functionality."""
-        from projects.fundraising_tracking_app.strava_integration.metrics import MetricsCollector
+        from projects.fundraising_tracking_app.activity_integration.metrics import MetricsCollector
         
         collector = MetricsCollector()
         
@@ -323,7 +323,7 @@ class TestMetricsCollectorIntegration:
     
     def test_metrics_collector_summary(self):
         """Test metrics collector summary functionality."""
-        from projects.fundraising_tracking_app.strava_integration.metrics import MetricsCollector
+        from projects.fundraising_tracking_app.activity_integration.metrics import MetricsCollector
         
         collector = MetricsCollector()
         
@@ -342,7 +342,7 @@ class TestMetricsCollectorIntegration:
     
     def test_metrics_collector_with_data(self):
         """Test metrics collector with actual data."""
-        from projects.fundraising_tracking_app.strava_integration.metrics import MetricsCollector, RequestMetric
+        from projects.fundraising_tracking_app.activity_integration.metrics import MetricsCollector, RequestMetric
         
         collector = MetricsCollector()
         

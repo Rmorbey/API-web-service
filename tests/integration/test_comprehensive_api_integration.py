@@ -12,7 +12,7 @@ from fastapi import FastAPI
 import os
 
 # Import the routers
-from projects.fundraising_tracking_app.strava_integration.strava_integration_api import router as strava_router
+from projects.fundraising_tracking_app.activity_integration.activity_api import router as activity_router
 from projects.fundraising_tracking_app.fundraising_scraper.fundraising_api import router as fundraising_router
 
 
@@ -22,47 +22,46 @@ class TestComprehensiveAPIIntegration:
     def setup_method(self):
         """Set up test environment"""
         # Set API keys for tests
-        os.environ["STRAVA_API_KEY"] = "test-strava-key-123"
+        os.environ["ACTIVITY_API_KEY"] = "test-activity-key-123"
         os.environ["FUNDRAISING_API_KEY"] = "test-fundraising-key-456"
         
         # Create test apps
-        self.strava_app = FastAPI()
-        self.strava_app.include_router(strava_router, prefix="/api/strava-integration")
+        self.activity_app = FastAPI()
+        self.activity_app.include_router(activity_router, prefix="/api/activity-integration")
         
         self.fundraising_app = FastAPI()
         self.fundraising_app.include_router(fundraising_router, prefix="/api/fundraising")
         
-        self.strava_client = TestClient(self.strava_app)
+        self.activity_client = TestClient(self.activity_app)
         self.fundraising_client = TestClient(self.fundraising_app)
     
-    def test_complete_strava_workflow(self):
-        """Test complete Strava workflow from health check to data retrieval"""
+    def test_complete_activity_workflow(self):
+        """Test complete activity workflow from health check to data retrieval"""
         # 1. Health check
-        health_response = self.strava_client.get("/api/strava-integration/health")
+        health_response = self.activity_client.get("/api/activity-integration/health")
         assert health_response.status_code == 200
         health_data = health_response.json()
         assert health_data["status"] == "healthy"
         assert "timestamp" in health_data
         
         # 2. Get project info
-        info_response = self.strava_client.get("/api/strava-integration/")
+        info_response = self.activity_client.get("/api/activity-integration/")
         assert info_response.status_code == 200
         info_data = info_response.json()
         assert "project" in info_data
         assert "version" in info_data
         
         # 3. Get activity feed
-        feed_response = self.strava_client.get("/api/strava-integration/feed")
+        feed_response = self.activity_client.get("/api/activity-integration/feed")
         assert feed_response.status_code == 200
         feed_data = feed_response.json()
         assert "activities" in feed_data
         assert "total_activities" in feed_data
         
         # 4. Get metrics
-        metrics_response = self.strava_client.get("/api/strava-integration/metrics")
+        metrics_response = self.activity_client.get("/api/activity-integration/metrics")
         assert metrics_response.status_code == 200
         metrics_data = metrics_response.json()
-        assert "api_calls" in metrics_data
         assert "cache" in metrics_data
     
     def test_complete_fundraising_workflow(self):
@@ -91,11 +90,11 @@ class TestComprehensiveAPIIntegration:
     def test_authentication_workflow(self):
         """Test authentication workflow across both APIs"""
         # Test valid authentication
-        valid_headers = {"X-API-Key": "test-strava-key-123"}
+        valid_headers = {"X-API-Key": "test-activity-key-123"}
         
-        # Strava API with valid auth
-        response = self.strava_client.post(
-            "/api/strava-integration/refresh-cache",
+        # Activity API with valid auth
+        response = self.activity_client.post(
+            "/api/activity-integration/refresh-cache",
             headers=valid_headers,
             json={"force_full_refresh": False, "include_old_activities": False}
         )
@@ -114,9 +113,9 @@ class TestComprehensiveAPIIntegration:
         # Test invalid authentication
         invalid_headers = {"X-API-Key": "invalid-key"}
         
-        # Strava API with invalid auth
-        response = self.strava_client.post(
-            "/api/strava-integration/refresh-cache",
+        # Activity API with invalid auth
+        response = self.activity_client.post(
+            "/api/activity-integration/refresh-cache",
             headers=invalid_headers,
             json={"force_full_refresh": False, "include_old_activities": False}
         )
@@ -133,8 +132,8 @@ class TestComprehensiveAPIIntegration:
     def test_error_propagation_workflow(self):
         """Test how errors propagate through the system"""
         # Test with invalid request data
-        response = self.strava_client.post(
-            "/api/strava-integration/refresh-cache",
+        response = self.activity_client.post(
+            "/api/activity-integration/refresh-cache",
             headers={"X-API-Key": "test-strava-key-123"},
             json={"invalid_field": "invalid_value"}
         )
@@ -160,7 +159,7 @@ class TestComprehensiveAPIIntegration:
         
         def make_strava_request():
             try:
-                response = self.strava_client.get("/api/strava-integration/feed")
+                response = self.activity_client.get("/api/activity-integration/feed")
                 results.append(response.status_code)
             except Exception as e:
                 errors.append(e)
@@ -194,13 +193,13 @@ class TestComprehensiveAPIIntegration:
     def test_cache_interaction_workflow(self):
         """Test cache interaction between different components"""
         # 1. Get initial data
-        initial_response = self.strava_client.get("/api/strava-integration/feed")
+        initial_response = self.activity_client.get("/api/activity-integration/feed")
         assert initial_response.status_code == 200
         initial_data = initial_response.json()
         
         # 2. Force cache refresh
-        refresh_response = self.strava_client.post(
-            "/api/strava-integration/refresh-cache",
+        refresh_response = self.activity_client.post(
+            "/api/activity-integration/refresh-cache",
             headers={"X-API-Key": "test-strava-key-123"},
             json={"force_full_refresh": True, "include_old_activities": False}
         )
@@ -208,7 +207,7 @@ class TestComprehensiveAPIIntegration:
         assert refresh_response.status_code in [200, 500, 401, 403]
         
         # 3. Get data after refresh
-        after_refresh_response = self.strava_client.get("/api/strava-integration/feed")
+        after_refresh_response = self.activity_client.get("/api/activity-integration/feed")
         assert after_refresh_response.status_code == 200
         after_refresh_data = after_refresh_response.json()
         
@@ -219,8 +218,8 @@ class TestComprehensiveAPIIntegration:
     def test_data_consistency_across_endpoints(self):
         """Test data consistency across different endpoints"""
         # Get data from multiple endpoints
-        feed_response = self.strava_client.get("/api/strava-integration/feed")
-        metrics_response = self.strava_client.get("/api/strava-integration/metrics")
+        feed_response = self.activity_client.get("/api/activity-integration/feed")
+        metrics_response = self.activity_client.get("/api/activity-integration/metrics")
         
         assert feed_response.status_code == 200
         assert metrics_response.status_code == 200
@@ -244,7 +243,7 @@ class TestComprehensiveAPIIntegration:
         # Make multiple rapid requests
         responses = []
         for _ in range(10):
-            response = self.strava_client.get("/api/strava-integration/feed")
+            response = self.activity_client.get("/api/activity-integration/feed")
             responses.append(response.status_code)
             time.sleep(0.1)  # Small delay to avoid overwhelming
         
@@ -254,7 +253,7 @@ class TestComprehensiveAPIIntegration:
     def test_health_check_integration(self):
         """Test health check integration across all services"""
         # Test Strava health
-        strava_health = self.strava_client.get("/api/strava-integration/health")
+        strava_health = self.activity_client.get("/api/activity-integration/health")
         assert strava_health.status_code == 200
         strava_data = strava_health.json()
         assert strava_data["status"] == "healthy"
@@ -274,33 +273,33 @@ class TestComprehensiveAPIIntegration:
     def test_error_recovery_workflow(self):
         """Test error recovery and resilience"""
         # Test with invalid parameters
-        response = self.strava_client.get("/api/strava-integration/feed?limit=invalid")
+        response = self.activity_client.get("/api/activity-integration/feed?limit=invalid")
         assert response.status_code == 422
         
         # Test with valid parameters after error
-        response = self.strava_client.get("/api/strava-integration/feed?limit=10")
+        response = self.activity_client.get("/api/activity-integration/feed?limit=10")
         assert response.status_code == 200
         
         # Test with invalid activity type
-        response = self.strava_client.get("/api/strava-integration/feed?activity_type=InvalidType")
+        response = self.activity_client.get("/api/activity-integration/feed?activity_type=InvalidType")
         assert response.status_code == 422
         
         # Test with valid activity type after error
-        response = self.strava_client.get("/api/strava-integration/feed?activity_type=Run")
+        response = self.activity_client.get("/api/activity-integration/feed?activity_type=Run")
         assert response.status_code == 200
     
     def test_complete_user_journey(self):
         """Test complete user journey from start to finish"""
         # 1. User checks system health
-        health_response = self.strava_client.get("/api/strava-integration/health")
+        health_response = self.activity_client.get("/api/activity-integration/health")
         assert health_response.status_code == 200
         
         # 2. User gets project information
-        info_response = self.strava_client.get("/api/strava-integration/")
+        info_response = self.activity_client.get("/api/activity-integration/")
         assert info_response.status_code == 200
         
         # 3. User browses activity feed
-        feed_response = self.strava_client.get("/api/strava-integration/feed?limit=5")
+        feed_response = self.activity_client.get("/api/activity-integration/feed?limit=5")
         assert feed_response.status_code == 200
         feed_data = feed_response.json()
         assert len(feed_data["activities"]) <= 5
@@ -314,7 +313,7 @@ class TestComprehensiveAPIIntegration:
         assert donations_response.status_code == 200
         
         # 6. User checks system metrics
-        metrics_response = self.strava_client.get("/api/strava-integration/metrics")
+        metrics_response = self.activity_client.get("/api/activity-integration/metrics")
         assert metrics_response.status_code == 200
         
         # Verify all responses have expected data structure

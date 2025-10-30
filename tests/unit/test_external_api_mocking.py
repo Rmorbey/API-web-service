@@ -1,6 +1,6 @@
 """
 Unit tests for mocking external APIs.
-Tests mocking of Strava API, JustGiving API, and other external services.
+Tests mocking of activity API, JustGiving API, and other external services.
 """
 
 import pytest
@@ -10,11 +10,11 @@ import httpx
 from fastapi import HTTPException
 
 
-class TestStravaAPIMocking:
-    """Test mocking of Strava API calls."""
+class TestActivityAPIMocking:
+    """Test mocking of activity API calls."""
     
-    def test_mock_strava_activities_response(self):
-        """Test mocking Strava activities API response."""
+    def test_mock_activity_response(self):
+        """Test mocking activity API response."""
         mock_response = {
             "activities": [
                 {
@@ -53,8 +53,8 @@ class TestStravaAPIMocking:
             assert mock_response["activities"][0]["name"] == "Morning Run"
             assert mock_response["activities"][0]["type"] == "Run"
     
-    def test_mock_strava_api_error_response(self):
-        """Test mocking Strava API error response."""
+    def test_mock_activity_api_error_response(self):
+        """Test mocking activity API error response."""
         with patch('httpx.AsyncClient.get') as mock_get:
             mock_response_obj = Mock()
             mock_response_obj.status_code = 401
@@ -65,8 +65,8 @@ class TestStravaAPIMocking:
             assert mock_response_obj.status_code == 401
             assert mock_response_obj.json()["message"] == "Unauthorized"
     
-    def test_mock_strava_rate_limit_response(self):
-        """Test mocking Strava API rate limit response."""
+    def test_mock_activity_rate_limit_response(self):
+        """Test mocking activity API rate limit response."""
         with patch('httpx.AsyncClient.get') as mock_get:
             mock_response_obj = Mock()
             mock_response_obj.status_code = 429

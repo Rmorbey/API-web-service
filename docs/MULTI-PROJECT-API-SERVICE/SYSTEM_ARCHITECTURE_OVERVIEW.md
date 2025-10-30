@@ -3,16 +3,17 @@
 ## 📊 **Core System Components**
 
 ### **1. Data Collection Layer**
-- **Strava Integration** (`smart_strava_cache.py`)
+- **Activity Integration** (`activity_cache.py`) - GPX import from Google Sheets
 - **Fundraising Scraper** (`fundraising_scraper.py`)
 - **HTTP Clients** (`http_clients.py`)
 - **Supabase Cache Manager** (`supabase_cache_manager.py`)
 
 ### **2. Data Processing Layer**
 - **Async Processor** (`async_processor.py`)
-- **Smart Cache Management** (Strava & Fundraising)
+- **Smart Cache Management** (Activity & Fundraising)
+- **GPX Parser** (parses GPS data from GPX files)
 - **Data Validation & Formatting**
-- **Hybrid Caching Strategy** (Supabase + Local JSON)
+- **Hybrid Caching Strategy** (Supabase for activities, Local JSON for fundraising)
 
 ### **3. API Layer**
 - **FastAPI Application** (`multi_project_api.py`)
@@ -60,19 +61,21 @@ Request → Trusted Host Check → Referer Validation → API Key Auth → Rate 
 
 ### **Phase 1: Data Collection & Caching**
 
-#### **Strava Data Collection:**
+#### **Activity Data Import (GPX):**
 ```
-1. SmartStravaCache.force_refresh_now()
+1. POST /api/activity-integration/gpx/import-from-sheets
    ↓
-2. HTTP Client → Strava API
+2. HTTP Client → Google Sheets API → Google Drive API
    ↓
-3. Raw Activity Data (JSON)
+3. Fetch GPX File Content
    ↓
-4. Smart Merge with Existing Cache
+4. Parse GPX File (GPS coordinates, timestamps, metadata)
    ↓
-5. Rich Data Collection (polyline, bounds, photos, comments)
+5. Calculate Activity Metrics (distance, duration, elevation)
    ↓
-6. Hybrid Cache Storage (Supabase + JSON file + in-memory)
+6. Store in Supabase + Music Detection
+   ↓
+7. Cache Storage (Supabase database + in-memory)
 ```
 
 #### **Fundraising Data Collection:**

@@ -37,7 +37,6 @@ Separate startup scripts for development and production environments with proper
 📋 Installing development dependencies...
 🌐 Starting development server on http://0.0.0.0:8000
 📊 API Documentation: http://0.0.0.0:8000/docs
-🎯 Demo Page: http://0.0.0.0:8000/demo (ENABLED)
 💰 Fundraising Demo: http://0.0.0.0:8000/fundraising-demo (ENABLED)
 🔧 Environment: DEVELOPMENT (Demo endpoints enabled)
 ```
@@ -57,7 +56,6 @@ Separate startup scripts for development and production environments with proper
 📋 Installing production dependencies...
 🌐 Starting production server on http://0.0.0.0:8000
 📊 API Documentation: http://0.0.0.0:8000/docs
-🚫 Demo Page: http://0.0.0.0:8000/demo (DISABLED)
 🚫 Fundraising Demo: http://0.0.0.0:8000/fundraising-demo (DISABLED)
 🔧 Environment: PRODUCTION (Demo endpoints disabled)
 ```
@@ -70,8 +68,8 @@ Separate startup scripts for development and production environments with proper
 ./start_development.sh
 
 # In another terminal, test demo endpoints
-curl http://localhost:8000/demo
-# Should return: Demo page HTML
+curl http://localhost:8000/fundraising-demo
+# Should return: Fundraising demo page HTML
 
 curl http://localhost:8000/api/fundraising/demo/data
 # Should return: Fundraising data JSON

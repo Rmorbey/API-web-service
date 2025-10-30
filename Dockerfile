@@ -26,6 +26,18 @@ RUN groupadd -r appuser && useradd -r -g appuser appuser
 RUN mkdir -p /app/logs && \
     chown -R appuser:appuser /app
 
+# Decode Google OAuth credentials from environment variables (if provided)
+# These run as root before switching to appuser
+RUN if [ -n "$GOOGLE_CREDENTIALS_BASE64" ]; then \
+        echo "$GOOGLE_CREDENTIALS_BASE64" | base64 -d > /app/credentials.json && \
+        chown appuser:appuser /app/credentials.json; \
+    fi
+
+RUN if [ -n "$GOOGLE_TOKEN_BASE64" ]; then \
+        echo "$GOOGLE_TOKEN_BASE64" | base64 -d > /app/token.json && \
+        chown appuser:appuser /app/token.json; \
+    fi
+
 # Switch to non-root user
 USER appuser
 

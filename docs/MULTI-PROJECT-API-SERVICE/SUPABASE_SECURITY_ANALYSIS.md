@@ -76,7 +76,7 @@ CREATE POLICY "API service access" ON cache_storage
 -- Add data validation constraints
 ALTER TABLE cache_storage 
 ADD CONSTRAINT valid_cache_type 
-CHECK (cache_type IN ('strava', 'fundraising'));
+CHECK (cache_type IN ('activities', 'fundraising'));
 
 ALTER TABLE cache_storage 
 ADD CONSTRAINT valid_json_data 
@@ -151,7 +151,7 @@ class SecureSupabaseCacheManager:
         
         # Security configurations
         self.max_data_size = 10 * 1024 * 1024  # 10MB
-        self.allowed_cache_types = {'strava', 'fundraising'}
+        self.allowed_cache_types = {'activities', 'fundraising'}
         self.rate_limit_window = 60  # seconds
         self.rate_limit_requests = 100  # per window
         self._request_counts = {}
@@ -182,7 +182,7 @@ class SecureSupabaseCacheManager:
             return False, f"Data too large: {data_size} bytes (max: {self.max_data_size})"
         
         # Validate required fields
-        if cache_type == 'strava':
+        if cache_type == 'activities':
             required_fields = ['activities', 'timestamp']
         elif cache_type == 'fundraising':
             required_fields = ['donations', 'total_raised', 'timestamp']

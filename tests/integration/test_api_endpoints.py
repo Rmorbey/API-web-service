@@ -7,54 +7,54 @@ import pytest
 from fastapi.testclient import TestClient
 
 
-class TestStravaAPIEndpoints:
-    """Test Strava integration API endpoints."""
+class TestActivityAPIEndpoints:
+    """Test activity integration API endpoints."""
     
     def test_health_endpoint_without_auth(self, strava_test_client):
         """Test health endpoint without authentication."""
-        response = strava_test_client.get("/api/strava-integration/health")
+        response = strava_test_client.get("/api/activity-integration/health")
         assert response.status_code in [200, 401]  # May require auth or not
     
     def test_health_endpoint_with_valid_auth(self, strava_test_client, valid_api_headers):
         """Test health endpoint with valid authentication."""
-        response = strava_test_client.get("/api/strava-integration/health", headers=valid_api_headers)
+        response = strava_test_client.get("/api/activity-integration/health", headers=valid_api_headers)
         assert response.status_code in [200, 401]  # May still require different auth
     
     def test_health_endpoint_with_invalid_auth(self, strava_test_client, invalid_api_headers):
         """Test health endpoint with invalid authentication - should still work as it's public."""
-        response = strava_test_client.get("/api/strava-integration/health", headers=invalid_api_headers)
+        response = strava_test_client.get("/api/activity-integration/health", headers=invalid_api_headers)
         assert response.status_code == 200  # Health endpoint is public, ignores invalid auth
     
     def test_health_endpoint_without_headers(self, strava_test_client, no_api_headers):
         """Test health endpoint without API key headers - should work as it's public."""
-        response = strava_test_client.get("/api/strava-integration/health", headers=no_api_headers)
+        response = strava_test_client.get("/api/activity-integration/health", headers=no_api_headers)
         assert response.status_code == 200  # Health endpoint is public
     
     def test_feed_endpoint_without_auth(self, strava_test_client):
         """Test feed endpoint without authentication."""
-        response = strava_test_client.get("/api/strava-integration/demo/feed")
+        response = strava_test_client.get("/api/activity-integration/demo/feed")
         assert response.status_code in [200, 500]  # Demo endpoint is public, may return data or error
     
     def test_feed_endpoint_with_valid_auth(self, strava_test_client, valid_api_headers):
         """Test feed endpoint with valid authentication (optional)."""
-        response = strava_test_client.get("/api/strava-integration/feed", headers=valid_api_headers)
+        response = strava_test_client.get("/api/activity-integration/feed", headers=valid_api_headers)
         # May return 200 with data or 500 if cache is empty/error
         assert response.status_code in [200, 500]
     
     def test_feed_endpoint_with_invalid_auth(self, strava_test_client, invalid_api_headers):
         """Test feed endpoint with invalid authentication (ignored since endpoint is public)."""
-        response = strava_test_client.get("/api/strava-integration/demo/feed", headers=invalid_api_headers)
+        response = strava_test_client.get("/api/activity-integration/demo/feed", headers=invalid_api_headers)
         assert response.status_code in [200, 500]  # Demo endpoint ignores invalid auth
     
     def test_refresh_endpoint_without_auth(self, strava_test_client):
         """Test refresh endpoint without authentication."""
-        response = strava_test_client.post("/api/strava-integration/refresh-cache")
+        response = strava_test_client.post("/api/activity-integration/refresh-cache")
         assert response.status_code == 401  # Should require authentication
     
     def test_refresh_endpoint_with_valid_auth(self, strava_test_client, valid_api_headers):
         """Test refresh endpoint with valid authentication."""
         request_data = {"force_full_refresh": False, "include_old_activities": False}
-        response = strava_test_client.post("/api/strava-integration/refresh-cache", 
+        response = strava_test_client.post("/api/activity-integration/refresh-cache", 
                                          headers=valid_api_headers, 
                                          json=request_data)
         # May return 200 (success) or 500 (error) depending on external API availability
@@ -62,7 +62,7 @@ class TestStravaAPIEndpoints:
     
     def test_refresh_endpoint_with_invalid_auth(self, strava_test_client, invalid_api_headers):
         """Test refresh endpoint with invalid authentication."""
-        response = strava_test_client.post("/api/strava-integration/refresh-cache", headers=invalid_api_headers)
+        response = strava_test_client.post("/api/activity-integration/refresh-cache", headers=invalid_api_headers)
         assert response.status_code == 403  # Should return forbidden
 
 
@@ -171,7 +171,7 @@ class TestAPIResponseStructure:
     def test_error_response_structure(self, strava_test_client, invalid_api_headers):
         """Test that error responses have proper structure."""
         # Test an endpoint that requires authentication
-        response = strava_test_client.post("/api/strava-integration/refresh-cache", 
+        response = strava_test_client.post("/api/activity-integration/refresh-cache", 
                                          headers=invalid_api_headers,
                                          json={"force_full_refresh": False})
     

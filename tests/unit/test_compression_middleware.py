@@ -10,7 +10,7 @@ from unittest.mock import Mock, AsyncMock
 from fastapi import FastAPI, Request, Response
 from fastapi.testclient import TestClient
 
-from projects.fundraising_tracking_app.strava_integration.compression_middleware import (
+from projects.fundraising_tracking_app.activity_integration.compression_middleware import (
     CompressionMiddleware, 
     SmartCompressionMiddleware
 )

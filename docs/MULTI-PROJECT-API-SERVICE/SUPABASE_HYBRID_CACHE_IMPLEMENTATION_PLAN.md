@@ -82,11 +82,11 @@ Server Start → Load from Supabase → Populate JSON Files → Check Timestamps
 - ✅ **Smart cache validation** - Multiple criteria validation with detailed reasoning
 - ✅ **Cache status monitoring** - Real-time health information via API endpoint
 - ✅ **Enhanced refresh logic** - Timestamp-based with data quality checks
-- ✅ **Monitoring endpoint** - `/api/strava-integration/cache-status` for real-time status
+- ✅ **Monitoring endpoint** - `/api/activity-integration/cache-status` for real-time status
 - ✅ **Comprehensive testing completed** - All fallback scenarios, persistence, and monitoring tested
 - ✅ **Production-ready system** - Graceful error handling, background retry, and monitoring
-- ✅ **Complete fundraising integration** - Both Strava and fundraising data now persistent
-- ✅ **Dual monitoring system** - Both `/api/strava-integration/cache-status` and `/api/fundraising/cache-status`
+- ✅ **Complete fundraising integration** - Both activity and fundraising data now persistent
+- ✅ **Dual monitoring system** - Both `/api/activity-integration/cache-status` and `/api/fundraising/cache-status`
 - ✅ **Full system ready** - All data sources now have Supabase persistence and monitoring
 
 ## 📅 **Implementation Phases**
@@ -158,7 +158,7 @@ CREATE TABLE projects (
 CREATE TABLE cache_storage (
     id SERIAL PRIMARY KEY,
     project_id INTEGER REFERENCES projects(id),
-    cache_type VARCHAR(50) NOT NULL, -- 'strava', 'fundraising', 'custom'
+    cache_type VARCHAR(50) NOT NULL, -- 'activities', 'fundraising', 'custom'
     data JSONB NOT NULL,
     last_fetch TIMESTAMP WITH TIME ZONE,
     last_rich_fetch TIMESTAMP WITH TIME ZONE,
@@ -202,7 +202,7 @@ pip install supabase
 *Estimated Time: 3-4 hours* | *Actual Time: ~2 hours*
 
 ### **2.1 Create SupabaseCacheManager Class**
-**File:** `projects/fundraising_tracking_app/strava_integration/supabase_cache_manager.py`
+**File:** `projects/fundraising_tracking_app/activity_integration/supabase_cache_manager.py`
 
 ```python
 #!/usr/bin/env python3
@@ -320,8 +320,8 @@ supabase==2.3.4
 ## **Phase 3: Integration with Existing Cache Classes** ✅ COMPLETED
 *Estimated Time: 4-5 hours* | *Actual Time: ~2 hours*
 
-### **3.1 Update SmartStravaCache**
-**File:** `projects/fundraising_tracking_app/strava_integration/smart_strava_cache.py`
+### **3.1 Update ActivityCache**
+**File:** `projects/fundraising_tracking_app/activity_integration/activity_cache.py`
 
 #### **Changes to `__init__` method:**
 ```python

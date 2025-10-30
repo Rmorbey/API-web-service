@@ -5,7 +5,7 @@
 Set these as **SECRET** type in DigitalOcean App Platform:
 
 ### **API Security Keys:**
-- `STRAVA_API_KEY` = `your_strava_api_key_here`
+- `ACTIVITY_API_KEY` = `your_activity_api_key_here`
 - `FUNDRAISING_API_KEY` = `your_fundraising_api_key_here`
 
 ### **JustGiving Configuration:**
@@ -14,15 +14,13 @@ Set these as **SECRET** type in DigitalOcean App Platform:
 ### **Jawg Maps Configuration:**
 - `JAWG_ACCESS_TOKEN` = `your_jawg_access_token_here`
 
-### **Strava API Configuration:**
-- `STRAVA_CLIENT_ID` = `your_strava_client_id_here`
-- `STRAVA_CLIENT_SECRET` = `your_strava_client_secret_here`
+### **Google Sheets API Configuration (for GPX Import):**
+- `GOOGLE_SHEETS_SPREADSHEET_ID` = `your_google_sheets_id_here`
+- `GOOGLE_SHEETS_CREDENTIALS_FILE` = `path/to/credentials.json`
+- `GOOGLE_SHEETS_TOKEN_FILE` = `path/to/token.json`
 
-### **Strava Tokens:**
-- `STRAVA_ACCESS_TOKEN` = `your_strava_access_token_here`
-- `STRAVA_REFRESH_TOKEN` = `your_strava_refresh_token_here`
-- `STRAVA_EXPIRES_AT` = `your_strava_expires_at_here`
-- `STRAVA_EXPIRES_IN` = `your_strava_expires_in_here`
+### **Activity Cache Configuration:**
+- `ACTIVITY_CACHE_HOURS` = `8`
 
 ### **Environment Configuration:**
 - `ENVIRONMENT` = `production`
@@ -57,14 +55,14 @@ git push origin main
 1. Go to **Settings** → **App-Level Environment Variables**
 2. Click **"Edit"**
 3. Add each variable:
-   - **Name**: Variable name (e.g., `STRAVA_API_KEY`)
+   - **Name**: Variable name (e.g., `ACTIVITY_API_KEY`)
    - **Value**: Your actual value
    - **Type**: `SECRET` (for sensitive data) or `PLAIN_TEXT` (for non-sensitive)
    - **Scope**: `RUN_TIME`
 
-### **4. Optional: Automated Token Refresh Setup**
+### **4. Google Sheets API Setup**
 
-If you want automated Strava token refresh:
+For GPX activity import via Google Sheets:
 
 **Get DigitalOcean API Token:**
 1. Go to [API Tokens](https://cloud.digitalocean.com/account/api/tokens)
@@ -83,11 +81,11 @@ If you want automated Strava token refresh:
 ### **2. Test Your Deployment:**
 ```bash
 # Test health endpoint
-curl https://your-app.ondigitalocean.app/api/strava-integration/health
+curl https://your-app.ondigitalocean.app/api/activity-integration/health
 
 # Test API with API key
 curl -H "X-API-Key: your_api_key_here" \
-     https://your-app.ondigitalocean.app/api/strava-integration/feed?limit=5
+     https://your-app.ondigitalocean.app/api/activity-integration/feed?limit=5
 ```
 
 ### **3. Check Logs:**

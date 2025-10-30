@@ -10,3 +10,8 @@ lxml==4.9.3
 requests==2.31.0
 schedule==1.2.0
 polyline==2.0.0
+# GPX Import dependencies
+gpxpy==1.5.0
+google-api-python-client==2.108.0
+google-auth-httplib2==0.1.1
+google-auth-oauthlib==1.1.0

@@ -14,12 +14,12 @@ import requests
 from unittest.mock import patch, Mock
 
 # Import the routers and create test apps
-from projects.fundraising_tracking_app.strava_integration.strava_integration_api import router as strava_router
+from projects.fundraising_tracking_app.activity_integration.activity_api import router as activity_router
 from projects.fundraising_tracking_app.fundraising_scraper.fundraising_api import router as fundraising_router
 
 # Create test apps
-strava_app = FastAPI()
-strava_app.include_router(strava_router, prefix="/api/strava-integration")
+activity_app = FastAPI()
+activity_app.include_router(activity_router, prefix="/api/activity-integration")
 
 fundraising_app = FastAPI()
 fundraising_app.include_router(fundraising_router, prefix="/api/fundraising")
@@ -30,10 +30,10 @@ class TestLoadPerformance:
     
     def test_concurrent_feed_requests(self):
         """Test concurrent requests to feed endpoint"""
-        client = TestClient(strava_app)
+        client = TestClient(activity_app)
         
         def make_request():
-            response = client.get("/api/strava-integration/feed")
+            response = client.get("/api/activity-integration/feed")
             return response.status_code, time.time()
         
         # Test with 10 concurrent requests
@@ -82,14 +82,14 @@ class TestLoadPerformance:
     
     def test_response_time_under_load(self):
         """Test response times under moderate load"""
-        client = TestClient(strava_app)
+        client = TestClient(activity_app)
         
         response_times = []
         
         # Make 20 sequential requests
         for i in range(20):
             start_time = time.time()
-            response = client.get("/api/strava-integration/health")
+            response = client.get("/api/activity-integration/health")
             end_time = time.time()
             
             response_time = end_time - start_time
@@ -118,11 +118,11 @@ class TestLoadPerformance:
         process = psutil.Process(os.getpid())
         initial_memory = process.memory_info().rss / 1024 / 1024  # MB
         
-        client = TestClient(strava_app)
+        client = TestClient(activity_app)
         
         # Make many requests to test memory stability
         for i in range(100):
-            response = client.get("/api/strava-integration/health")
+            response = client.get("/api/activity-integration/health")
             assert response.status_code == 200
             
             # Check memory every 20 requests
@@ -147,11 +147,11 @@ class TestConcurrencyLimits:
     
     def test_thread_safety_cache_access(self):
         """Test thread safety of cache operations"""
-        from projects.fundraising_tracking_app.strava_integration.smart_strava_cache import SmartStravaCache
+        from projects.fundraising_tracking_app.activity_integration.activity_cache import SmartStravaCache
         from datetime import datetime
         
         # Mock the token manager to avoid real API calls
-        with patch('projects.fundraising_tracking_app.strava_integration.smart_strava_cache.StravaTokenManager'):
+        with patch('projects.fundraising_tracking_app.activity_integration.activity_cache.StravaTokenManager'):
             cache = SmartStravaCache()
             
             results = []
@@ -187,14 +187,14 @@ class TestConcurrencyLimits:
     
     def test_rate_limiting_behavior(self):
         """Test rate limiting under high request volume"""
-        client = TestClient(strava_app)
+        client = TestClient(activity_app)
         
         # Make many rapid requests
         start_time = time.time()
         responses = []
         
         for i in range(50):
-            response = client.get("/api/strava-integration/health")
+            response = client.get("/api/activity-integration/health")
             responses.append(response.status_code)
         
         end_time = time.time()
@@ -211,11 +211,11 @@ class TestConcurrencyLimits:
     
     def test_concurrent_api_key_validation(self):
         """Test concurrent API key validation"""
-        client = TestClient(strava_app)
+        client = TestClient(activity_app)
         
         def make_authenticated_request():
             response = client.post(
-                "/api/strava-integration/refresh-cache",
+                "/api/activity-integration/refresh-cache",
                 headers={"X-API-Key": "test-strava-key-123"},
                 json={"force_full_refresh": False}
             )
@@ -242,10 +242,10 @@ class TestSystemLimits:
     
     def test_large_response_handling(self):
         """Test handling of large responses"""
-        client = TestClient(strava_app)
+        client = TestClient(activity_app)
         
         # Test feed endpoint with maximum allowed limit
-        response = client.get("/api/strava-integration/feed?limit=200")
+        response = client.get("/api/activity-integration/feed?limit=200")
         
         # Should handle large requests gracefully
         assert response.status_code in [200, 400, 422]  # Valid responses
@@ -258,12 +258,12 @@ class TestSystemLimits:
     
     def test_error_recovery_under_load(self):
         """Test error recovery when system is under load"""
-        client = TestClient(strava_app)
+        client = TestClient(activity_app)
         
         # Simulate load with concurrent requests
         def make_request():
             try:
-                response = client.get("/api/strava-integration/health")
+                response = client.get("/api/activity-integration/health")
                 return response.status_code
             except Exception as e:
                 return f"Error: {e}"

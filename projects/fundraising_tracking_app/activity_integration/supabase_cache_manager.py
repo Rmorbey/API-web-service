@@ -32,7 +32,7 @@ class SecureSupabaseCacheManager:
         
         # Security configurations
         self.max_data_size = 10 * 1024 * 1024  # 10MB
-        self.allowed_cache_types = {'strava', 'fundraising'}
+        self.allowed_cache_types = {'activities', 'fundraising'}
         self.rate_limit_window = 60  # seconds
         self.rate_limit_requests = 100  # per window
         self._request_counts = {}
@@ -75,7 +75,7 @@ class SecureSupabaseCacheManager:
             return False, f"Data too large: {data_size} bytes (max: {self.max_data_size})"
         
         # Validate required fields
-        if cache_type == 'strava':
+        if cache_type == 'activities':
             required_fields = ['activities', 'timestamp']
         elif cache_type == 'fundraising':
             required_fields = ['donations', 'total_raised', 'timestamp']
@@ -97,7 +97,7 @@ class SecureSupabaseCacheManager:
                 protected_patterns = [
                     "polyline",      # Encoded route data
                     "bounds",        # Calculated map bounds  
-                    "description",   # Strava activity descriptions (API data)
+                    "description",   # Activity descriptions (GPX import data)
                     "name",          # Activity names (API data)
                     "type",          # Activity types (API data)
                     "start_date",    # Timestamps (API data)

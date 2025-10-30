@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Pydantic models for Strava Integration API
+Pydantic models for Activity Integration API
 Defines request and response models for type safety and validation
 """
 
@@ -30,7 +30,7 @@ class ActivityComment(BaseModel):
 
 
 class Activity(BaseModel):
-    """Strava activity data"""
+    """Activity data (imported from GPX)"""
     id: int = Field(..., description="Activity ID")
     name: str = Field(..., description="Activity name")
     type: str = Field(..., description="Activity type")
@@ -64,7 +64,7 @@ class HealthResponse(BaseModel):
     project: str = Field(..., description="Project name")
     status: str = Field(..., description="Health status")
     timestamp: datetime = Field(..., description="Health check timestamp")
-    strava_configured: bool = Field(..., description="Whether Strava is configured")
+    activity_configured: bool = Field(..., description="Whether activity integration is configured")
     jawg_configured: bool = Field(..., description="Whether Jawg Maps is configured")
     cache_status: str = Field(..., description="Cache status")
 

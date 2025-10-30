@@ -114,7 +114,7 @@ class TestAPIPerformanceMonitoring:
         # Test with invalid API key (should return error quickly)
         start_time = time.time()
         response = strava_test_client.get(
-            "/api/strava-integration/feed",
+            "/api/activity-integration/feed",
             headers={"X-API-Key": "invalid-key"}
         )
         end_time = time.time()
@@ -130,7 +130,7 @@ class TestAPIPerformanceMonitoring:
         # First request (may be slower due to cache miss)
         start_time = time.time()
         response1 = strava_test_client.get(
-            "/api/strava-integration/health",
+            "/api/activity-integration/health",
             headers={"X-API-Key": "test-strava-key-123"}
         )
         end_time = time.time()
@@ -139,7 +139,7 @@ class TestAPIPerformanceMonitoring:
         # Second request (should be faster due to cache hit)
         start_time = time.time()
         response2 = strava_test_client.get(
-            "/api/strava-integration/health",
+            "/api/activity-integration/health",
             headers={"X-API-Key": "test-strava-key-123"}
         )
         end_time = time.time()
@@ -197,7 +197,7 @@ class TestMonitoringIntegration:
             
             for endpoint in endpoints:
                 if client_name == "strava" and "feed" in endpoint:
-                    endpoint = "/api/strava-integration/feed"
+                    endpoint = "/api/activity-integration/feed"
                 elif client_name == "fundraising" and "data" in endpoint:
                     endpoint = "/api/fundraising/data"
                 else:
@@ -298,7 +298,7 @@ class TestPerformanceThresholds:
         # Make requests with invalid authentication
         for i in range(20):
             response = strava_test_client.get(
-                "/api/strava-integration/feed",
+                "/api/activity-integration/feed",
                 headers={"X-API-Key": "invalid-key"}
             )
             total_requests += 1

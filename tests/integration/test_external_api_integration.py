@@ -10,12 +10,12 @@ import httpx
 from fastapi.testclient import TestClient
 
 
-class TestStravaAPIIntegration:
-    """Test Strava API integration with mocking."""
+class TestActivityAPIIntegration:
+    """Test activity API integration with mocking."""
     
-    def test_strava_api_with_mocked_response(self, strava_test_client):
-        """Test Strava API with mocked external response."""
-        mock_strava_response = {
+    def test_activity_api_with_mocked_response(self, strava_test_client):
+        """Test activity API with mocked external response."""
+        mock_activity_response = {
             "activities": [
                 {
                     "id": 123456789,
@@ -40,7 +40,7 @@ class TestStravaAPIIntegration:
             "total_activities": 1
         }
         
-        # Mock the Strava API call
+        # Mock the activity API call
         with patch('httpx.AsyncClient.get') as mock_get:
             mock_response_obj = Mock()
             mock_response_obj.status_code = 200
@@ -49,7 +49,7 @@ class TestStravaAPIIntegration:
             
             # Test the API endpoint
             response = strava_test_client.get(
-                "/api/strava-integration/feed",
+                "/api/activity-integration/feed",
                 headers={"X-API-Key": "test-strava-key-123"}
             )
             
@@ -70,7 +70,7 @@ class TestStravaAPIIntegration:
             
             # Test the API endpoint
             response = strava_test_client.get(
-                "/api/strava-integration/feed",
+                "/api/activity-integration/feed",
                 headers={"X-API-Key": "test-strava-key-123"}
             )
             
@@ -85,7 +85,7 @@ class TestStravaAPIIntegration:
             
             # Test the API endpoint
             response = strava_test_client.get(
-                "/api/strava-integration/feed",
+                "/api/activity-integration/feed",
                 headers={"X-API-Key": "test-strava-key-123"}
             )
             
@@ -195,7 +195,7 @@ class TestCacheIntegration:
                 with patch('os.path.exists', return_value=True):
                     # Test the API endpoint
                     response = strava_test_client.get(
-                        "/api/strava-integration/feed",
+                        "/api/activity-integration/feed",
                         headers={"X-API-Key": "test-strava-key-123"}
                     )
                     
@@ -209,7 +209,7 @@ class TestCacheIntegration:
             with patch('builtins.open', side_effect=FileNotFoundError):
                 # Test the API endpoint
                 response = strava_test_client.get(
-                    "/api/strava-integration/feed",
+                    "/api/activity-integration/feed",
                     headers={"X-API-Key": "test-strava-key-123"}
                 )
                 
@@ -223,7 +223,7 @@ class TestCacheIntegration:
             with patch('json.load', side_effect=json.JSONDecodeError("Invalid JSON", "doc", 0)):
                 # Test the API endpoint
                 response = strava_test_client.get(
-                    "/api/strava-integration/feed",
+                    "/api/activity-integration/feed",
                     headers={"X-API-Key": "test-strava-key-123"}
                 )
                 
@@ -243,7 +243,7 @@ class TestEnvironmentVariableIntegration:
         }):
             # Test the API endpoint
             response = strava_test_client.get(
-                "/api/strava-integration/health",
+                "/api/activity-integration/health",
                 headers={"X-API-Key": "test-strava-key-123"}
             )
             
@@ -255,7 +255,7 @@ class TestEnvironmentVariableIntegration:
         with patch.dict('os.environ', {}, clear=True):
             # Test the API endpoint
             response = strava_test_client.get(
-                "/api/strava-integration/health",
+                "/api/activity-integration/health",
                 headers={"X-API-Key": "test-strava-key-123"}
             )
             
@@ -314,7 +314,7 @@ class TestFullSystemIntegration:
                             
                             # Test the full flow
                             response = strava_test_client.get(
-                                "/api/strava-integration/feed",
+                                "/api/activity-integration/feed",
                                 headers={"X-API-Key": "test-strava-key-123"}
                             )
                             
@@ -386,7 +386,7 @@ class TestErrorHandlingIntegration:
                 
                 # Test the API endpoint
                 response = strava_test_client.get(
-                    "/api/strava-integration/feed",
+                    "/api/activity-integration/feed",
                     headers={"X-API-Key": "test-strava-key-123"}
                 )
                 
@@ -407,7 +407,7 @@ class TestErrorHandlingIntegration:
             with patch('builtins.open', side_effect=error):
                 # Test the API endpoint
                 response = strava_test_client.get(
-                    "/api/strava-integration/feed",
+                    "/api/activity-integration/feed",
                     headers={"X-API-Key": "test-strava-key-123"}
                 )
                 

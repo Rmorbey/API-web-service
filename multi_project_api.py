@@ -20,10 +20,10 @@ from dotenv import load_dotenv
 logger = logging.getLogger(__name__)
 
 # Import security middleware
-from projects.fundraising_tracking_app.strava_integration.security import SecurityMiddleware
+from projects.fundraising_tracking_app.activity_integration.security import SecurityMiddleware
 
 # Import error handling
-from projects.fundraising_tracking_app.strava_integration.simple_error_handlers import (
+from projects.fundraising_tracking_app.activity_integration.simple_error_handlers import (
     http_exception_handler,
     validation_exception_handler,
     general_exception_handler
@@ -31,12 +31,12 @@ from projects.fundraising_tracking_app.strava_integration.simple_error_handlers 
 from fastapi.exceptions import RequestValidationError
 
 # Import HTTP client lifespan manager
-from projects.fundraising_tracking_app.strava_integration.http_clients import lifespan_http_clients
+from projects.fundraising_tracking_app.activity_integration.http_clients import lifespan_http_clients
 from contextlib import asynccontextmanager
 
 # Import cache middleware
-from projects.fundraising_tracking_app.strava_integration.cache_middleware import CacheMiddleware
-from projects.fundraising_tracking_app.strava_integration.compression_middleware import SmartCompressionMiddleware
+from projects.fundraising_tracking_app.activity_integration.cache_middleware import CacheMiddleware
+from projects.fundraising_tracking_app.activity_integration.compression_middleware import SmartCompressionMiddleware
 
 # Load environment variables
 load_dotenv()
@@ -54,10 +54,10 @@ async def lifespan_with_cache_init(app: FastAPI):
         logger.info("🔄 Phase 2: Initializing core services...")
         
         try:
-            # Initialize Strava cache system (synchronous - no background threads)
-            from projects.fundraising_tracking_app.strava_integration.strava_integration_api import get_cache as get_strava_cache
-            strava_cache = get_strava_cache()
-            logger.info("✅ Strava cache system initialized (core services)")
+            # Initialize Activity cache system (synchronous - no background threads)
+            from projects.fundraising_tracking_app.activity_integration.activity_api import get_cache as get_activity_cache
+            activity_cache = get_activity_cache()
+            logger.info("✅ Activity cache system initialized (core services)")
             
             # Initialize Fundraising cache system (synchronous - no background threads)
             from projects.fundraising_tracking_app.fundraising_scraper.fundraising_api import get_cache as get_fundraising_cache
@@ -68,7 +68,7 @@ async def lifespan_with_cache_init(app: FastAPI):
             logger.info("🔄 Phase 3: Starting background services...")
             
             # Start background services after core initialization
-            strava_cache.start_background_services()
+            activity_cache.start_background_services()
             fundraising_cache.start_background_services()
             
             logger.info("✅ All services initialized with proper startup hierarchy!")
@@ -93,8 +93,9 @@ app = FastAPI(
     
     A comprehensive FastAPI application providing APIs for multiple projects including:
     
-    ### 📊 **Strava Integration API**
-    - **Activity Feed**: Get Strava activities with photos, comments, and music detection
+    ### 📊 **Activity Integration API**
+    - **Activity Feed**: Get activities with photos, comments, and music detection (imported via GPX)
+    - **GPX Import**: Import activity data from Google Sheets containing GPX references
     - **Cache Management**: View cache statistics and invalidate cache entries
     - **Map Integration**: Access Jawg map tiles and tokens
     - **Metrics**: Monitor API performance and usage
@@ -208,7 +209,7 @@ async def add_security_headers(request: Request, call_next):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-    response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://widget.deezer.com https://unpkg.com; style-src 'self' 'unsafe-inline' https://unpkg.com; img-src 'self' data: https:; connect-src 'self' https://api.strava.com https://api.deezer.com https://widget.deezer.com; frame-src https://widget.deezer.com;"
+    response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://widget.deezer.com https://unpkg.com; style-src 'self' 'unsafe-inline' https://unpkg.com; img-src 'self' data: https:; connect-src 'self' https://api.deezer.com https://widget.deezer.com; frame-src https://widget.deezer.com;"
     
     return response
 
@@ -223,9 +224,9 @@ app.add_exception_handler(Exception, general_exception_handler)
 
 # Project configuration
 PROJECTS = {
-    "strava-integration": {
-        "name": "Strava Integration Service", 
-        "description": "Personal Strava data integration with smart caching",
+    "activity-integration": {
+        "name": "Activity Integration Service", 
+        "description": "Personal activity data integration with GPX import and smart caching",
         "version": "1.0.0",
         "enabled": True
     },
@@ -239,10 +240,10 @@ PROJECTS = {
 
 # Import project modules
 try:
-    from projects.fundraising_tracking_app.strava_integration.strava_integration_api import router as strava_router
+    from projects.fundraising_tracking_app.activity_integration.activity_api import router as activity_router
 except ImportError:
     # Fallback if modules don't exist
-    strava_router = None
+    activity_router = None
 
 try:
     from projects.fundraising_tracking_app.fundraising_scraper.fundraising_api import router as fundraising_router
@@ -291,7 +292,7 @@ def root() -> Dict[str, Any]:
         "available_endpoints": {
             "health": "/health",
             "projects": "/projects",
-            "strava_integration": "/api/strava-integration/"
+            "activity_integration": "/api/activity-integration/"
         }
     }
 
@@ -332,28 +333,21 @@ def get_projects() -> Dict[str, Any]:
         "timestamp": datetime.utcnow().isoformat()
     }
 
-@app.get("/demo")
-def serve_demo() -> FileResponse:
-    """Serve the Strava React demo (development environment only)"""
-    # Verify we're in development environment
-    from projects.fundraising_tracking_app.strava_integration.environment_utils import verify_development_access
-    verify_development_access()
-    return FileResponse("projects/fundraising_tracking_app/examples/strava-react-demo-clean.html")
 
 @app.get("/fundraising-demo")
 def serve_fundraising_demo() -> FileResponse:
     """Serve the fundraising demo (development environment only)"""
     # Verify we're in development environment
-    from projects.fundraising_tracking_app.strava_integration.environment_utils import verify_development_access
+    from projects.fundraising_tracking_app.activity_integration.environment_utils import verify_development_access
     verify_development_access()
     return FileResponse("projects/fundraising_tracking_app/examples/fundraising-demo.html")
 
 # Include project routers if they exist
-if strava_router:
+if activity_router:
     app.include_router(
-        strava_router, 
-        prefix="/api/strava-integration", 
-        tags=["strava-integration"]
+        activity_router, 
+        prefix="/api/activity-integration", 
+        tags=["activity-integration"]
     )
 
 if fundraising_router:

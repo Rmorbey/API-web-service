@@ -7,7 +7,7 @@ We've implemented environment-based access control for demo endpoints to ensure 
 ## 🎯 **Implementation**
 
 ### **1. Environment Utils Module**
-Created `projects/fundraising_tracking_app/strava_integration/environment_utils.py` with:
+Created `projects/fundraising_tracking_app/activity_integration/environment_utils.py` with:
 
 ```python
 def get_environment() -> str:
@@ -36,12 +36,11 @@ All demo endpoints now include environment verification:
 - `/api/fundraising/demo/data` - Development only
 - `/api/fundraising/demo/donations` - Development only
 
-#### **Strava Integration API Demo Endpoints:**
-- `/api/strava-integration/demo/feed` - Development only
-- `/api/strava-integration/demo/map-tiles/{z}/{x}/{y}` - Development only
+#### **Activity Integration API Demo Endpoints:**
+- `/api/activity-integration/demo/feed` - Development only
+- `/api/activity-integration/demo/map-tiles/{z}/{x}/{y}` - Development only
 
 #### **Main API Demo Pages:**
-- `/demo` - Development only
 - `/fundraising-demo` - Development only
 
 ### **3. Environment Configuration**

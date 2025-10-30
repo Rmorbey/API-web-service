@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Fixed Cache Management Tests
-Tests the actual SmartStravaCache and SmartFundraisingCache interfaces
+Tests the actual ActivityCache and SmartFundraisingCache interfaces
 """
 
 import pytest
@@ -11,83 +11,76 @@ import tempfile
 from datetime import datetime, timedelta
 from unittest.mock import Mock, patch, MagicMock
 
-from projects.fundraising_tracking_app.strava_integration.smart_strava_cache import SmartStravaCache
+from projects.fundraising_tracking_app.activity_integration.activity_cache import ActivityCache
 from projects.fundraising_tracking_app.fundraising_scraper.fundraising_scraper import SmartFundraisingCache
 
 
-class TestSmartStravaCache:
-    """Test the actual SmartStravaCache implementation"""
+class TestActivityCache:
+    """Test the actual ActivityCache implementation"""
     
     def test_cache_initialization(self):
         """Test that cache initializes correctly with default values."""
-        with patch('projects.fundraising_tracking_app.strava_integration.smart_strava_cache.StravaTokenManager'):
-            cache = SmartStravaCache()
+        with patch('projects.fundraising_tracking_app.activity_integration.activity_cache.threading.Thread'):
+            cache = ActivityCache()
             
             # Test default initialization
-            assert cache.cache_file == "projects/fundraising_tracking_app/strava_integration/strava_cache.json"
-            assert cache.cache_duration_hours == 6  # Default from env or 6
+            assert cache.cache_duration_hours == 8  # Default from env or 8
             assert cache.allowed_activity_types == ["Run", "Ride"]
-            assert cache.start_date == datetime(2025, 5, 22)
+            assert cache.supabase_cache is not None
             assert cache._cache_data is None  # Private attribute
             assert cache._cache_loaded_at is None
     
     def test_cache_initialization_with_custom_duration(self):
         """Test cache initialization with custom duration."""
-        with patch('projects.fundraising_tracking_app.strava_integration.smart_strava_cache.StravaTokenManager'):
-            cache = SmartStravaCache(cache_duration_hours=12)
+        with patch('projects.fundraising_tracking_app.activity_integration.activity_cache.threading.Thread'):
+            cache = ActivityCache(cache_duration_hours=12)
             assert cache.cache_duration_hours == 12
     
-    @patch('projects.fundraising_tracking_app.strava_integration.smart_strava_cache.StravaTokenManager')
-    def test_get_activities_smart_basic(self, mock_token_manager):
+    def test_get_activities_smart_basic(self):
         """Test the get_activities_smart method with basic functionality."""
-        cache = SmartStravaCache()
-        
-        # Mock the token manager
-        mock_token_manager.return_value.get_valid_token.return_value = "test_token"
-        
-        # Mock the cache data
-        mock_cache_data = {
-            "timestamp": datetime.now().isoformat(),
-            "activities": [
-                {
-                    "id": 1,
-                    "name": "Test Run",
-                    "type": "Run",
-                    "start_date_local": "2025-06-01T10:00:00Z",
-                    "distance": 5000,
-                    "moving_time": 1800
-                }
-            ]
-        }
-        
-        with patch.object(cache, '_load_cache', return_value=mock_cache_data):
-            activities = cache.get_activities_smart(limit=10)
+        with patch('projects.fundraising_tracking_app.activity_integration.activity_cache.threading.Thread'):
+            cache = ActivityCache()
             
-            assert len(activities) == 1
-            assert activities[0]["name"] == "Test Run"
-            assert activities[0]["type"] == "Run"
+            # Mock the cache data
+            mock_cache_data = {
+                "timestamp": datetime.now().isoformat(),
+                "activities": [
+                    {
+                        "id": 1,
+                        "name": "Test Run",
+                        "type": "Run",
+                        "start_date_local": "2025-06-01T10:00:00Z",
+                        "distance": 5000,
+                        "moving_time": 1800
+                    }
+                ]
+            }
+            
+            with patch.object(cache, '_load_cache', return_value=mock_cache_data):
+                activities = cache.get_activities_smart(limit=10)
+                
+                assert len(activities) == 1
+                assert activities[0]["name"] == "Test Run"
+                assert activities[0]["type"] == "Run"
     
-    @patch('projects.fundraising_tracking_app.strava_integration.smart_strava_cache.StravaTokenManager')
-    def test_force_refresh_now(self, mock_token_manager):
-        """Test the force_refresh_now method."""
-        cache = SmartStravaCache()
-        
-        # Mock the token manager
-        mock_token_manager.return_value.get_valid_token.return_value = "test_token"
-        
-        # The method should not raise an exception
-        try:
-            cache.force_refresh_now()
-            # If we get here, the method executed without error
-            assert True
-        except Exception as e:
-            # If it fails due to external dependencies, that's expected in tests
-            assert "token" in str(e).lower() or "api" in str(e).lower() or "http" in str(e).lower()
+    def test_manual_import_required(self):
+        """Test that manual import is required (no automatic refresh)."""
+        with patch('projects.fundraising_tracking_app.activity_integration.activity_cache.threading.Thread'):
+            cache = ActivityCache()
+            
+            # Check that refresh returns manual import message
+            result = cache.check_and_refresh()
+            assert "manual_import_required" in result.get("status", "")
     
-    @patch('projects.fundraising_tracking_app.strava_integration.smart_strava_cache.StravaTokenManager')
-    def test_cleanup_backups(self, mock_token_manager):
-        """Test the cleanup_backups method."""
-        cache = SmartStravaCache()
+    def test_cache_methods_exist(self):
+        """Test that cache methods exist."""
+        with patch('projects.fundraising_tracking_app.activity_integration.activity_cache.threading.Thread'):
+            cache = ActivityCache()
+            
+            # Test that important methods exist
+            assert hasattr(cache, 'get_activities_smart')
+            assert hasattr(cache, 'check_and_refresh')
+            assert hasattr(cache, 'get_cache_status')
         
         with patch('os.path.exists', return_value=True), \
              patch('os.listdir', return_value=['backup1.json', 'backup2.json']), \
@@ -96,7 +89,7 @@ class TestSmartStravaCache:
             cache.cleanup_backups()
             # Should not raise an exception
     
-    @patch('projects.fundraising_tracking_app.strava_integration.smart_strava_cache.StravaTokenManager')
+    @patch('projects.fundraising_tracking_app.activity_integration.activity_cache.StravaTokenManager')
     def test_clean_invalid_activities(self, mock_token_manager):
         """Test the clean_invalid_activities method."""
         cache = SmartStravaCache()
@@ -247,7 +240,7 @@ class TestSmartFundraisingCache:
 class TestCacheIntegration:
     """Test cache integration and edge cases"""
     
-    @patch('projects.fundraising_tracking_app.strava_integration.smart_strava_cache.StravaTokenManager')
+    @patch('projects.fundraising_tracking_app.activity_integration.activity_cache.StravaTokenManager')
     def test_cache_with_empty_data(self, mock_token_manager):
         """Test cache behavior with empty data."""
         cache = SmartStravaCache()

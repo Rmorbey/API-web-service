@@ -8,7 +8,7 @@ import time
 import threading
 from unittest.mock import Mock, patch
 
-from projects.fundraising_tracking_app.strava_integration.metrics import (
+from projects.fundraising_tracking_app.activity_integration.metrics import (
     MetricsCollector,
     RequestMetric,
     SystemMetric

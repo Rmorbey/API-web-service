@@ -36,11 +36,9 @@ pip install -r requirements.txt --quiet
 # Start the server in production mode (no reload, proper logging)
 echo "🌐 Starting production server on http://0.0.0.0:8000"
 echo "📊 API Documentation: http://0.0.0.0:8000/docs"
-echo "🚫 Demo Page: http://0.0.0.0:8000/demo (DISABLED)"
 echo "🚫 Fundraising Demo: http://0.0.0.0:8000/fundraising-demo (DISABLED)"
 echo "🔧 Environment: PRODUCTION (Demo endpoints disabled)"
 echo ""
 
-# Production settings: single worker for rate-limited APIs, proper logging
-# Single worker prevents duplicate API calls to Strava (1000 calls/day limit)
+# Production settings: single worker for proper logging
 uvicorn multi_project_api:app --host 0.0.0.0 --port 8000 --workers 1 --access-log --log-level info

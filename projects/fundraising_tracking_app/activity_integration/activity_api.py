@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """
-Minimal Strava Integration API Module
-Contains only the essential endpoints used by the demo
+Activity Integration API Module
+Contains endpoints for activity data (GPX import from Google Sheets)
 """
 
-from fastapi import FastAPI, APIRouter, HTTPException, Query, Path, Header, Depends, Request
+from fastapi import FastAPI, APIRouter, HTTPException, Query, Path, Header, Depends, Request, UploadFile, File, Form
 from fastapi.responses import Response, JSONResponse, HTMLResponse
+from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 import os
 import httpx
@@ -14,10 +15,11 @@ import logging
 logger = logging.getLogger(__name__)
 from datetime import datetime
 from dotenv import load_dotenv
-from .smart_strava_cache import SmartStravaCache
+from .activity_cache import ActivityCache
 # Removed complex error handlers - using FastAPI's built-in HTTPException
 from .caching import cache_manager
 from .async_processor import async_processor
+from .gpx_importer import GPXImporter
 from .models import (
     ActivityFeedResponse, 
     HealthResponse, 
@@ -52,13 +54,13 @@ def get_cache():
     """Get the cache instance, creating it only when first needed (lazy initialization)"""
     global _cache_instance
     if _cache_instance is None:
-        _cache_instance = SmartStravaCache()
+        _cache_instance = ActivityCache()
     return _cache_instance
 
 # API Key for protected endpoints
-API_KEY = os.getenv("STRAVA_API_KEY")
+API_KEY = os.getenv("ACTIVITY_API_KEY")
 if not API_KEY:
-    raise ValueError("STRAVA_API_KEY environment variable is required")
+    raise ValueError("ACTIVITY_API_KEY environment variable is required")
 
 def verify_api_key(x_api_key: Optional[str] = Header(None)):
     """Verify API key for protected endpoints"""
@@ -120,10 +122,10 @@ def verify_frontend_access(request: Request):
 # Project endpoints
 @router.get("/")
 def project_root():
-    """Root endpoint for Strava integration project"""
+    """Root endpoint for activity integration project"""
     return {
-        "project": "strava-integration",
-        "description": "Personal Strava data integration API - Production Ready",
+        "project": "activity-integration",
+        "description": "Activity data integration API - Production Ready",
         "version": "2.0.0",
         "endpoints": {
             "feed": "/feed - Get optimized activity feed with all data",
@@ -141,12 +143,12 @@ def project_root():
 
 @router.get("/health")
 def health_check():
-    """Health check for Strava integration project"""
+    """Health check for activity integration project"""
     return {
-        "project": "strava-integration",
+        "project": "activity-integration",
         "status": "healthy",
         "timestamp": datetime.utcnow().isoformat(),
-        "strava_configured": bool(os.getenv("STRAVA_ACCESS_TOKEN")),
+        "activity_configured": bool(os.getenv("GOOGLE_SHEETS_SPREADSHEET_ID")),
         "jawg_configured": bool(os.getenv("JAWG_ACCESS_TOKEN")),
         "cache_status": "active" if get_cache()._cache_data else "inactive"
     }
@@ -159,7 +161,7 @@ def get_cache_status():
         status = cache.get_cache_status()
         
         return {
-            "project": "strava-integration",
+            "project": "activity-integration",
             "timestamp": datetime.utcnow().isoformat(),
             "cache_status": status
         }
@@ -175,7 +177,7 @@ def get_data_loss_analysis(api_key: str = Depends(verify_api_key)):
         analysis = cache.analyze_cache_data_loss()
         
         return {
-            "project": "strava-integration",
+            "project": "activity-integration",
             "timestamp": datetime.utcnow().isoformat(),
             "data_loss_analysis": analysis
         }
@@ -238,7 +240,7 @@ def get_metrics(api_key: str = Depends(verify_api_key)):
             "cache_duration_hours": get_cache().cache_duration_hours
         },
         "system": {
-            "strava_configured": bool(os.getenv("STRAVA_ACCESS_TOKEN")),
+            "activity_configured": bool(os.getenv("GOOGLE_SHEETS_SPREADSHEET_ID")),
             "jawg_configured": bool(os.getenv("JAWG_ACCESS_TOKEN")),
             "music_integration": "active"
         }
@@ -260,7 +262,7 @@ def get_jawg_token():
 
 @router.get("/token-status")
 def get_token_status(api_key: str = Depends(verify_api_key)):
-    """Get Strava token status for debugging"""
+    """Get token status for debugging (legacy endpoint - no longer used)"""
     try:
         cache = get_cache()
         token_status = cache.token_manager.get_token_status()
@@ -375,7 +377,7 @@ async def refresh_cache(request: RefreshRequest, api_key: str = Depends(verify_a
 # Demo endpoints (development only - no API key required for demo pages)
 @router.get("/demo/feed")
 async def get_activity_feed_demo(request: FeedRequest = Depends()):
-    """Get a list of processed Strava activities for demo page (development environment only)"""
+    """Get a list of processed activities for demo page (development environment only)"""
     # Verify we're in development environment
     from .environment_utils import verify_development_access
     verify_development_access()
@@ -568,15 +570,15 @@ def _apply_feed_filters(activities: List[Dict[str, Any]], request: FeedRequest) 
 @router.get(
     "/feed",
     summary="📊 Activity Feed",
-    description="Get Strava activity feed with photos, comments, music detection, and map data",
+    description="Get activity feed with photos, comments, music detection, and map data",
     response_description="Activity feed with comprehensive data",
-    tags=["Strava Integration", "Activities"]
+    tags=["Activities"]
 )
 async def get_activity_feed(request: FeedRequest = Depends(), api_key: str = Depends(verify_api_key), frontend_access: bool = Depends(verify_frontend_access)):
     """
     ## 📊 Activity Feed Endpoint
     
-    Retrieves a comprehensive activity feed from Strava with enhanced data including:
+    Retrieves a comprehensive activity feed with enhanced data including:
     
     ### 🎯 **Features**
     - **Activity Data**: Distance, duration, pace, elevation, and type
@@ -607,7 +609,7 @@ async def get_activity_feed(request: FeedRequest = Depends(), api_key: str = Dep
     - **Jawg Integration**: Ready for Jawg map tile integration
     
     ### 📈 **Performance**
-    - **Caching**: 6-hour cache with 95% hit rate
+    - **Caching**: Persistent cache with high hit rate
     - **Async Processing**: Parallel processing for optimal performance
     - **Response Time**: 5-50ms average response time
     
@@ -745,6 +747,295 @@ def _clean_comments(comments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 # - _get_activity_music() helper function (unused)
 
 # Demo page is served by main API at /demo endpoint
+
+# GPX Import Endpoints
+
+class GPXImportRequest(BaseModel):
+    """Request model for GPX import from Google Sheets"""
+    spreadsheet_id: str
+    range: Optional[str] = "Activities!A:Z"
+
+class GPXUploadRequest(BaseModel):
+    """Request model for single GPX file upload"""
+    name: str
+    type: str = "Run"
+    start_date: str
+    description: Optional[str] = ""
+    gpx_content: Optional[str] = None
+
+@router.post(
+    "/gpx/import-from-sheets",
+    summary="📥 Import GPX Activities from Google Sheets",
+    description="Import activities from Google Sheets with GPX data",
+    tags=["GPX Import"]
+)
+async def import_gpx_from_sheets(
+    request: GPXImportRequest,
+    api_key: str = Depends(verify_api_key)
+):
+    """Import activities from Google Sheets"""
+    try:
+        importer = GPXImporter()
+        sheet_activities = importer.read_activities_from_sheets(
+            request.spreadsheet_id,
+            request.range
+        )
+        
+        processed_activities = []
+        for sheet_activity in sheet_activities:
+            activity = importer.process_gpx_activity(sheet_activity)
+            if activity:
+                # Add to cache
+                cache = get_cache()
+                # Generate ID if not provided
+                if not activity.get('id'):
+                    activity['id'] = hash(f"{activity.get('name')}{activity.get('start_date')}")
+                
+                processed_activities.append(activity)
+        
+        # Save to cache
+        if processed_activities:
+            # Process through async processor for formatting and music detection
+            formatted_activities = await async_processor.process_activities_parallel(
+                processed_activities,
+                operations=['formatting', 'music_detection']
+            )
+            
+            # Save to cache (this will merge with existing activities)
+            cache = get_cache()
+            new_count = cache.add_gpx_activities(formatted_activities)
+            
+            logger.info(f"✅ Imported {len(formatted_activities)} GPX activities ({new_count} new, {len(formatted_activities) - new_count} updated)")
+            
+            return {
+                "status": "success",
+                "imported": len(formatted_activities),
+                "new_activities": new_count,
+                "updated_activities": len(formatted_activities) - new_count,
+                "message": f"Successfully imported {len(formatted_activities)} activities ({new_count} new)"
+            }
+        else:
+            return {
+                "status": "success",
+                "imported": 0,
+                "new_activities": 0,
+                "updated_activities": 0,
+                "message": "No activities to import"
+            }
+        
+    except Exception as e:
+        logger.error(f"Failed to import GPX from sheets: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to import GPX from sheets: {str(e)}"
+        )
+
+@router.post(
+    "/gpx/upload",
+    summary="📤 Upload Single GPX Activity",
+    description="Upload a single GPX file to create an activity",
+    tags=["GPX Import"]
+)
+async def upload_gpx_activity(
+    name: str = Form(...),
+    type: str = Form("Run"),
+    start_date: str = Form(...),
+    description: Optional[str] = Form(""),
+    gpx_file: UploadFile = File(...),
+    api_key: str = Depends(verify_api_key)
+):
+    """Upload a single GPX file"""
+    try:
+        # Read GPX file content
+        gpx_content = await gpx_file.read()
+        gpx_content_str = gpx_content.decode('utf-8')
+        
+        importer = GPXImporter()
+        
+        # Create activity object
+        sheet_activity = {
+            'name': name,
+            'type': type,
+            'start_date': start_date,
+            'start_date_local': start_date,
+            'description': description,
+            'gpx_content': gpx_content_str
+        }
+        
+        activity = importer.process_gpx_activity(sheet_activity)
+        
+        if not activity:
+            raise HTTPException(
+                status_code=400,
+                detail="Failed to parse GPX file"
+            )
+        
+        # Generate ID
+        if not activity.get('id'):
+            activity['id'] = hash(f"{name}{start_date}")
+        
+        # Process through async processor
+        formatted_activities = await async_processor.process_activities_parallel(
+            [activity],
+            operations=['formatting']
+        )
+        
+        return {
+            "status": "success",
+            "activity": formatted_activities[0] if formatted_activities else activity
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to upload GPX: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to upload GPX: {str(e)}"
+        )
+
+@router.post(
+    "/gpx/refresh",
+    summary="🔄 Refresh GPX Activities",
+    description="Refresh activities from Google Sheets",
+    tags=["GPX Import"]
+)
+async def refresh_gpx_activities(
+    api_key: str = Depends(verify_api_key)
+):
+    """Refresh GPX activities from Google Sheets"""
+    try:
+        spreadsheet_id = os.getenv("GOOGLE_SHEETS_SPREADSHEET_ID")
+        if not spreadsheet_id:
+            raise HTTPException(
+                status_code=400,
+                detail="GOOGLE_SHEETS_SPREADSHEET_ID not configured"
+            )
+        
+        importer = GPXImporter()
+        sheet_activities = importer.read_activities_from_sheets(spreadsheet_id)
+        
+        processed_activities = []
+        for sheet_activity in sheet_activities:
+            activity = importer.process_gpx_activity(sheet_activity)
+            if activity:
+                processed_activities.append(activity)
+        
+        # Update cache with new activities
+        # This would need integration with ActivityCache
+        # For now, return the processed activities
+        
+        return {
+            "status": "success",
+            "refreshed": len(processed_activities),
+            "activities": processed_activities
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to refresh GPX activities: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to refresh GPX activities: {str(e)}"
+        )
+
+@router.post(
+    "/gpx/sync-drive-folder",
+    summary="📁 Sync Drive Folder to Google Sheet",
+    description="Scan a Google Drive folder and auto-populate Google Sheet with GPX files",
+    tags=["GPX Import"]
+)
+async def sync_drive_folder_to_sheet(
+    folder_id: str,
+    spreadsheet_id: str,
+    api_key: str = Depends(verify_api_key)
+):
+    """Scan a Google Drive folder and populate Google Sheet with GPX files"""
+    try:
+        importer = GPXImporter()
+        
+        if not importer.sheets_service:
+            raise HTTPException(
+                status_code=500,
+                detail="Google Sheets service not available"
+            )
+        
+        # Get Drive service
+        if not importer.drive_service:
+            raise HTTPException(
+                status_code=500,
+                detail="Google Drive service not available"
+            )
+        
+        # List all GPX files in folder
+        query = f"'{folder_id}' in parents and (mimeType='application/gpx+xml' or name contains '.gpx')"
+        results = importer.drive_service.files().list(
+            q=query,
+            fields="files(id, name)"
+        ).execute()
+        
+        files = results.get('files', [])
+        
+        if not files:
+            return {
+                "status": "success",
+                "message": "No GPX files found in folder",
+                "files_found": 0
+            }
+        
+        # Prepare data for sheet
+        sheet_data = []
+        for file in files:
+            file_name = file['name']
+            file_id = file['id']
+            
+            # Extract activity name (remove .gpx extension)
+            activity_name = file_name.replace('.gpx', '').replace('.GPX', '')
+            
+            # Detect activity type from filename
+            file_lower = file_name.lower()
+            if 'ride' in file_lower or 'bike' in file_lower or 'cycling' in file_lower:
+                activity_type = "Ride"
+            elif 'hike' in file_lower or 'walk' in file_lower or 'hiking' in file_lower:
+                activity_type = "Hike"
+            elif 'swim' in file_lower:
+                activity_type = "Swim"
+            else:
+                activity_type = "Run"  # Default
+            
+            sheet_data.append([activity_name, activity_type, file_id, "", ""])  # name, type, gpx_drive_id, description, photos
+        
+        # Write to Google Sheet
+        range_name = f"Activities!A2:E{len(sheet_data) + 1}"  # Start from row 2
+        
+        # Clear existing data first (optional - you might want to append instead)
+        # importer.sheets_service.spreadsheets().values().clear(
+        #     spreadsheetId=spreadsheet_id,
+        #     range=range_name
+        # ).execute()
+        
+        # Write new data
+        body = {
+            'values': sheet_data
+        }
+        
+        importer.sheets_service.spreadsheets().values().update(
+            spreadsheetId=spreadsheet_id,
+            range=range_name,
+            valueInputOption='RAW',
+            body=body
+        ).execute()
+        
+        return {
+            "status": "success",
+            "message": f"Synced {len(files)} GPX files to Google Sheet",
+            "files_found": len(files),
+            "files": [{"name": f['name'], "id": f['id']} for f in files]
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to sync Drive folder: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to sync Drive folder: {str(e)}"
+        )
 
 # Router is exported for use in multi_project_api.py
 # No need to create a separate FastAPI app here

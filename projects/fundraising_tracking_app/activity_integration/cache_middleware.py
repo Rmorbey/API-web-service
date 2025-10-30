@@ -26,22 +26,22 @@ class CacheMiddleware(BaseHTTPMiddleware):
         # Define cache rules for specific routes
         self.cache_rules = cache_routes or {
             # Static data - cache for 1 hour
-            "/api/strava-integration/": {"type": "static", "max_age": 3600},
+            "/api/activity-integration/": {"type": "static", "max_age": 3600},
             "/api/fundraising/": {"type": "static", "max_age": 3600},
             
             # Dynamic data - cache for 5 minutes
-            "/api/strava-integration/feed": {"type": "dynamic", "max_age": 300},
-            "/api/strava-integration/activities": {"type": "dynamic", "max_age": 300},
+            "/api/activity-integration/feed": {"type": "dynamic", "max_age": 300},
+            "/api/activity-integration/activities": {"type": "dynamic", "max_age": 300},
             "/api/fundraising/data": {"type": "dynamic", "max_age": 300},
             "/api/fundraising/donations": {"type": "dynamic", "max_age": 300},
             
             # Real-time data - cache for 1 minute
-            "/api/strava-integration/health": {"type": "realtime", "max_age": 60},
+            "/api/activity-integration/health": {"type": "realtime", "max_age": 60},
             "/api/fundraising/health": {"type": "realtime", "max_age": 60},
-            "/api/strava-integration/metrics": {"type": "realtime", "max_age": 60},
+            "/api/activity-integration/metrics": {"type": "realtime", "max_age": 60},
             
             # User-specific data - cache for 30 minutes
-            "/api/strava-integration/refresh-cache": {"type": "user_data", "max_age": 1800},
+            "/api/activity-integration/refresh-cache": {"type": "user_data", "max_age": 1800},
             "/api/fundraising/refresh": {"type": "user_data", "max_age": 1800},
         }
     

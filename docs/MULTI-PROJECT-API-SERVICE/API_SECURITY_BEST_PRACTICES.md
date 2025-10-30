@@ -98,7 +98,7 @@ response.headers["X-Content-Type-Options"] = "nosniff"
 response.headers["X-Frame-Options"] = "DENY"
 response.headers["X-XSS-Protection"] = "1; mode=block"
 response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://widget.deezer.com https://unpkg.com; style-src 'self' 'unsafe-inline' https://unpkg.com; img-src 'self' data: https:; connect-src 'self' https://api.strava.com https://api.deezer.com https://widget.deezer.com; frame-src https://widget.deezer.com;"
+response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://widget.deezer.com https://unpkg.com; style-src 'self' 'unsafe-inline' https://unpkg.com; img-src 'self' data: https:; connect-src 'self' https://api.deezer.com https://widget.deezer.com https://www.googleapis.com; frame-src https://widget.deezer.com;"
 ```
 
 **Security Headers Explained:**
@@ -171,7 +171,7 @@ Frontend App → Trusted Host Check → Referer Validation → API Key Auth → 
 
 ### **Demo Files (No API Keys):**
 - `projects/fundraising_tracking_app/examples/fundraising-demo.html` - Uses `/demo/data` and `/demo/donations`
-- `projects/fundraising_tracking_app/examples/strava-react-demo-clean.html` - Uses `/demo/feed` and `/demo/map-tiles`
+- Removed: `strava-react-demo-clean.html` (no longer used - replaced with GPX import workflow)
 
 ### **Production Files (API Keys in .env):**
 - `.env` - Contains actual API keys (not committed)

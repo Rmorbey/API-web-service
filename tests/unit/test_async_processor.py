@@ -9,7 +9,7 @@ import asyncio
 from unittest.mock import Mock, patch
 from datetime import datetime
 
-from projects.fundraising_tracking_app.strava_integration.async_processor import AsyncProcessor
+from projects.fundraising_tracking_app.activity_integration.async_processor import AsyncProcessor
 
 
 class TestAsyncProcessor:

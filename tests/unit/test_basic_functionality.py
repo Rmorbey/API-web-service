@@ -14,20 +14,17 @@ import json
 class TestBasicCacheFunctionality:
     """Basic tests for cache functionality that don't require complex mocking."""
     
-    def test_strava_cache_initialization(self):
-        """Test that SmartStravaCache can be initialized."""
-        with patch('projects.fundraising_tracking_app.strava_integration.smart_strava_cache.StravaTokenManager'):
-            with patch('projects.fundraising_tracking_app.strava_integration.smart_strava_cache.threading.Thread'):
-                from projects.fundraising_tracking_app.strava_integration.smart_strava_cache import SmartStravaCache
-                
-                cache = SmartStravaCache()
-                
-                # Test basic attributes
-                assert hasattr(cache, 'cache_file')
-                assert hasattr(cache, 'base_url')
-                assert hasattr(cache, 'allowed_activity_types')
-                assert cache.allowed_activity_types == ["Run", "Ride"]
-                assert cache.base_url == "https://www.strava.com/api/v3"
+    def test_activity_cache_initialization(self):
+        """Test that ActivityCache can be initialized."""
+        with patch('projects.fundraising_tracking_app.activity_integration.activity_cache.threading.Thread'):
+            from projects.fundraising_tracking_app.activity_integration.activity_cache import ActivityCache
+            
+            cache = ActivityCache()
+            
+            # Test basic attributes
+            assert hasattr(cache, 'supabase_cache')
+            assert hasattr(cache, 'allowed_activity_types')
+            assert cache.allowed_activity_types == ["Run", "Ride"]
     
     def test_fundraising_cache_initialization(self):
         """Test that SmartFundraisingCache can be initialized."""
@@ -43,18 +40,16 @@ class TestBasicCacheFunctionality:
             assert hasattr(cache, 'backup_dir')
             assert cache.justgiving_url == test_url
     
-    def test_strava_cache_file_structure(self):
-        """Test that Strava cache file has expected structure."""
-        with patch('projects.fundraising_tracking_app.strava_integration.smart_strava_cache.StravaTokenManager'):
-            with patch('projects.fundraising_tracking_app.strava_integration.smart_strava_cache.threading.Thread'):
-                from projects.fundraising_tracking_app.strava_integration.smart_strava_cache import SmartStravaCache
-                
-                cache = SmartStravaCache()
-                
-                # Test that cache file path is set
-                assert cache.cache_file is not None
-                assert isinstance(cache.cache_file, str)
-                assert cache.cache_file.endswith('.json')
+    def test_activity_cache_supabase_structure(self):
+        """Test that ActivityCache uses Supabase for storage."""
+        with patch('projects.fundraising_tracking_app.activity_integration.activity_cache.threading.Thread'):
+            from projects.fundraising_tracking_app.activity_integration.activity_cache import ActivityCache
+            
+            cache = ActivityCache()
+            
+            # Test that Supabase cache is initialized
+            assert cache.supabase_cache is not None
+            assert hasattr(cache.supabase_cache, 'enabled')
     
     def test_fundraising_cache_file_structure(self):
         """Test that fundraising cache file has expected structure."""
@@ -69,13 +64,12 @@ class TestBasicCacheFunctionality:
             assert isinstance(cache.cache_file, str)
             assert cache.cache_file.endswith('.json')
     
-    def test_strava_cache_allowed_activity_types(self):
-        """Test that Strava cache only allows Run and Ride activities."""
-        with patch('projects.fundraising_tracking_app.strava_integration.smart_strava_cache.StravaTokenManager'):
-            with patch('projects.fundraising_tracking_app.strava_integration.smart_strava_cache.threading.Thread'):
-                from projects.fundraising_tracking_app.strava_integration.smart_strava_cache import SmartStravaCache
-                
-                cache = SmartStravaCache()
+    def test_activity_cache_allowed_activity_types(self):
+        """Test that ActivityCache only allows Run and Ride activities."""
+        with patch('projects.fundraising_tracking_app.activity_integration.activity_cache.threading.Thread'):
+            from projects.fundraising_tracking_app.activity_integration.activity_cache import ActivityCache
+            
+            cache = ActivityCache()
                 
                 # Test allowed activity types
                 assert "Run" in cache.allowed_activity_types
@@ -84,9 +78,9 @@ class TestBasicCacheFunctionality:
     
     def test_strava_cache_start_date(self):
         """Test that Strava cache has correct start date filter."""
-        with patch('projects.fundraising_tracking_app.strava_integration.smart_strava_cache.StravaTokenManager'):
-            with patch('projects.fundraising_tracking_app.strava_integration.smart_strava_cache.threading.Thread'):
-                from projects.fundraising_tracking_app.strava_integration.smart_strava_cache import SmartStravaCache
+        with patch('projects.fundraising_tracking_app.activity_integration.activity_cache.StravaTokenManager'):
+            with patch('projects.fundraising_tracking_app.activity_integration.activity_cache.threading.Thread'):
+                from projects.fundraising_tracking_app.activity_integration.activity_cache import SmartStravaCache
                 from datetime import datetime
                 
                 cache = SmartStravaCache()

@@ -8,7 +8,7 @@ import pytest
 from datetime import datetime, date
 from pydantic import ValidationError
 
-from projects.fundraising_tracking_app.strava_integration.models import (
+from projects.fundraising_tracking_app.activity_integration.models import (
     FeedRequest, RefreshRequest, CleanupRequest, ProjectInfoResponse,
     Activity, ActivityComment, ActivityPhoto, ActivityPhotos,
     ActivityFeedResponse, HealthResponse, MetricsResponse,
@@ -283,7 +283,7 @@ class TestHealthResponse:
             project="test-project",
             status="healthy",
             timestamp=datetime.now(),
-            strava_configured=True,
+            activity_configured=True,
             jawg_configured=True,
             cache_status="active"
         )
@@ -291,7 +291,7 @@ class TestHealthResponse:
         assert response.status == "healthy"
         assert response.timestamp is not None
         assert response.project == "test-project"
-        assert response.strava_configured is True
+        assert response.activity_configured is True
         assert response.jawg_configured is True
         assert response.cache_status == "active"
 

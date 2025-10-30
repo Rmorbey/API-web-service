@@ -10,7 +10,7 @@ from collections import deque
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 
-from projects.fundraising_tracking_app.strava_integration.security import (
+from projects.fundraising_tracking_app.activity_integration.security import (
     RateLimiter,
     SecurityHeaders,
     APIKeyValidator,
@@ -255,7 +255,7 @@ class TestSecurityMiddleware:
         request = Mock()
         request.method = "GET"
         request.url = Mock()
-        request.url.path = "/api/strava-integration/map-tiles/10/512/384"
+        request.url.path = "/api/activity-integration/map-tiles/10/512/384"
         request.client = Mock()
         request.client.host = "127.0.0.1"
         request.headers = {"user-agent": "Mozilla/5.0"}
@@ -403,7 +403,7 @@ class TestCoverageGaps:
         response.status_code = 200
         
         # Mock logger to capture warning calls
-        with patch('projects.fundraising_tracking_app.strava_integration.security.logger') as mock_logger:
+        with patch('projects.fundraising_tracking_app.activity_integration.security.logger') as mock_logger:
             # Call the static method
             RequestLogger.log_request(request, response, 0.1)
             
@@ -427,7 +427,7 @@ class TestCoverageGaps:
         
         # Mock rate limiter to return False (rate limited)
         with patch.object(middleware.rate_limiter, 'is_allowed', return_value=(False, {"reset_time": 60})):
-            with patch('projects.fundraising_tracking_app.strava_integration.security.logger') as mock_logger:
+            with patch('projects.fundraising_tracking_app.activity_integration.security.logger') as mock_logger:
                 async def mock_call_next(req):
                     return Response(content='{"status": "ok"}', status_code=200)
                 
@@ -440,7 +440,7 @@ class TestCoverageGaps:
     
     def test_create_api_key_generation(self):
         """Test API key generation"""
-        from projects.fundraising_tracking_app.strava_integration.security import create_api_key
+        from projects.fundraising_tracking_app.activity_integration.security import create_api_key
         
         # Generate multiple keys to ensure randomness
         key1 = create_api_key()

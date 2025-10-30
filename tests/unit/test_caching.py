@@ -9,8 +9,8 @@ from unittest.mock import Mock, patch
 from fastapi import Request
 from fastapi.testclient import TestClient
 
-from projects.fundraising_tracking_app.strava_integration.caching import CacheManager, cache_manager
-from projects.fundraising_tracking_app.strava_integration.cache_middleware import CacheMiddleware
+from projects.fundraising_tracking_app.activity_integration.caching import CacheManager, cache_manager
+from projects.fundraising_tracking_app.activity_integration.cache_middleware import CacheMiddleware
 
 
 class TestCacheManager:
@@ -165,7 +165,7 @@ class TestCacheMiddleware:
         middleware = CacheMiddleware(None)
         
         # Test exact match
-        rule = middleware._get_cache_rule("/api/strava-integration/feed")
+        rule = middleware._get_cache_rule("/api/activity-integration/feed")
         assert rule is not None
         assert rule["type"] == "dynamic"
         
@@ -201,12 +201,12 @@ class TestCacheIntegration:
         client = TestClient(app, base_url="http://localhost")
         
         # Test without API key (should fail)
-        response = client.get("/api/strava-integration/cache-stats")
+        response = client.get("/api/activity-integration/cache-stats")
         assert response.status_code in [400, 401, 429]  # Could be 400, 401, or 429 (rate limited)
         
         # Test with API key
-        response = client.get("/api/strava-integration/cache-stats", 
-                            headers={"X-API-Key": "test-strava-key-123"})
+        response = client.get("/api/activity-integration/cache-stats", 
+                            headers={"X-API-Key": "test-activity-key-123"})
         assert response.status_code in [200, 429]  # 200 for success, 429 for rate limited
         
         # Only check JSON content if we got a successful response
@@ -224,12 +224,12 @@ class TestCacheIntegration:
         client = TestClient(app, base_url="http://localhost")
         
         # Test without API key (should fail)
-        response = client.post("/api/strava-integration/cache/invalidate")
+        response = client.post("/api/activity-integration/cache/invalidate")
         assert response.status_code in [400, 401, 429]  # Could be 400, 401, or 429 (rate limited)
         
         # Test with API key
-        response = client.post("/api/strava-integration/cache/invalidate",
-                             headers={"X-API-Key": "test-strava-key-123"})
+        response = client.post("/api/activity-integration/cache/invalidate",
+                             headers={"X-API-Key": "test-activity-key-123"})
         assert response.status_code in [200, 429]  # 200 for success, 429 for rate limited
         
         # Only check JSON content if we got a successful response

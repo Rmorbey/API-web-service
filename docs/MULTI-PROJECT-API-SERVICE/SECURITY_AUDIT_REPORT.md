@@ -6,15 +6,9 @@
 **CRITICAL**: Your actual API keys and tokens were exposed in multiple documentation files committed to the repository.
 
 ### **Secrets Exposed:**
-- ✅ **STRAVA_API_KEY**: `[EXPOSED - NOW FIXED]`
+- ✅ **ACTIVITY_API_KEY**: `[EXPOSED - NOW FIXED]`
 - ✅ **FUNDRAISING_API_KEY**: `[EXPOSED - NOW FIXED]`
 - ✅ **JAWG_ACCESS_TOKEN**: `[EXPOSED - NOW FIXED]`
-- ✅ **STRAVA_CLIENT_SECRET**: `[EXPOSED - NOW FIXED]`
-- ✅ **STRAVA_ACCESS_TOKEN**: `[EXPOSED - NOW FIXED]`
-- ✅ **STRAVA_REFRESH_TOKEN**: `[EXPOSED - NOW FIXED]`
-- ✅ **STRAVA_CLIENT_ID**: `[EXPOSED - NOW FIXED]`
-- ✅ **STRAVA_EXPIRES_AT**: `[EXPOSED - NOW FIXED]`
-- ✅ **STRAVA_EXPIRES_IN**: `[EXPOSED - NOW FIXED]`
 
 ## **Files Affected (FIXED):**
 
@@ -39,15 +33,10 @@
 ### **2. Security Pattern Established:**
 ```bash
 # ✅ SECURE PATTERN (Now Used Everywhere)
-STRAVA_API_KEY=your_strava_api_key_here
+ACTIVITY_API_KEY=your_activity_api_key_here
 FUNDRAISING_API_KEY=your_fundraising_api_key_here
 JAWG_ACCESS_TOKEN=your_jawg_access_token_here
-STRAVA_CLIENT_SECRET=your_strava_client_secret_here
-STRAVA_ACCESS_TOKEN=your_strava_access_token_here
-STRAVA_REFRESH_TOKEN=your_strava_refresh_token_here
-STRAVA_CLIENT_ID=your_strava_client_id_here
-STRAVA_EXPIRES_AT=your_strava_expires_at_here
-STRAVA_EXPIRES_IN=your_strava_expires_in_here
+GOOGLE_SHEETS_SPREADSHEET_ID=your_google_sheets_id_here
 ```
 
 ## **Verification Completed:**

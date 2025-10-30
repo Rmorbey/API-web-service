@@ -16,7 +16,7 @@ class TestErrorHandlingIntegration:
         """Test that authentication errors return proper structure."""
         # Test with invalid API key on an endpoint that requires authentication
         response = strava_test_client.post(
-            "/api/strava-integration/refresh-cache",
+            "/api/activity-integration/refresh-cache",
             headers={"X-API-Key": "invalid-key"},
             json={"force_full_refresh": False}
         )
@@ -36,7 +36,7 @@ class TestErrorHandlingIntegration:
     def test_missing_api_key_error_response(self, strava_test_client):
         """Test that missing API key returns proper error."""
         # Test without API key
-        response = strava_test_client.get("/api/strava-integration/feed")
+        response = strava_test_client.get("/api/activity-integration/feed")
         
         # Should return 401 or 200 (depending on endpoint configuration)
         assert response.status_code in [200, 401, 403]
@@ -53,7 +53,7 @@ class TestErrorHandlingIntegration:
         """Test that validation errors return proper structure."""
         # Test with invalid request body
         response = strava_test_client.post(
-            "/api/strava-integration/refresh-cache",
+            "/api/activity-integration/refresh-cache",
             headers={"X-API-Key": "test-strava-key-123"},
             json={"invalid": "data"}
         )
@@ -72,11 +72,11 @@ class TestErrorHandlingIntegration:
     def test_server_error_response_structure(self, strava_test_client):
         """Test that server errors return proper structure."""
         # Mock an internal server error
-        with patch('projects.fundraising_tracking_app.strava_integration.smart_strava_cache.SmartStravaCache') as mock_cache:
+        with patch('projects.fundraising_tracking_app.activity_integration.activity_cache.SmartStravaCache') as mock_cache:
             mock_cache.side_effect = Exception("Internal server error")
             
             response = strava_test_client.get(
-                "/api/strava-integration/feed",
+                "/api/activity-integration/feed",
                 headers={"X-API-Key": "test-strava-key-123"}
             )
             
@@ -143,7 +143,7 @@ class TestSecurityIntegration:
         responses = []
         for i in range(5):
             response = strava_test_client.get(
-                "/api/strava-integration/health",
+                "/api/activity-integration/health",
                 headers={"X-API-Key": "test-strava-key-123"}
             )
             responses.append(response.status_code)
@@ -175,7 +175,7 @@ class TestErrorSecurityCombination:
     def test_authentication_with_security_headers(self, strava_test_client):
         """Test that authentication errors include security headers."""
         response = strava_test_client.get(
-            "/api/strava-integration/feed",
+            "/api/activity-integration/feed",
             headers={"X-API-Key": "invalid-key"}
         )
         
@@ -193,7 +193,7 @@ class TestErrorSecurityCombination:
     def test_validation_error_with_cors(self, strava_test_client):
         """Test that validation errors include CORS headers."""
         response = strava_test_client.post(
-            "/api/strava-integration/refresh-cache",
+            "/api/activity-integration/refresh-cache",
             headers={"X-API-Key": "test-strava-key-123"},
             json={"invalid": "data"}
         )
@@ -230,10 +230,10 @@ class TestErrorLoggingIntegration:
     
     def test_error_logging_with_mock(self, strava_test_client):
         """Test that errors are logged (using mocks)."""
-        with patch('projects.fundraising_tracking_app.strava_integration.simple_error_handlers.logger') as mock_logger:
+        with patch('projects.fundraising_tracking_app.activity_integration.simple_error_handlers.logger') as mock_logger:
             # Make a request that might trigger an error
             response = strava_test_client.get(
-                "/api/strava-integration/feed",
+                "/api/activity-integration/feed",
                 headers={"X-API-Key": "invalid-key"}
             )
             
@@ -250,7 +250,7 @@ class TestErrorLoggingIntegration:
         
         for i in range(3):
             response = strava_test_client.get(
-                "/api/strava-integration/feed",
+                "/api/activity-integration/feed",
                 headers={"X-API-Key": "invalid-key"}
             )
             
@@ -273,7 +273,7 @@ class TestSecurityErrorResponseConsistency:
     def test_error_response_consistency_across_endpoints(self, strava_test_client, fundraising_test_client):
         """Test that error responses are consistent across different endpoints."""
         endpoints = [
-            ("/api/strava-integration/feed", strava_test_client),
+            ("/api/activity-integration/feed", strava_test_client),
             ("/api/fundraising/data", fundraising_test_client)
         ]
         

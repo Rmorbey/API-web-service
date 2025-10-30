@@ -18,9 +18,9 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 # Set test environment variables
-os.environ["STRAVA_API_KEY"] = "test-strava-key-123"
+os.environ["ACTIVITY_API_KEY"] = "test-activity-key-123"
 os.environ["FUNDRAISING_API_KEY"] = "test-fundraising-key-456"
-os.environ["STRAVA_ACCESS_TOKEN"] = "test-strava-token-789"
+# Removed: STRAVA_ACCESS_TOKEN - no longer needed for GPX import workflow
 os.environ["JAWG_API_KEY"] = "test-jawg-key-abc"
 os.environ["JUSTGIVING_URL"] = "https://test-justgiving.com/test-page"
 
@@ -28,9 +28,9 @@ os.environ["JUSTGIVING_URL"] = "https://test-justgiving.com/test-page"
 def test_env_vars() -> Dict[str, str]:
     """Provide test environment variables."""
     return {
-        "STRAVA_API_KEY": "test-strava-key-123",
+        "ACTIVITY_API_KEY": "test-activity-key-123",
         "FUNDRAISING_API_KEY": "test-fundraising-key-456", 
-        "STRAVA_ACCESS_TOKEN": "test-strava-token-789",
+        # Removed: STRAVA_ACCESS_TOKEN - no longer needed
         "JAWG_API_KEY": "test-jawg-key-abc",
         "JUSTGIVING_URL": "https://test-justgiving.com/test-page"
     }
@@ -44,7 +44,7 @@ def temp_dir() -> Generator[str, None, None]:
 
 @pytest.fixture(scope="function")
 def mock_strava_api_response() -> Dict[str, Any]:
-    """Mock Strava API response data."""
+    """Mock activity API response data (legacy fixture name kept for compatibility)."""
     return {
         "id": 123456789,
         "name": "Test Activity",
@@ -171,20 +171,20 @@ def test_client():
 
 @pytest.fixture(scope="function")
 def strava_test_client():
-    """Create a test client for Strava integration endpoints."""
+    """Create a test client for activity integration endpoints."""
     from fastapi import FastAPI
     from fastapi.exceptions import RequestValidationError
-    from projects.fundraising_tracking_app.strava_integration.strava_integration_api import router as strava_router
-    from projects.fundraising_tracking_app.strava_integration.simple_error_handlers import (
+    from projects.fundraising_tracking_app.activity_integration.activity_api import router as activity_router
+    from projects.fundraising_tracking_app.activity_integration.simple_error_handlers import (
         api_exception_handler,
         validation_exception_handler,
         http_exception_handler,
         general_exception_handler
     )
     
-    # Create a test app with the Strava router
+    # Create a test app with the activity router
     test_app = FastAPI()
-    test_app.include_router(strava_router, prefix="/api/strava-integration")
+    test_app.include_router(activity_router, prefix="/api/activity-integration")
     
     # Add error handlers (APIException was removed, using general exception handler)
     
@@ -220,7 +220,7 @@ def async_test_client():
 def valid_api_headers() -> Dict[str, str]:
     """Provide valid API headers for testing."""
     return {
-        "X-API-Key": "test-strava-key-123",
+        "X-API-Key": "test-activity-key-123",
         "Content-Type": "application/json"
     }
 
@@ -253,7 +253,7 @@ def error_response_template() -> Dict[str, Any]:
 
 @pytest.fixture(scope="function")
 def sample_strava_activities() -> List[Dict[str, Any]]:
-    """Sample Strava activities for testing."""
+    """Sample activities for testing (legacy fixture name kept for compatibility)."""
     return [
         {
             "id": 15806551007,

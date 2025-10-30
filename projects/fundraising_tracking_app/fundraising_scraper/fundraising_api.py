@@ -10,8 +10,8 @@ import logging
 from datetime import datetime
 import os
 # Removed complex error handlers - using FastAPI's built-in HTTPException
-from ..strava_integration.caching import cache_manager
-from ..strava_integration.async_processor import async_processor
+from ..activity_integration.caching import cache_manager
+from ..activity_integration.async_processor import async_processor
 from .fundraising_scraper import SmartFundraisingCache
 from .models import (
     FundraisingDataResponse, 
@@ -295,7 +295,7 @@ async def get_donations(request: DonationsFilterRequest = Depends(), api_key: st
 async def get_fundraising_data_demo() -> FundraisingDataResponse:
     """Get fundraising data for demo page (development environment only)"""
     # Verify we're in development environment
-    from ..strava_integration.environment_utils import verify_development_access
+    from ..activity_integration.environment_utils import verify_development_access
     verify_development_access()
     try:
         cache = get_cache()
@@ -328,7 +328,7 @@ async def get_fundraising_data_demo() -> FundraisingDataResponse:
 async def get_donations_demo(request: DonationsFilterRequest = Depends()) -> DonationsResponse:
     """Get donations for demo page (development environment only)"""
     # Verify we're in development environment
-    from ..strava_integration.environment_utils import verify_development_access
+    from ..activity_integration.environment_utils import verify_development_access
     verify_development_access()
     try:
         cache = get_cache()

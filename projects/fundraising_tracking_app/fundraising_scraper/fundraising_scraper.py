@@ -16,8 +16,8 @@ from bs4 import BeautifulSoup
 import re
 import os
 import glob
-from ..strava_integration.http_clients import get_http_client
-from ..strava_integration.supabase_cache_manager import SecureSupabaseCacheManager
+from ..activity_integration.http_clients import get_http_client
+from ..activity_integration.supabase_cache_manager import SecureSupabaseCacheManager
 
 # Configure logging
 logger = logging.getLogger(__name__)

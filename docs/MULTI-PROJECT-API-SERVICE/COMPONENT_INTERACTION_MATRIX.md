@@ -4,9 +4,9 @@
 
 This matrix shows how each component interacts with others in the system, including the type and frequency of interactions.
 
-| Component | SmartStravaCache | SmartFundraisingCache | AsyncProcessor | Security | HTTP Clients | API Endpoints | File System |
-|-----------|------------------|----------------------|----------------|----------|--------------|---------------|-------------|
-| **SmartStravaCache** | - | ❌ | 🔄 High | 🔄 Medium | 🔄 High | 🔄 Medium | 🔄 High |
+| Component | ActivityCache | SmartFundraisingCache | AsyncProcessor | Security | HTTP Clients | API Endpoints | File System |
+|-----------|---------------|----------------------|----------------|----------|--------------|---------------|-------------|
+| **ActivityCache** | - | ❌ | 🔄 High | 🔄 Medium | 🔄 Medium | 🔄 Medium | ❌ |
 | **SmartFundraisingCache** | ❌ | - | 🔄 High | 🔄 Medium | 🔄 High | 🔄 Medium | 🔄 High |
 | **AsyncProcessor** | 🔄 High | 🔄 High | - | ❌ | 🔄 Medium | ❌ | ❌ |
 | **Security** | 🔄 Medium | 🔄 Medium | ❌ | - | ❌ | 🔄 High | ❌ |
@@ -25,13 +25,13 @@ This matrix shows how each component interacts with others in the system, includ
 
 ## 🔄 **Detailed Component Interactions**
 
-### **1. SmartStravaCache Interactions**
+### **1. ActivityCache Interactions**
 
 #### **With HTTP Clients:**
-- **Frequency**: High (every API call)
-- **Type**: HTTP requests to Strava API
-- **Purpose**: Fetch activity data, photos, comments, polylines
-- **Data Flow**: Request → Response → Raw JSON data
+- **Frequency**: Medium (GPX file fetching)
+- **Type**: HTTP requests to Google Drive/Sheets API
+- **Purpose**: Fetch GPX files for activity processing
+- **Data Flow**: Request → Response → GPX data
 
 #### **With AsyncProcessor:**
 - **Frequency**: High (every data processing)
@@ -91,7 +91,7 @@ This matrix shows how each component interacts with others in the system, includ
 
 ### **3. AsyncProcessor Interactions**
 
-#### **With SmartStravaCache:**
+#### **With ActivityCache:**
 - **Frequency**: High (every activity processing)
 - **Type**: Data enhancement
 - **Purpose**: Process activities for music, photos, formatting
@@ -111,7 +111,7 @@ This matrix shows how each component interacts with others in the system, includ
 
 ### **4. Security Interactions**
 
-#### **With SmartStravaCache:**
+#### **With ActivityCache:**
 - **Frequency**: Medium (rate limiting)
 - **Type**: Rate limiting checks
 - **Purpose**: Prevent API abuse
@@ -131,7 +131,7 @@ This matrix shows how each component interacts with others in the system, includ
 
 ### **5. API Endpoints Interactions**
 
-#### **With SmartStravaCache:**
+#### **With ActivityCache:**
 - **Frequency**: Medium (when called)
 - **Type**: Data retrieval
 - **Purpose**: Get activity data for frontend
@@ -193,9 +193,9 @@ External → Compare →  Store/Update →  Persist
 
 ### **High Frequency Interactions (Every Request/Update):**
 1. **API Endpoints ↔ Security**: Every API request
-2. **Cache ↔ File System**: Every cache update
+2. **Cache ↔ Supabase**: Every cache update (Supabase persistence)
 3. **Cache ↔ AsyncProcessor**: Every data processing
-4. **Cache ↔ HTTP Clients**: Every data collection
+4. **Fundraising Cache ↔ HTTP Clients**: Every data collection
 
 ### **Medium Frequency Interactions (Periodic):**
 1. **Cache ↔ Security**: Rate limiting checks

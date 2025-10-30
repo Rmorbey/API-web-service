@@ -2,7 +2,7 @@
 
 ## 🚀 Multi-Project API Service
 
-A FastAPI application providing APIs for Strava integration and fundraising tracking.
+A FastAPI application providing APIs for activity data integration (via GPX import) and fundraising tracking.
 
 ## 📊 **API Overview**
 
@@ -36,12 +36,12 @@ Get basic information about the API service.
 ### **GET /health** - Health Check
 Check the health status of the API service.
 
-## 📊 **Strava Integration API**
+## 📊 **Activity Integration API**
 
-Base URL: `/api/strava-integration`
+Base URL: `/api/activity-integration`
 
 ### **GET /feed** - Activity Feed
-Get Strava activity feed with photos, comments, music detection, and map data.
+Get activity feed with photos, comments, music detection, and map data (imported from GPX files).
 
 **Query Parameters:**
 - `limit` (int, optional): Number of activities (default: 20, max: 500)
@@ -116,8 +116,11 @@ Get Jawg map service token for map tile access.
 ### **GET /map-tiles/{z}/{x}/{y}** - Map Tiles
 Get map tiles for route visualization.
 
+### **POST /gpx/import-from-sheets** - Import GPX Activities
+Import activity data from Google Sheets containing GPX file references.
+
 ### **POST /refresh-cache** - Refresh Cache
-Manually trigger cache refresh for Strava data with batch processing.
+Manually trigger cache refresh (legacy endpoint - GPX import now required).
 
 ## 💰 **Fundraising API**
 
@@ -175,21 +178,18 @@ The API automatically detects music from activity descriptions:
 ## 🗺️ **Map Integration**
 
 ### **Jawg Map Service**
-1. **Get Token**: Use `/api/strava-integration/jawg-token`
-2. **Map Tiles**: Use `/api/strava-integration/map-tiles/{z}/{x}/{y}`
+1. **Get Token**: Use `/api/activity-integration/jawg-token`
+2. **Map Tiles**: Use `/api/activity-integration/map-tiles/{z}/{x}/{y}`
 3. **Route Data**: Activity feed includes encoded polylines and bounds
 
 ## 🎮 **Demo Endpoints (Development Only)**
 
 These endpoints are available only in development mode and don't require API keys:
 
-### **GET /demo** - Strava Demo Page
-Interactive Strava activities viewer with maps, photos, and music integration.
-
 ### **GET /fundraising-demo** - Fundraising Demo Page
 Live fundraising progress tracker with donation history.
 
-### **GET /api/strava-integration/demo/feed** - Demo Activity Feed
+### **GET /api/activity-integration/demo/feed** - Demo Activity Feed
 Get activity feed without API key authentication (development only).
 
 ### **GET /api/fundraising/demo/data** - Demo Fundraising Data
@@ -198,7 +198,7 @@ Get fundraising data without API key authentication (development only).
 ## 📈 **Performance & Caching**
 
 ### **Cache Strategy:**
-- **Strava Data**: 6-hour cache with Supabase persistence
+- **Activity Data**: Manual GPX import, stored in Supabase
 - **Fundraising Data**: 15-minute cache with hybrid storage
 - **HTTP Responses**: 5-minute cache with ETag support
 - **Hit Rate**: 95% average cache hit rate
