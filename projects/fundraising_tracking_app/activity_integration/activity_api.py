@@ -647,6 +647,12 @@ async def get_activity_feed(request: FeedRequest = Depends(), api_key: str = Dep
         
         # Apply additional filtering based on request parameters
         filtered_activities = _apply_feed_filters(raw_activities, request)
+
+        # Normalize activity names for output (handle legacy underscores)
+        for activity in filtered_activities:
+            name = activity.get("name")
+            if isinstance(name, str) and "_" in name:
+                activity["name"] = name.replace("_", " ")
         
         # Handle case where no activities are returned
         if not filtered_activities:
