@@ -10,6 +10,7 @@ import xml.etree.ElementTree as ET
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 import polyline
+import base64
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +51,31 @@ class GPXImporter:
             creds = None
             token_file = os.getenv("GOOGLE_SHEETS_TOKEN_FILE", "token.json")
             creds_file = os.getenv("GOOGLE_SHEETS_CREDENTIALS_FILE", "credentials.json")
+            
+            # Decode credentials from base64 environment variables if files don't exist (for Docker/runtime)
+            if not os.path.exists(creds_file):
+                creds_base64 = os.getenv("GOOGLE_CREDENTIALS_BASE64")
+                if creds_base64:
+                    try:
+                        logger.info("📥 Decoding credentials from GOOGLE_CREDENTIALS_BASE64 environment variable")
+                        creds_content = base64.b64decode(creds_base64).decode('utf-8')
+                        with open(creds_file, 'w') as f:
+                            f.write(creds_content)
+                        logger.info(f"✅ Decoded and saved credentials to {creds_file}")
+                    except Exception as e:
+                        logger.error(f"❌ Failed to decode GOOGLE_CREDENTIALS_BASE64: {e}")
+            
+            if not os.path.exists(token_file):
+                token_base64 = os.getenv("GOOGLE_TOKEN_BASE64")
+                if token_base64:
+                    try:
+                        logger.info("📥 Decoding token from GOOGLE_TOKEN_BASE64 environment variable")
+                        token_content = base64.b64decode(token_base64).decode('utf-8')
+                        with open(token_file, 'w') as f:
+                            f.write(token_content)
+                        logger.info(f"✅ Decoded and saved token to {token_file}")
+                    except Exception as e:
+                        logger.error(f"❌ Failed to decode GOOGLE_TOKEN_BASE64: {e}")
             
             # Load existing token
             if os.path.exists(token_file):
