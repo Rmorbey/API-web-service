@@ -84,11 +84,21 @@ class GPXImporter:
             # If no valid credentials, authorize
             if not creds or not creds.valid:
                 if creds and creds.expired and creds.refresh_token:
-                    creds.refresh(Request())
-                else:
+                    try:
+                        creds.refresh(Request())
+                        logger.info("✅ Refreshed expired Google OAuth token")
+                    except Exception as refresh_error:
+                        logger.error(f"❌ Failed to refresh token: {refresh_error}")
+                        logger.error("💡 Token refresh failed - you may need to regenerate the token.json file")
+                        logger.error("   Run the OAuth flow locally to generate a new token, then update GOOGLE_TOKEN_BASE64")
+                        # Clear invalid token so we can try to re-authenticate
+                        creds = None
+                
+                if not creds or not creds.valid:
                     if not os.path.exists(creds_file):
                         logger.error(f"Google Sheets credentials file not found: {creds_file}")
                         return
+                    logger.info("🔄 Starting OAuth flow to generate new token...")
                     flow = InstalledAppFlow.from_client_secrets_file(
                         creds_file,
                         [
